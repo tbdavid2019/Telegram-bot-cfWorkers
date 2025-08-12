@@ -24,7 +24,7 @@ var UserConfig = class {
   // OpenAI API Key
   OPENAI_API_KEY = [];
   // OpenAI的模型名稱
-  OPENAI_CHAT_MODEL = "gpt-4o";
+  OPENAI_CHAT_MODEL = "gpt-4.1";
   // OpenAI API BASE ``
   OPENAI_API_BASE = "https://api.openai.com/v1";
   // OpenAI API Extra Params
@@ -1865,8 +1865,9 @@ var commandAuthCheck = {
   }
 };
 var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version",   "/redo", 隱藏看看
-  "/new", //新對話 
   "/boa",  //解答之書
+  "/new", //新對話 
+  "/qi", //奇門遁甲 
   "/oracle", //淺草籤詩
   "/poetry", //唐詩
   "/weatheralert", // 天氣特報警報
@@ -1986,6 +1987,10 @@ var commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandDDGSearch
   },
+  "/qi": { // 奇門遁甲
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandQimen
+  },
   "/weatheralert": { // 天氣特報
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandWeatherAlert
@@ -1993,10 +1998,79 @@ var commandHandlers = {
 };
 
 
+// 奇門問答
+async function commandQimen(message, command, subcommand, context) {
+  const question = (subcommand || '').trim();
+  if (!question) {
+    return sendMessageToTelegramWithContext(context)('錯誤: 請在指令後面輸入要詢問的問題。');
+  }
+
+  const url = 'https://qi.david888.com/api/qimen-question';
+  const payload = {
+    question,              // 使用者問題
+    mode: 'advanced',      // 可改: 'traditional' | 'advanced'
+    purpose: '綜合',        // 依你的要求統一為「綜合」
+    // 若要自帶時間與時區，可加上以下兩行：
+    datetime: new Date().toISOString(),
+    timezone: '+08:00',
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const text = await response.text();
+
+    // 檢查是否為 JSON
+    if (!(text.startsWith('{') && text.endsWith('}'))) {
+      return sendMessageToTelegramWithContext(context)(`錯誤: API回應非JSON，內容: ${text}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。內容: ${text}`);
+    }
+
+    if (!data.success) {
+      const msg = data.message || '未知錯誤';
+      return sendMessageToTelegramWithContext(context)(`奇門服務回應失敗：${msg}`);
+    }
+
+    // 取出主要欄位
+    const ans = (data.answer || '').trim();
+    const qi = data.qimenInfo || {};
+    const meta = data.metadata || {};
+
+    // 組裝訊息
+    let reply = `【奇門遁甲】\n問題：${data.question || question}\n\n`;
+    if (qi.localDate || qi.localTime) {
+      reply += `時間：${qi.localDate || ''} ${qi.localTime || ''}\n`;
+    }
+    if (qi.mode || qi.purpose) {
+      reply += `模式：${qi.mode || 'N/A'}　目的：${qi.purpose || '綜合'}\n`;
+    }
+    reply += '\n';
+    reply += ans ? ans : '（無回覆內容）';
+
+    // （可選）附上模型與供應商資訊，方便除錯
+    if (meta.provider || meta.model) {
+      reply += `\n\n— 來源：${meta.provider || ''} ${meta.model || ''}`.trimEnd();
+    }
+
+    return sendMessageToTelegramWithContext(context)(reply);
+  } catch (e) {
+    return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
+  }
+}
+
 // 天氣特報查詢
 async function commandWeatherAlert(message, command, subcommand, context) {
-  let cwaapiKey = APIKEY
-  const url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0033-001?Authorization={cwaapiKey}}&format=JSON';
+  const url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0033-001?Authorization=CWA-AFB7BD45-6D32-4CA4-B619-D8BBC81B1ABA&format=JSON';
 
   try {
     const response = await fetch(url);
@@ -2208,7 +2282,7 @@ async function commandDnsLookup2(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)("請提供域名。用法：/dns <域名>");
   }
 
-  const netlasapiKey = ""; // Your API key
+  const netlasapiKey = "VataPoHSxfdgneNnvGK9ylJsnqiurm0L"; // Your API key
   const url = `https://app.netlas.io/api/host/${domainName}/`;
 
   try {
@@ -2303,8 +2377,8 @@ async function commandIpLookup(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)("請提供IP地址。用法：/ip <IP地址>");
   }
 
-  const infoapiKey = ""; // 你的 ipinfo.io API 密钥
-  const url = `https://ipinfo.io/${ipAddress}?token=${infoapiKey}`;
+  const apiKey = "4a2ddcbdcb09b4"; // 你的 ipinfo.io API 密钥
+  const url = `https://ipinfo.io/${ipAddress}?token=${apiKey}`;
 
   try {
     const response = await fetch(url);
@@ -2494,8 +2568,8 @@ async function commandStock(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)("请提供股票代码。用法：/stock <股票代码>");
   }
 
-  const FMPapiKey = ""; // 你的 API 密钥
-  const url = `https://financialmodelingprep.com/api/v3/quote/${stockSymbol}?apikey=${FMPapiKey}`;
+  const apiKey = "psHDQQHMeQMi9fpTXvxa8D6JR8zaPB9q"; // 你的 API 密钥
+  const url = `https://financialmodelingprep.com/api/v3/quote/${stockSymbol}?apikey=${apiKey}`;
   
   try {
     const response = await fetch(url, {
@@ -3506,6 +3580,8 @@ var zh_hans_default = {
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "隨機的唐詩",
+      "web": "網頁搜尋",
+      "qi": "奇門遁甲",
       "weatheralert": "台灣天氣 特報 警報",
     },
     "new": {
@@ -3543,6 +3619,8 @@ var zh_hant_default = {
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "唐詩 隨機抽一首",
+      "web": "網頁搜尋",
+      "qi": "奇門遁甲",
       "weatheralert": "台灣天氣 特報 警報",
     },
     "new": {
@@ -3608,6 +3686,8 @@ var en_default = {
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "來首唐詩",
+      "web": "網頁搜尋",
+      "qi": "奇門遁甲",
       "weatheralert": "台灣天氣 特報 警報"
     },
     "new": {
