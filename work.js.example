@@ -2665,6 +2665,9 @@ function formatUniversalStockData(meta, quote, originalCode, stockType) {
   const currency = meta.currency || 'USD';
   const exchangeName = meta.exchangeName || meta.fullExchangeName || '未知交易所';
   
+  // 股票完整名稱 - 優先使用 longName 或 shortName
+  const stockName = meta.longName || meta.shortName || meta.displayName || '';
+  
   // 當前價格
   const currentPrice = meta.regularMarketPrice || meta.previousClose;
   const previousClose = meta.previousClose;
@@ -2681,7 +2684,6 @@ function formatUniversalStockData(meta, quote, originalCode, stockType) {
   
   // 根據股票類型設定標題和格式
   const marketEmoji = getMarketEmoji(stockType);
-  const marketName = getMarketName(stockType);
   
   // 格式化數字
   const formatNumber = (num) => {
@@ -2705,7 +2707,7 @@ function formatUniversalStockData(meta, quote, originalCode, stockType) {
   const trendSymbol = change > 0 ? '📈' : change < 0 ? '📉' : '➡️';
   const changeSymbol = change > 0 ? '+' : '';
 
-  return `${marketEmoji} **${symbol}** ${marketName ? `(${marketName})` : ''}
+  return `${marketEmoji} **${symbol}** ${stockName ? `(${stockName})` : ''}
 
 💰 **現價**: ${formatNumber(currentPrice)} ${currency}
 ${trendSymbol} **漲跌**: ${changeSymbol}${formatNumber(change)} (${changeSymbol}${changePercent.toFixed(2)}%)
