@@ -24,20 +24,29 @@ var UserConfig = class {
   // OpenAI API Key
   OPENAI_API_KEY = [];
   // OpenAI的模型名稱
-  OPENAI_CHAT_MODEL = "gpt-4.1";
+  OPENAI_CHAT_MODEL = "gpt-4o";
   // OpenAI API BASE ``
   OPENAI_API_BASE = "https://api.openai.com/v1";
   // OpenAI API Extra Params
   OPENAI_API_EXTRA_PARAMS = {};
    // -- DALLE 配置 --
   // DALL-E的模型名称
-  DALL_E_MODEL = "dall-e-2";
+  DALL_E_MODEL = "dall-e-3";
   // DALL-E图片尺寸
-  DALL_E_IMAGE_SIZE = "512x512";
+  DALL_E_IMAGE_SIZE = "1024x1024";
   // DALL-E图片质量
   DALL_E_IMAGE_QUALITY = "standard";
   // DALL-E图片风格
   DALL_E_IMAGE_STYLE = "vivid";
+  // GPT-Image-1 的配置
+  GPT_IMAGE_MODEL = "gpt-image-1";
+  // GPT-Image-1 图片尺寸
+  GPT_IMAGE_SIZE = "1024x1024";
+  // -- 圖片生成專用配置 --
+  // 圖片生成專用 API Key (如果為空則使用 OPENAI_API_KEY)
+  OPENAI_IMAGE_API_KEY = [];
+  // 圖片生成 API BASE (如果為空則使用 OPENAI_API_BASE)
+  OPENAI_IMAGE_API_BASE = "";
   // -- AZURE 配置 --
   //
   // Azure API Key
@@ -65,7 +74,7 @@ var UserConfig = class {
   // Google Gemini API
   GOOGLE_COMPLETIONS_API = "https://generativelanguage.googleapis.com/v1beta/models/";
   // Google Gemini Model
-  GOOGLE_COMPLETIONS_MODEL = "gemini-pro";
+  GOOGLE_COMPLETIONS_MODEL = "gemini-2.5-flash";
   // -- Mistral 配置 --
   //
   // mistral api key
@@ -200,7 +209,11 @@ var ENV_TYPES = {
   GOOGLE_API_KEY: "string",
   MISTRAL_API_KEY: "string",
   COHERE_API_KEY: "string",
-  ANTHROPIC_API_KEY: "string"
+  ANTHROPIC_API_KEY: "string",
+  GPT_IMAGE_MODEL: "string",
+  GPT_IMAGE_SIZE: "string",
+  OPENAI_IMAGE_API_KEY: "array",
+  OPENAI_IMAGE_API_BASE: "string"
 };
 var ENV_KEY_MAPPER = {
   CHAT_MODEL: "OPENAI_CHAT_MODEL",
@@ -571,7 +584,48 @@ async function sendPhotoToTelegram(photo, token, context) {
   const url = `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendPhoto`;
   let body;
   const headers = {};
-  if (typeof photo === "string") {
+  
+  // 處理 base64 data URL
+  if (typeof photo === "string" && photo.startsWith("data:image/")) {
+    try {
+      // 提取 base64 數據
+      const [header, base64Data] = photo.split(',');
+      const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/png';
+      
+      // 將 base64 轉換為 Uint8Array
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // 創建 Blob
+      const blob = new Blob([bytes], { type: mimeType });
+      
+      // 使用 FormData 發送
+      body = new FormData();
+      body.append("photo", blob, "generated_image.png");
+      for (const key of Object.keys(context)) {
+        if (context[key] !== void 0 && context[key] !== null) {
+          body.append(key, `${context[key]}`);
+        }
+      }
+    } catch (e) {
+      console.error("Error processing base64 image:", e);
+      // 如果處理失敗，嘗試直接發送原始字符串
+      body = {
+        photo
+      };
+      for (const key of Object.keys(context)) {
+        if (context[key] !== void 0 && context[key] !== null) {
+          body[key] = context[key];
+        }
+      }
+      body = JSON.stringify(body);
+      headers["Content-Type"] = "application/json";
+    }
+  } else if (typeof photo === "string") {
+    // 處理普通 URL
     body = {
       photo
     };
@@ -583,6 +637,7 @@ async function sendPhotoToTelegram(photo, token, context) {
     body = JSON.stringify(body);
     headers["Content-Type"] = "application/json";
   } else {
+    // 處理 Blob 或其他類型
     body = new FormData();
     body.append("photo", photo, "photo.png");
     for (const key of Object.keys(context)) {
@@ -591,6 +646,7 @@ async function sendPhotoToTelegram(photo, token, context) {
       }
     }
   }
+  
   return await fetch(
     url,
     {
@@ -1175,8 +1231,30 @@ function openAIKeyFromContext(context) {
   const length = context.USER_CONFIG.OPENAI_API_KEY.length;
   return context.USER_CONFIG.OPENAI_API_KEY[Math.floor(Math.random() * length)];
 }
+function openAIImageKeyFromContext(context) {
+  // 如果有專門的圖片 API Key，優先使用
+  if (context.USER_CONFIG.OPENAI_IMAGE_API_KEY && context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length > 0) {
+    const length = context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length;
+    return context.USER_CONFIG.OPENAI_IMAGE_API_KEY[Math.floor(Math.random() * length)];
+  }
+  // 否則使用一般的 OpenAI API Key
+  return openAIKeyFromContext(context);
+}
+function getOpenAIImageApiBase(context) {
+  // 如果有專門的圖片 API BASE，優先使用
+  if (context.USER_CONFIG.OPENAI_IMAGE_API_BASE && context.USER_CONFIG.OPENAI_IMAGE_API_BASE.trim() !== "") {
+    return context.USER_CONFIG.OPENAI_IMAGE_API_BASE.trim();
+  }
+  // 否則使用一般的 OpenAI API BASE
+  return context.USER_CONFIG.OPENAI_API_BASE;
+}
 function isOpenAIEnable(context) {
   return context.USER_CONFIG.OPENAI_API_KEY.length > 0;
+}
+function isOpenAIImageEnable(context) {
+  // 檢查是否有專門的圖片 API Key，或者有一般的 OpenAI API Key
+  return (context.USER_CONFIG.OPENAI_IMAGE_API_KEY && context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length > 0) ||
+         (context.USER_CONFIG.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0);
 }
 async function renderOpenAIMessage(item) {
   const res = {
@@ -1224,29 +1302,53 @@ async function requestCompletionsFromOpenAI(params, context, onStream) {
   return requestChatCompletions(url, header, body, context, onStream);
 }
 async function requestImageFromOpenAI(prompt, context) {
-  const url = `${context.USER_CONFIG.OPENAI_API_BASE}/images/generations`;
+  const url = `${getOpenAIImageApiBase(context)}/images/generations`;
   const header = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${openAIKeyFromContext(context)}`
+    "Authorization": `Bearer ${openAIImageKeyFromContext(context)}`
   };
+  
+  // 檢查是否使用 gpt-image-1 模型
+  const isGptImage1 = context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
+                      context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1";
+  
   const body = {
     prompt,
-    n: 1,
-    size: context.USER_CONFIG.DALL_E_IMAGE_SIZE,
-    model: context.USER_CONFIG.DALL_E_MODEL
+    n: 1
   };
-  if (body.model === "dall-e-3") {
-    body.quality = context.USER_CONFIG.DALL_E_IMAGE_QUALITY;
-    body.style = context.USER_CONFIG.DALL_E_IMAGE_STYLE;
+  
+  if (isGptImage1) {
+    // GPT-Image-1 配置
+    body.model = "gpt-image-1";
+    body.size = context.USER_CONFIG.GPT_IMAGE_SIZE || "1024x1024";
+  } else {
+    // DALL-E 配置
+    body.model = context.USER_CONFIG.DALL_E_MODEL;
+    body.size = context.USER_CONFIG.DALL_E_IMAGE_SIZE;
+    
+    if (body.model === "dall-e-3") {
+      body.quality = context.USER_CONFIG.DALL_E_IMAGE_QUALITY;
+      body.style = context.USER_CONFIG.DALL_E_IMAGE_STYLE;
+    }
   }
+  
   const resp = await fetch(url, {
     method: "POST",
     headers: header,
     body: JSON.stringify(body)
   }).then((res) => res.json());
+  
   if (resp.error?.message) {
     throw new Error(resp.error.message);
   }
+  
+  // 處理 gpt-image-1 的 base64 回應
+  if (isGptImage1 && resp?.data?.[0]?.b64_json) {
+    // 將 base64 轉換為 data URL，讓 sendPhotoToTelegram 處理
+    return `data:image/png;base64,${resp.data[0].b64_json}`;
+  }
+  
+  // 處理 DALL-E 的 URL 回應
   return resp?.data?.[0]?.url;
 }
 
@@ -1655,7 +1757,7 @@ var imageGenAgents = [
   },
   {
     name: "openai",
-    enable: isOpenAIEnable,
+    enable: isOpenAIImageEnable,
     request: requestImageFromOpenAI
   },
   {
@@ -1687,6 +1789,11 @@ function currentImageModel(agentName, context) {
         return context.USER_CONFIG.AZURE_DALLE_API;
       }
     case "openai":
+      // 檢查是否使用 gpt-image-1
+      if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
+          context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
+        return "gpt-image-1";
+      }
       return context.USER_CONFIG.DALL_E_MODEL;
     case "workers":
       return context.USER_CONFIG.WORKERS_IMAGE_MODEL;
@@ -1867,7 +1974,7 @@ var commandAuthCheck = {
 var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version",   "/redo", 隱藏看看
   "/boa",  //解答之書
   "/new", //新對話 
-  "/qi", //奇門遁甲 
+  "/qi", //奇門遁甲
   "/oracle", //淺草籤詩
   "/poetry", //唐詩
   "/weatheralert", // 天氣特報警報
@@ -1875,8 +1982,8 @@ var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version", 
   "/dictcn",  // 新增的指令中文字典 (要加參數)
   "/dicten",  // 新增的指令英文字典 (要加參數)
   "/system",
-  "/stock",   //國際股市 (要加參數)
-  "/stocktw",  //台灣股市 (要加參數)
+  "/stock2",   //美國國際股市 (要加參數)
+  "/stock",  //台灣股市 (要加參數)
   "/wt", // 台灣地區天氣  (要加參數)
   "/ip", // ip (要加參數)
   "/dns", //dns  (要加參數)
@@ -1943,11 +2050,11 @@ var commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandDictEN
   },
-  "/stocktw": { // 台灣股票
+  "/stock": { // 台灣股票
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandStockTW
   },
-  "/stock": {  //國際股票
+  "/stock2": {  //國際股票
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandStock
   },
@@ -1996,6 +2103,7 @@ var commandHandlers = {
     fn: commandWeatherAlert
   },          
 };
+
 
 
 // 奇門問答
@@ -2067,6 +2175,7 @@ async function commandQimen(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
   }
 }
+
 
 // 天氣特報查詢
 async function commandWeatherAlert(message, command, subcommand, context) {
@@ -2473,91 +2582,163 @@ ${forecastInfo}
   `;
 }
 
-// 台灣股票修正 20240823 開盤格式不同
+// 台灣股票修正 20250120 使用新的 Yahoo Finance API，支援台股和美股
 async function commandStockTW(message, command, subcommand, context) {
-  const stockCode = subcommand.trim();
+  const stockCode = subcommand.trim().toUpperCase();
 
   if (!stockCode) {
-    return sendMessageToTelegramWithContext(context)("请提供股票代码。用法：/stocktw <股票代码>");
+    return sendMessageToTelegramWithContext(context)("請提供股票代碼。用法：/stock <股票代碼或美股代碼>");
   }
 
-  const url = `https://tw.quote.finance.yahoo.net/quote/q?type=tick&perd=1m&sym=${stockCode}&callback=`;
-
-  let text = ''; // 定义 text 变量
-  let jsonDataStr = ''; // 定义 jsonDataStr 变量
-
+  // 智慧判斷股票類型並格式化代碼
+  const formattedCode = formatStockCode(stockCode);
+  
   try {
-    const response = await fetch(url);
-    text = await response.text();
+    // 使用 Yahoo Finance API v8
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${formattedCode}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
 
-    // 打印出返回的完整数据以进行调试
-    console.error("Raw Response Text: ", JSON.stringify(text));
-
-    // 确保去掉前后的括号并修剪空白字符
-    jsonDataStr = text.trim();
-    console.error("Before Cleanup JSON String: ", JSON.stringify(jsonDataStr));
-
-    // 去掉可能的括号包裹
-    if (jsonDataStr.startsWith('(')) {
-      jsonDataStr = jsonDataStr.slice(1);
-    }
-    if (jsonDataStr.endsWith(')')) {
-      jsonDataStr = jsonDataStr.slice(0, -1);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    // 去掉 JSON 数据后面的任何额外字符（如 `%`）
-    const jsonEnd = jsonDataStr.lastIndexOf('}');
-    if (jsonEnd !== -1) {
-      jsonDataStr = jsonDataStr.slice(0, jsonEnd + 1);
+    const data = await response.json();
+    
+    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+      throw new Error(`找不到股票代碼 ${stockCode} 的資料`);
     }
 
-    console.error("Cleaned JSON String: ", JSON.stringify(jsonDataStr));
-
-    // 尝试解析 JSON
-    const jsonData = JSON.parse(jsonDataStr);
-
-    if (!jsonData || !jsonData.mem || !jsonData.tick) {
-      throw new Error("无法解析返回的股票数据");
+    const result = data.chart.result[0];
+    const meta = result.meta;
+    const quote = result.indicators.quote[0];
+    
+    if (!meta || !quote) {
+      throw new Error("股票資料格式錯誤");
     }
 
-    const formattedStockInfo = formatStockData(jsonData);
+    const stockType = detectStockType(formattedCode);
+    const formattedStockInfo = formatUniversalStockData(meta, quote, stockCode, stockType);
     return sendMessageToTelegramWithContext(context)(formattedStockInfo);
+    
   } catch (e) {
-    console.error(`JSON Parsing Error: ${e.message}`, jsonDataStr); 
-    return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
+    console.error(`Stock Query Error: ${e.message}`); 
+    return sendMessageToTelegramWithContext(context)(`查詢股票失敗: ${e.message}\n\n建議:\n1. 台股請輸入數字代碼 (如: 2330)\n2. 美股請輸入英文代碼 (如: TSLA, AAPL)\n3. 檢查是否為交易時間\n4. 稍後再試`);
   }
 }
 
-function formatStockData(data) {
-  const stockName = data.mem.name;
-  const latestPrice = data.tick[data.tick.length - 1].p;
-  const volume = data.tick[data.tick.length - 1].v;
-  const high = data.mem[834]; // 今日最高
-  const low = data.mem[835]; // 今日最低
-  const open = data.mem[101]; // 開盤價
-  
-  let closeLabel;
-  let close;
-
-  if (data.tick && data.tick.length > 0) {
-    // 如果 tick 資料存在且不為空，假設是盤中時間，使用最新價格作為現價
-    closeLabel = "現價";
-    close = latestPrice;
-  } else {
-    // 否則，假設為收盤後，使用舊的 JSON 鍵（878）或最新價格
-    closeLabel = "收盤價";
-    close = data.mem[878] || latestPrice;
+// 智慧判斷並格式化股票代碼
+function formatStockCode(stockCode) {
+  // 如果已經包含交易所後綴，直接返回
+  if (stockCode.includes('.') || /^[A-Z]+$/.test(stockCode)) {
+    return stockCode;
   }
+  
+  // 如果是純數字，判斷為台股，加上 .TW
+  if (/^\d+$/.test(stockCode)) {
+    return `${stockCode}.TW`;
+  }
+  
+  // 其他情況（混合字母數字）直接返回，讓 API 自行判斷
+  return stockCode;
+}
 
-  return `
-  股票名稱: ${stockName}
-  最新價格: ${latestPrice}
-  成交量: ${volume}
-  今日最高: ${high}
-  今日最低: ${low}
-  開盤價: ${open}
-  ${closeLabel}: ${close}
-  `;
+// 檢測股票類型
+function detectStockType(formattedCode) {
+  if (formattedCode.endsWith('.TW')) {
+    return 'taiwan';
+  } else if (formattedCode.endsWith('.HK')) {
+    return 'hongkong';
+  } else if (formattedCode.includes('.')) {
+    return 'international';
+  } else {
+    return 'us'; // 預設為美股
+  }
+}
+
+function formatUniversalStockData(meta, quote, originalCode, stockType) {
+  const symbol = meta.symbol || originalCode;
+  const currency = meta.currency || 'USD';
+  const exchangeName = meta.exchangeName || meta.fullExchangeName || '未知交易所';
+  
+  // 當前價格
+  const currentPrice = meta.regularMarketPrice || meta.previousClose;
+  const previousClose = meta.previousClose;
+  
+  // 計算漲跌
+  const change = currentPrice - previousClose;
+  const changePercent = ((change / previousClose) * 100);
+  
+  // 今日開高低量
+  const dayHigh = meta.regularMarketDayHigh || 'N/A';
+  const dayLow = meta.regularMarketDayLow || 'N/A';
+  const dayOpen = quote.open ? quote.open[quote.open.length - 1] : meta.regularMarketOpen || 'N/A';
+  const volume = meta.regularMarketVolume || 'N/A';
+  
+  // 根據股票類型設定標題和格式
+  const marketEmoji = getMarketEmoji(stockType);
+  const marketName = getMarketName(stockType);
+  
+  // 格式化數字
+  const formatNumber = (num) => {
+    if (typeof num !== 'number') return num;
+    return num.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatVolume = (vol) => {
+    if (typeof vol !== 'number') return vol;
+    if (vol >= 1000000000) {
+      return `${(vol / 1000000000).toFixed(1)}B`;
+    } else if (vol >= 1000000) {
+      return `${(vol / 1000000).toFixed(1)}M`;
+    } else if (vol >= 1000) {
+      return `${(vol / 1000).toFixed(1)}K`;
+    }
+    return vol.toLocaleString();
+  };
+
+  // 判斷漲跌顏色符號
+  const trendSymbol = change > 0 ? '📈' : change < 0 ? '📉' : '➡️';
+  const changeSymbol = change > 0 ? '+' : '';
+
+  return `${marketEmoji} **${symbol}** ${marketName ? `(${marketName})` : ''}
+
+💰 **現價**: ${formatNumber(currentPrice)} ${currency}
+${trendSymbol} **漲跌**: ${changeSymbol}${formatNumber(change)} (${changeSymbol}${changePercent.toFixed(2)}%)
+
+📈 **今日最高**: ${formatNumber(dayHigh)}
+📉 **今日最低**: ${formatNumber(dayLow)}  
+🔓 **開盤價**: ${formatNumber(dayOpen)}
+📊 **成交量**: ${formatVolume(volume)}
+🔒 **昨收**: ${formatNumber(previousClose)}
+
+⏰ 資料來源: Yahoo Finance`;
+}
+
+// 根據股票類型獲取市場表情符號
+function getMarketEmoji(stockType) {
+  switch (stockType) {
+    case 'taiwan': return '🇹🇼';
+    case 'us': return '🇺🇸';
+    case 'hongkong': return '🇭🇰';
+    case 'international': return '🌍';
+    default: return '📊';
+  }
+}
+
+// 根據股票類型獲取市場名稱
+function getMarketName(stockType) {
+  switch (stockType) {
+    case 'taiwan': return '台灣證券交易所';
+    case 'us': return 'US Market';
+    case 'hongkong': return '香港證券交易所';
+    case 'international': return 'International Market';
+    default: return '';
+  }
 }
 
 //國際股票
@@ -2565,7 +2746,7 @@ async function commandStock(message, command, subcommand, context) {
   const stockSymbol = subcommand.trim().toUpperCase(); // 获取用户输入的股票代码，并转换为大写
 
   if (!stockSymbol) {
-    return sendMessageToTelegramWithContext(context)("请提供股票代码。用法：/stock <股票代码>");
+    return sendMessageToTelegramWithContext(context)("請提供股票代號。用法：/stock2 <股票代號>");
   }
 
   const apiKey = "psHDQQHMeQMi9fpTXvxa8D6JR8zaPB9q"; // 你的 API 密钥
@@ -2587,7 +2768,7 @@ async function commandStock(message, command, subcommand, context) {
       return sendMessageToTelegramWithContext(context)(formattedStockInfo);
     } else {
       return sendMessageToTelegramWithContext(context)(
-        `未找到 ${stockSymbol} 的股票信息。请确认股票代号。`
+        `未找到 ${stockSymbol} 的股票信息。請確認股票代號是否正確。`
       );
     }
     
@@ -2597,25 +2778,27 @@ async function commandStock(message, command, subcommand, context) {
   }
 }
 
+
 function formatStockInfo(stock) {
   return `
-  股票名称: ${stock.name} (${stock.symbol})
-  当前价格: $${stock.price.toFixed(2)}
-  今日涨跌: ${stock.change.toFixed(2)} (${stock.changesPercentage.toFixed(2)}%)
-  今日最低价: $${stock.dayLow.toFixed(2)}
-  今日最高价: $${stock.dayHigh.toFixed(2)}
-  年度最低价: $${stock.yearLow.toFixed(2)}
-  年度最高价: $${stock.yearHigh.toFixed(2)}
+  股票名稱: ${stock.name} (${stock.symbol})
+  當前價格: $${stock.price.toFixed(2)}
+  今日漲跌: ${stock.change.toFixed(2)} (${stock.changesPercentage.toFixed(2)}%)
+  今日最低價: $${stock.dayLow.toFixed(2)}
+  今日最高價: $${stock.dayHigh.toFixed(2)}
+  年度最低價: $${stock.yearLow.toFixed(2)}
+  年度最高價: $${stock.yearHigh.toFixed(2)}
   市值: $${(stock.marketCap / 1e9).toFixed(2)} 十億美元
   交易所: ${stock.exchange}
   成交量: ${stock.volume.toLocaleString()}
   平均成交量: ${stock.avgVolume.toLocaleString()}
-  开盘价: $${stock.open.toFixed(2)}
-  昨日收盘价: $${stock.previousClose.toFixed(2)}
+  開盤價: $${stock.open.toFixed(2)}
+  昨日收盤價: $${stock.previousClose.toFixed(2)}
   每股收益 (EPS): $${stock.eps.toFixed(2)}
   市盈率 (P/E): ${stock.pe.toFixed(2)}
   `;
 }
+
 
 // 新增的 /dictcn 中文字典指令功能
 async function commandDictCN(message, command, subcommand, context) {
@@ -3560,7 +3743,7 @@ var zh_hans_default = {
       "help": "获取命令帮助",
       "new": "发起新的对话",
       "start": "获取你的ID, 并发起新的对话",
-      "img": "生成一张图片, 命令完整格式为 `/img 图片描述`, 例如`/img 月光下的沙滩`",
+      "img": "生成一张图片, 命令完整格式为 `/img 图片描述`, 例如`/img 月光下的沙滩`。支持 DALL-E-2, DALL-E-3 和最新的 GPT-Image-1 模型",
       "version": "获取当前版本号, 判断是否需要更新",
       "setenv": "设置用户配置，命令完整格式为 /setenv KEY=VALUE",
       "setenvs": "批量设置用户配置, 命令完整格式为 /setenvs {\"KEY1\": \"VALUE1\", \"KEY2\": \"VALUE2\"}",
@@ -3571,17 +3754,18 @@ var zh_hans_default = {
       "echo": "回显消息",
       "dicten": "查询英文词汇定义 如 /dicten apple",
       "dictcn": "查询中文字词定义 如 /dictcn 蘋",
-      "stocktw": "查询台湾股票代号 如 /stocktw 2330",
-      "stock": "查询国际股票代号 如 /stock AAPL",
+      "stock": "查询台股/美股代号 如 /stock 2330 或 /stock TSLA（智能判断台股美股）",
+      "stock2": "查询国际股票代号 如 /stock AAPL",
       "wt": "台湾各城市的天气 如 /wt 高雄市",
-      "ip": "查詢 IP 地址信息 如 /ip 8.8.8.8",
-      "dns": "查詢 dns 地址信息 如 /ip david888.com",
+      "ip": "查詢 IP 地址資訊 如 /ip 8.8.8.8",
+      "dns": "查詢 dns 地址資訊 如 /ip david888.com",
       "boa": "解答之書 命運還是機會",
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "隨機的唐詩",
-      "web": "網頁搜尋",
       "qi": "奇門遁甲",
+      "web": "網頁搜尋",
+      "dns2": "查詢 dns 資訊",
       "weatheralert": "台灣天氣 特報 警報",
     },
     "new": {
@@ -3599,7 +3783,7 @@ var zh_hant_default = {
       "help": "獲取命令幫助",
       "new": "開始一個新的對話",
       "start": "獲取你的ID並開始一個新的對話",
-      "img": "生成圖片，完整命令格式為 `/img 圖片描述`，例如`/img 海灘月光`",
+      "img": "生成圖片，完整命令格式為 `/img 圖片描述`，例如`/img 海灘月光`。支援 DALL-E-2, DALL-E-3 和最新的 GPT-Image-1 模型",
       "version": "獲取當前版本號以確定是否需要更新",
       "setenv": "設置用戶配置，完整命令格式為/setenv KEY=VALUE",
       "setenvs": "批量設置用戶配置，命令完整格式為 /setenvs {\"KEY1\": \"VALUE1\", \"KEY2\": \"VALUE2\"}",
@@ -3610,8 +3794,8 @@ var zh_hant_default = {
       "echo": "回顯消息",
       "dicten": "查詢英文單詞定義 如 /dicten apple",
       "dictcn": "查詢中文詞彙定義 如 /dictcn 蘋",
-      "stocktw": "查詢台灣股票代號 如 /stocktw 2330 ",
-      "stock": "查詢國際股票代號 如 /stock AAPL ",
+      "stock": "查詢台股/美股代碼 如 /stock 2330 或 /stock TSLA（智慧判斷台股美股）",
+      "stock2": "查詢國際股票代號 如 /stock2 AAPL ",
       "wt": "查詢台灣各城市的天氣 如 /wt 高雄市 ",
       "ip": "查詢 IP 地址信息 如 /ip 8.8.8.8",
       "dns": "查詢 dns 地址信息 如 /ip david888.com",
@@ -3619,8 +3803,9 @@ var zh_hant_default = {
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "唐詩 隨機抽一首",
-      "web": "網頁搜尋",
       "qi": "奇門遁甲",
+      "web": "網頁搜尋",
+      "dns2": "查詢 dns 資訊",
       "weatheralert": "台灣天氣 特報 警報",
     },
     "new": {
@@ -3650,7 +3835,10 @@ var pt_default = {
       "echo": "Repetir a mensagem",
       "dicten": "Consultar definição de palavra em inglês",
       "dictcn": "Consultar definição de palavra em chinês",
-      "stocktw": "Consultar símbolo de ações de Taiwan",
+      "stock": "Consultar símbolo de ações de Taiwan",
+      "qi": "奇門遁甲",
+      "web": "網頁搜尋",
+      "dns2": "查詢 dns 資訊",
       "stock": "Consultar símbolo de ações internacionais"
     },
     "new": {
@@ -3679,15 +3867,16 @@ var en_default = {
       "echo": "Echo the message",
       "dicten": "Lookup English word definition",
       "dictcn": "Lookup Chinese word definition",
-      "stocktw": "Lookup Taiwan stock symbol",
-      "stock": "Lookup international stock symbol",
+      "stock": "Lookup stock symbol",
+      "stock2": "Lookup international stock symbol",
       "ip": "查詢 IP 地址信息 如 /ip 8.8.8.8",
       "dns": "查詢 dns 地址信息 如 /ip david888.com",
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "來首唐詩",
-      "web": "網頁搜尋",
       "qi": "奇門遁甲",
+      "web": "網頁搜尋",
+      "dns2": "查詢 dns 資訊",
       "weatheralert": "台灣天氣 特報 警報"
     },
     "new": {
