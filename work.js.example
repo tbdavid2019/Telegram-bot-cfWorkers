@@ -47,6 +47,13 @@ var UserConfig = class {
   OPENAI_IMAGE_API_KEY = [];
   // 圖片生成 API BASE (如果為空則使用 OPENAI_API_BASE)
   OPENAI_IMAGE_API_BASE = "";
+  // -- Gemini 圖片生成配置 --
+  // Gemini 圖片生成模型
+  GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image-preview";
+  // Gemini 圖片生成 API Key (Google 原生 API Key)
+  GEMINI_IMAGE_API_KEY = [];
+  // Gemini 圖片生成 API BASE (不再需要，直接使用 Google API)
+  GEMINI_IMAGE_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
   // -- AZURE 配置 --
   //
   // Azure API Key
@@ -213,7 +220,10 @@ var ENV_TYPES = {
   GPT_IMAGE_MODEL: "string",
   GPT_IMAGE_SIZE: "string",
   OPENAI_IMAGE_API_KEY: "array",
-  OPENAI_IMAGE_API_BASE: "string"
+  OPENAI_IMAGE_API_BASE: "string",
+  GEMINI_IMAGE_MODEL: "string",
+  GEMINI_IMAGE_API_KEY: "array",
+  GEMINI_IMAGE_API_BASE: "string"
 };
 var ENV_KEY_MAPPER = {
   CHAT_MODEL: "OPENAI_CHAT_MODEL",
@@ -1352,6 +1362,184 @@ async function requestImageFromOpenAI(prompt, context) {
   return resp?.data?.[0]?.url;
 }
 
+// Gemini 圖片生成相關函數
+function geminiImageKeyFromContext(context) {
+  if (context.USER_CONFIG.GEMINI_IMAGE_API_KEY && context.USER_CONFIG.GEMINI_IMAGE_API_KEY.length > 0) {
+    const length = context.USER_CONFIG.GEMINI_IMAGE_API_KEY.length;
+    return context.USER_CONFIG.GEMINI_IMAGE_API_KEY[Math.floor(Math.random() * length)];
+  }
+  throw new Error("Gemini API Key is required for Google native API");
+}
+
+function getGeminiImageApiBase(context) {
+  if (context.USER_CONFIG.GEMINI_IMAGE_API_BASE && context.USER_CONFIG.GEMINI_IMAGE_API_BASE.trim() !== "") {
+    return context.USER_CONFIG.GEMINI_IMAGE_API_BASE.trim();
+  }
+  return "https://openrouter.ai/api/v1";
+}
+
+function isGeminiImageEnable(context) {
+  const hasGeminiKey = context.USER_CONFIG.GEMINI_IMAGE_API_KEY && context.USER_CONFIG.GEMINI_IMAGE_API_KEY.length > 0;
+  
+  console.log(`[DEBUG] isGeminiImageEnable check:
+    GEMINI_IMAGE_API_KEY available: ${hasGeminiKey}
+    Result: ${hasGeminiKey}`);
+  
+  return hasGeminiKey;
+}
+
+async function requestImageFromGemini(prompt, context) {
+  try {
+    const model = context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image-preview";
+    
+    // 使用 streaming API
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
+    const apiKey = geminiImageKeyFromContext(context);
+    
+    console.log(`[DEBUG] Gemini Native API Stream Request:
+      URL: ${url}
+      Model: ${model}
+      API Key: ${apiKey ? `${apiKey.substring(0, 10)}...` : 'null'}
+      Prompt: ${prompt}`);
+    
+    const header = {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey
+    };
+    
+    // 使用更明確的圖片生成提示
+    const imagePrompt = `Generate an image of: ${prompt}. Please create a detailed visual representation.`;
+    
+    // 根據官方範例的格式構建請求
+    const body = {
+      "contents": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "text": imagePrompt
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "response_modalities": ["IMAGE"]
+      }
+    };
+    
+    console.log(`[DEBUG] Request body:`, JSON.stringify(body, null, 2));
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: header,
+      body: JSON.stringify(body)
+    });
+    
+    console.log(`[DEBUG] Response status: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[DEBUG] Error response:`, errorText);
+      throw new Error(`API Error ${response.status}: ${errorText}`);
+    }
+    
+    // 處理 streaming 響應 - 拼接所有片段
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullResponse = '';
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+        
+        // 將所有片段拼接起來
+        const chunk = decoder.decode(value, { stream: true });
+        fullResponse += chunk;
+        console.log(`[DEBUG] Received chunk: ${chunk.length} chars`);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    
+    console.log(`[DEBUG] Full response assembled, total length: ${fullResponse.length}`);
+    console.log(`[DEBUG] Response starts with:`, fullResponse.substring(0, 200));
+    console.log(`[DEBUG] Response ends with:`, fullResponse.substring(fullResponse.length - 200));
+    
+    // 解析完整的 JSON 響應
+    let data;
+    try {
+      data = JSON.parse(fullResponse);
+      console.log(`[DEBUG] Successfully parsed complete JSON response`);
+    } catch (parseError) {
+      console.log(`[DEBUG] Failed to parse full response as single JSON:`, parseError.message);
+      
+      // 如果不是有效的JSON，嘗試查找JSON數組
+      const arrayMatch = fullResponse.match(/\[.*\]/s);
+      if (arrayMatch) {
+        try {
+          data = JSON.parse(arrayMatch[0]);
+          console.log(`[DEBUG] Successfully parsed as JSON array`);
+        } catch (arrayParseError) {
+          console.log(`[DEBUG] Failed to parse as JSON array:`, arrayParseError.message);
+          throw new Error(`Failed to parse streaming response: ${parseError.message}`);
+        }
+      } else {
+        throw new Error(`Failed to parse streaming response: ${parseError.message}`);
+      }
+    }
+    
+    console.log(`[DEBUG] Searching for image data in response...`);
+    
+    // 如果 data 是數組，遍歷所有元素
+    const responses = Array.isArray(data) ? data : [data];
+    
+    for (let i = 0; i < responses.length; i++) {
+      const responseItem = responses[i];
+      console.log(`[DEBUG] Checking response item ${i}:`, Object.keys(responseItem));
+      
+      if (responseItem.candidates && responseItem.candidates[0] && 
+          responseItem.candidates[0].content && responseItem.candidates[0].content.parts) {
+        
+        console.log(`[DEBUG] Found ${responseItem.candidates[0].content.parts.length} parts in response ${i}`);
+        
+        for (let j = 0; j < responseItem.candidates[0].content.parts.length; j++) {
+          const part = responseItem.candidates[0].content.parts[j];
+          console.log(`[DEBUG] Part ${j} keys:`, Object.keys(part));
+          
+          // 檢查 inlineData (根據官方範例)
+          if (part.inlineData && part.inlineData.data) {
+            console.log(`[DEBUG] Found inlineData with ${part.inlineData.data.length} characters`);
+            const mimeType = part.inlineData.mimeType || 'image/png';
+            return `data:${mimeType};base64,${part.inlineData.data}`;
+          }
+          
+          // 也檢查 inline_data (備用格式)
+          if (part.inline_data && part.inline_data.data) {
+            console.log(`[DEBUG] Found inline_data with ${part.inline_data.data.length} characters`);
+            const mimeType = part.inline_data.mime_type || 'image/png';
+            return `data:${mimeType};base64,${part.inline_data.data}`;
+          }
+          
+          if (part.text) {
+            console.log(`[DEBUG] Part ${j} contains text:`, part.text.substring(0, 100));
+          }
+        }
+      }
+    }
+    
+    console.log(`[DEBUG] No image data found in any response items`);
+    throw new Error("No image data found in streaming response");
+    
+  } catch (error) {
+    console.error(`[ERROR] Gemini Native API Request failed:`, error);
+    throw error;
+  }
+}
+
 // src/agent/workersai.js
 async function run(model, body, id, token) {
   return await fetch(
@@ -1761,22 +1949,38 @@ var imageGenAgents = [
     request: requestImageFromOpenAI
   },
   {
+    name: "gemini",
+    enable: isGeminiImageEnable,
+    request: requestImageFromGemini
+  },
+  {
     name: "workers",
     enable: isWorkersAIEnable,
     request: requestImageFromWorkersAI
   }
 ];
 function loadImageGen(context) {
+  console.log(`[DEBUG] loadImageGen called with AI_IMAGE_PROVIDER: ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
+  
   for (const imgGen of imageGenAgents) {
+    console.log(`[DEBUG] Checking if ${imgGen.name} === ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
     if (imgGen.name === context.USER_CONFIG.AI_IMAGE_PROVIDER) {
+      console.log(`[DEBUG] Found matching provider: ${imgGen.name}`);
       return imgGen;
     }
   }
+  
+  console.log(`[DEBUG] No matching provider found, checking enable() functions...`);
   for (const imgGen of imageGenAgents) {
-    if (imgGen.enable(context)) {
+    const enabled = imgGen.enable(context);
+    console.log(`[DEBUG] ${imgGen.name}.enable() = ${enabled}`);
+    if (enabled) {
+      console.log(`[DEBUG] Selected auto provider: ${imgGen.name}`);
       return imgGen;
     }
   }
+  
+  console.log(`[DEBUG] No enabled provider found`);
   return null;
 }
 function currentImageModel(agentName, context) {
@@ -1795,6 +1999,8 @@ function currentImageModel(agentName, context) {
         return "gpt-image-1";
       }
       return context.USER_CONFIG.DALL_E_MODEL;
+    case "gemini":
+      return context.USER_CONFIG.GEMINI_IMAGE_MODEL;
     case "workers":
       return context.USER_CONFIG.WORKERS_IMAGE_MODEL;
     default:
@@ -1807,6 +2013,8 @@ function imageModelKey(agentName) {
       return "AZURE_DALLE_API";
     case "openai":
       return "DALL_E_MODEL";
+    case "gemini":
+      return "GEMINI_IMAGE_MODEL";
     case "workers":
       return "WORKERS_IMAGE_MODEL";
     default:
@@ -1978,7 +2186,8 @@ var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version", 
   "/oracle", //淺草籤詩
   "/poetry", //唐詩
   "/weatheralert", // 天氣特報警報
-  "/img", 
+  "/img",  //產生圖片
+  "/setimg", //設定圖片生成模型
   "/dictcn",  // 新增的指令中文字典 (要加參數)
   "/dicten",  // 新增的指令英文字典 (要加參數)
   "/system",
@@ -2008,6 +2217,10 @@ var commandHandlers = {
   "/img": {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandGenerateImg
+  },
+  "/setimg": {
+    scopes: ["all_private_chats", "all_chat_administrators"],
+    fn: commandSetImageProvider
   },
   "/version": {
     scopes: ["all_private_chats", "all_chat_administrators"],
@@ -2894,6 +3107,82 @@ async function commandGenerateImg(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
   }
 }
+
+async function commandSetImageProvider(message, command, subcommand, context) {
+  const validProviders = ["auto", "openai", "azure", "gemini", "workers"];
+  
+  if (subcommand === "") {
+    // 顯示當前設定和可用選項
+    const currentProvider = context.USER_CONFIG.AI_IMAGE_PROVIDER || "auto";
+    const currentImageAgent = loadImageGen(context);
+    const currentModel = currentImageAgent ? currentImageModel(currentImageAgent.name, context) : "未知";
+    
+    let msg = `🎨 **圖片生成設定**\n\n`;
+    msg += `📋 **當前設定**: ${currentProvider}\n`;
+    msg += `🤖 **當前模型**: ${currentModel}\n\n`;
+    msg += `📝 **可用選項**:\n`;
+    msg += `• auto - 自動選擇可用的服務\n`;
+    msg += `• openai - OpenAI DALL-E / GPT-Image-1\n`;
+    msg += `• azure - Azure OpenAI DALL-E\n`;
+    msg += `• gemini - Gemini 2.5 Flash Image\n`;
+    msg += `• workers - Cloudflare Workers AI\n\n`;
+    msg += `💡 **使用方法**: \`/setimg <provider>\`\n`;
+    msg += `📝 **範例**: \`/setimg gemini\``;
+    
+    context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
+    return sendMessageToTelegramWithContext(context)(msg);
+  }
+  
+  const provider = subcommand.toLowerCase().trim();
+  
+  if (!validProviders.includes(provider)) {
+    return sendMessageToTelegramWithContext(context)(
+      `❌ 無效的圖片生成服務: ${provider}\n\n` +
+      `✅ 可用選項: ${validProviders.join(", ")}`
+    );
+  }
+  
+  try {
+    // 更新配置
+    context.USER_CONFIG.AI_IMAGE_PROVIDER = provider;
+    
+    // 保存配置到資料庫
+    await DATABASE.put(
+      context.SHARE_CONTEXT.configStoreKey,
+      JSON.stringify(trimUserConfig(context.USER_CONFIG))
+    );
+    
+    // 檢查設定的服務是否可用
+    let statusMsg = `✅ **圖片生成服務已設定為**: ${provider}\n\n`;
+    
+    if (provider !== "auto") {
+      const imageAgent = loadImageGen(context);
+      if (imageAgent && imageAgent.name === provider) {
+        const currentModel = currentImageModel(provider, context);
+        statusMsg += `🤖 **使用模型**: ${currentModel}\n`;
+        statusMsg += `✅ **狀態**: 服務可用`;
+      } else {
+        statusMsg += `⚠️ **警告**: 所選服務目前不可用，將自動回退到其他可用服務`;
+      }
+    } else {
+      const imageAgent = loadImageGen(context);
+      if (imageAgent) {
+        const currentModel = currentImageModel(imageAgent.name, context);
+        statusMsg += `🤖 **自動選擇**: ${imageAgent.name} (${currentModel})\n`;
+        statusMsg += `✅ **狀態**: 服務可用`;
+      } else {
+        statusMsg += `❌ **錯誤**: 沒有可用的圖片生成服務`;
+      }
+    }
+    
+    context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
+    return sendMessageToTelegramWithContext(context)(statusMsg);
+    
+  } catch (e) {
+    return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
+  }
+}
+
 async function commandGetHelp(message, command, subcommand, context) {
   let helpMsg = ENV.I18N.command.help.summary + "\n";
   helpMsg += Object.keys(commandHandlers).map((key) => `${key}\uFF1A${ENV.I18N.command.help[key.substring(1)]}`).join("\n");
@@ -3746,6 +4035,7 @@ var zh_hans_default = {
       "new": "发起新的对话",
       "start": "获取你的ID, 并发起新的对话",
       "img": "生成一张图片, 命令完整格式为 `/img 图片描述`, 例如`/img 月光下的沙滩`。支持 DALL-E-2, DALL-E-3 和最新的 GPT-Image-1 模型",
+      "setimg": "设置图片生成模型，如 /setimg openai 或 /setimg gemini",
       "version": "获取当前版本号, 判断是否需要更新",
       "setenv": "设置用户配置，命令完整格式为 /setenv KEY=VALUE",
       "setenvs": "批量设置用户配置, 命令完整格式为 /setenvs {\"KEY1\": \"VALUE1\", \"KEY2\": \"VALUE2\"}",
@@ -3786,6 +4076,7 @@ var zh_hant_default = {
       "new": "開始一個新的對話",
       "start": "獲取你的ID並開始一個新的對話",
       "img": "生成圖片，完整命令格式為 `/img 圖片描述`，例如`/img 海灘月光`。支援 DALL-E-2, DALL-E-3 和最新的 GPT-Image-1 模型",
+      "setimg": "設定圖片生成模型，如 /setimg openai 或 /setimg gemini",
       "version": "獲取當前版本號以確定是否需要更新",
       "setenv": "設置用戶配置，完整命令格式為/setenv KEY=VALUE",
       "setenvs": "批量設置用戶配置，命令完整格式為 /setenvs {\"KEY1\": \"VALUE1\", \"KEY2\": \"VALUE2\"}",
@@ -3859,6 +4150,7 @@ var en_default = {
       "new": "Start a new conversation",
       "start": "Get your ID and start a new conversation",
       "img": "Generate an image, the complete command format is `/img image description`, for example `/img beach at moonlight`",
+      "setimg": "Set image generation model, like /setimg openai or /setimg gemini",
       "version": "Get the current version number to determine whether to update",
       "setenv": "Set user configuration, the complete command format is /setenv KEY=VALUE",
       "setenvs": "Batch set user configurations, the full format of the command is /setenvs {\"KEY1\": \"VALUE1\", \"KEY2\": \"VALUE2\"}",
