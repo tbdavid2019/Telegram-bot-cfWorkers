@@ -2187,6 +2187,7 @@ var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version", 
   "/poetry", //唐詩
   "/weatheralert", // 天氣特報警報
   "/img",  //產生圖片
+  "/img2",  //產生圖片2 (支援更多模型)
   "/setimg", //設定圖片生成模型
   "/dictcn",  // 新增的指令中文字典 (要加參數)
   "/dicten",  // 新增的指令英文字典 (要加參數)
@@ -2217,6 +2218,10 @@ var commandHandlers = {
   "/img": {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandGenerateImg
+  },
+  "/img2": {
+    scopes: ["all_private_chats", "all_chat_administrators"],
+    fn: commandGenerateImg2
   },
   "/setimg": {
     scopes: ["all_private_chats", "all_chat_administrators"],
@@ -3103,6 +3108,66 @@ async function commandGenerateImg(message, command, subcommand, context) {
     setTimeout(() => sendChatActionToTelegramWithContext(context)("upload_photo").catch(console.error), 0);
     const img = await gen(subcommand, context);
     return sendPhotoToTelegramWithContext(context)(img);
+  } catch (e) {
+    return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
+  }
+}
+
+async function commandGenerateImg2(message, command, subcommand, context) {
+  if (subcommand === "") {
+    return sendMessageToTelegramWithContext(context)("請提供圖片描述，例如：`/img2 月光下的沙灘`");
+  }
+  
+  try {
+    // 檢查可用的圖片生成器
+    const availableGenerators = [];
+    
+    for (const imgGen of imageGenAgents) {
+      if (imgGen.enable(context)) {
+        availableGenerators.push(imgGen);
+      }
+    }
+    
+    if (availableGenerators.length === 0) {
+      return sendMessageToTelegramWithContext(context)("ERROR: 沒有可用的圖片生成器，請檢查 API 密鑰設定");
+    }
+    
+    setTimeout(() => sendChatActionToTelegramWithContext(context)("upload_photo").catch(console.error), 0);
+    
+    // 同時調用所有可用的生成器
+    const imagePromises = availableGenerators.map(async (gen) => {
+      try {
+        const img = await gen.request(subcommand, context);
+        return { generator: gen.name, image: img, success: true };
+      } catch (e) {
+        console.error(`Error generating image with ${gen.name}:`, e);
+        return { generator: gen.name, error: e.message, success: false };
+      }
+    });
+    
+    const results = await Promise.all(imagePromises);
+    
+    // 發送成功的圖片
+    let successCount = 0;
+    for (const result of results) {
+      if (result.success) {
+        successCount++;
+        await sendPhotoToTelegramWithContext(context)(result.image);
+      }
+    }
+    
+    // 如果沒有成功的圖片，發送錯誤信息
+    if (successCount === 0) {
+      const errorMessages = results.map(r => `${r.generator}: ${r.error}`).join('\n');
+      return sendMessageToTelegramWithContext(context)(`所有圖片生成都失敗了：\n${errorMessages}`);
+    }
+    
+    // 如果有部分成功，發送總結信息
+    if (successCount < results.length) {
+      const failedGenerators = results.filter(r => !r.success).map(r => r.generator).join(', ');
+      return sendMessageToTelegramWithContext(context)(`成功生成 ${successCount}/${results.length} 張圖片\n失敗的生成器: ${failedGenerators}`);
+    }
+    
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
   }
@@ -4035,6 +4100,7 @@ var zh_hans_default = {
       "new": "发起新的对话",
       "start": "获取你的ID, 并发起新的对话",
       "img": "生成一张图片, 命令完整格式为 `/img 图片描述`, 例如`/img 月光下的沙滩`。支持 DALL-E-2, DALL-E-3 和最新的 GPT-Image-1 模型",
+      "img2": "同时使用多个模型生成图片, 命令完整格式为 `/img2 图片描述`, 例如`/img2 月光下的沙滩`。会同时调用所有配置的图片生成服务",
       "setimg": "设置图片生成模型，如 /setimg openai 或 /setimg gemini",
       "version": "获取当前版本号, 判断是否需要更新",
       "setenv": "设置用户配置，命令完整格式为 /setenv KEY=VALUE",
@@ -4076,6 +4142,7 @@ var zh_hant_default = {
       "new": "開始一個新的對話",
       "start": "獲取你的ID並開始一個新的對話",
       "img": "生成圖片，完整命令格式為 `/img 圖片描述`，例如`/img 海灘月光`。支援 DALL-E-2, DALL-E-3 和最新的 GPT-Image-1 模型",
+      "img2": "同時使用多個模型生成圖片，完整命令格式為 `/img2 圖片描述`，例如`/img2 海灘月光`。會同時調用所有配置的圖片生成服務",
       "setimg": "設定圖片生成模型，如 /setimg openai 或 /setimg gemini",
       "version": "獲取當前版本號以確定是否需要更新",
       "setenv": "設置用戶配置，完整命令格式為/setenv KEY=VALUE",
@@ -4118,6 +4185,7 @@ var pt_default = {
       "new": "Iniciar uma nova conversa",
       "start": "Obter seu ID e iniciar uma nova conversa",
       "img": "Gerar uma imagem, o formato completo do comando é `/img descrição da imagem`, por exemplo `/img praia ao luar`",
+      "img2": "Gerar imagens usando múltiplos modelos simultaneamente, o formato completo do comando é `/img2 descrição da imagem`, por exemplo `/img2 praia ao luar`. Chamará todos os serviços de geração de imagem configurados de uma vez",
       "version": "Obter o número da versão atual para determinar se é necessário atualizar",
       "setenv": "Definir configuração do usuário, o formato completo do comando é /setenv CHAVE=VALOR",
       "setenvs": "Definir configurações do usuário em lote, o formato completo do comando é /setenvs {\"CHAVE1\": \"VALOR1\", \"CHAVE2\": \"VALOR2\"}",
@@ -4150,6 +4218,7 @@ var en_default = {
       "new": "Start a new conversation",
       "start": "Get your ID and start a new conversation",
       "img": "Generate an image, the complete command format is `/img image description`, for example `/img beach at moonlight`",
+      "img2": "Generate images using multiple models simultaneously, the complete command format is `/img2 image description`, for example `/img2 beach at moonlight`. Will call all configured image generation services at once",
       "setimg": "Set image generation model, like /setimg openai or /setimg gemini",
       "version": "Get the current version number to determine whether to update",
       "setenv": "Set user configuration, the complete command format is /setenv KEY=VALUE",
