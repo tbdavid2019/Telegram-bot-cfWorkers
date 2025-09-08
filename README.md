@@ -348,4 +348,335 @@
 
 享受全新的 GPT-Image-1 圖片生成體驗！🎨✨
 
+---
 
+# 🤖 多平台 Bot 整合指南 (Telegram + LINE)
+
+已成功整合 LINE Bot 功能！現在您的 bot 可以同時在 Telegram 和 LINE 平台上運行，提供一致的 AI 對話和圖片生成體驗。
+
+## 🎯 核心功能特點
+
+### 平台支援
+- **🔵 Telegram Bot**：完整保留原有功能
+- **🟢 LINE Bot**：新增 LINE 平台支援
+- **🔀 智能切換**：根據配置自動啟用所需平台
+- **🎛️ 靈活控制**：支援單一平台或雙平台同時運行
+
+### 統一功能
+- **💬 AI 對話**：所有 LLM 和指令功能在兩個平台均可使用
+- **🎨 圖片生成**：支援 OpenAI、Gemini 等多種圖片生成服務
+- **📊 狀態監控**：實時查看平台狀態和 bot 資訊
+- **🔐 安全驗證**：完整的 webhook 簽名驗證機制
+
+
+
+
+## 📊 監控和管理
+
+### 平台狀態頁面
+訪問以下 URL 查看實時狀態：
+```
+https://your-domain.com/status
+```
+
+顯示內容包括：
+- 當前平台模式
+- 各平台啟用狀態
+- Bot 數量和基本資訊
+- Token 狀態（部分遮蔽）
+
+### 開發調試頁面
+
+在 `DEV_MODE=true` 或 `DEBUG_MODE=true` 時可用：
+
+#### Telegram Bot 資訊
+```
+https://your-domain.com/telegram/YOUR_TOKEN/bot
+```
+
+#### LINE Bot 資訊
+```
+https://your-domain.com/line/YOUR_TOKEN/bot
+```
+
+## 🔧 LINE 特殊功能
+
+### 圖片處理
+LINE 平台要求圖片必須是可公開訪問的 URL，系統會自動：
+- 檢測 base64 格式的圖片
+- 自動上傳到 Telegraph 圖床
+- 轉換為 LINE 可用的 URL 格式
+
+### 消息格式轉換
+為了重用現有的 Telegram 處理邏輯，系統會：
+- 將 LINE 事件轉換為 Telegram 消息格式
+- 保持指令和功能的一致性
+- 確保所有現有功能在 LINE 上正常運作
+
+## 🛠️ 配置範例
+
+### 範例 1：雙平台運行
+```bash
+# 基本設定
+PLATFORM_MODE=both
+TELEGRAM_BOT_ENABLE=true
+LINE_BOT_ENABLE=true
+
+# Telegram 設定
+TELEGRAM_AVAILABLE_TOKENS=123456789:ABCDEFghijklmnopQRSTUVwxyz
+TELEGRAM_BOT_NAME=["My Telegram Bot"]
+
+# LINE 設定
+LINE_CHANNEL_ACCESS_TOKEN=your_long_line_access_token
+LINE_CHANNEL_SECRET=your_line_channel_secret
+LINE_BOT_NAME=["My LINE Bot"]
+
+# AI 設定（共用）
+OPENAI_API_KEY=["sk-your-openai-key"]
+OPENAI_CHAT_MODEL=gpt-4o
+```
+
+### 範例 2：僅 LINE Bot
+```bash
+PLATFORM_MODE=line
+TELEGRAM_BOT_ENABLE=false
+LINE_BOT_ENABLE=true
+
+LINE_CHANNEL_ACCESS_TOKEN=your_line_token
+LINE_CHANNEL_SECRET=your_line_secret
+LINE_BOT_NAME=["LINE Only Bot"]
+```
+
+### 範例 3：僅 Telegram Bot（原有模式）
+```bash
+PLATFORM_MODE=telegram
+TELEGRAM_BOT_ENABLE=true
+LINE_BOT_ENABLE=false
+
+TELEGRAM_AVAILABLE_TOKENS=your_telegram_token
+```
+
+## 🔒 安全設定
+
+### Webhook 驗證
+- **Telegram**：使用 token 驗證
+- **LINE**：使用 Channel Secret 進行 HMAC-SHA256 簽名驗證
+
+### 開關控制
+```bash
+# 關閉 LINE webhook 簽名驗證（不建議）
+LINE_WEBHOOK_VERIFY=false
+
+# 白名單控制（適用於兩個平台）
+CHAT_WHITE_LIST=["allowed_user_1","allowed_user_2"]
+I_AM_A_GENEROUS_PERSON=false
+```
+
+## 🚨 故障排除
+
+### 1. LINE Bot 無回應
+**檢查項目：**
+- 確認 `LINE_CHANNEL_ACCESS_TOKEN` 設定正確
+- 確認 `LINE_CHANNEL_SECRET` 設定正確
+- 檢查 LINE Developer Console 中的 webhook URL
+- 確認 `LINE_BOT_ENABLE=true`
+
+**解決方法：**
+```bash
+# 檢查平台狀態
+訪問 https://your-domain.com/status
+
+# 暫時關閉簽名驗證進行測試
+LINE_WEBHOOK_VERIFY=false
+```
+
+### 2. 圖片生成在 LINE 上失敗
+**原因：** LINE 要求圖片必須是可公開訪問的 URL
+
+**解決方法：**
+- 確保 Telegraph 圖床服務正常
+- 檢查網路連線是否正常
+- 確認生成的圖片大小符合 LINE 限制
+
+### 3. 雙平台衝突
+**檢查：**
+```bash
+# 確認平台模式
+PLATFORM_MODE=both
+
+# 確認兩個平台都正確啟用
+TELEGRAM_BOT_ENABLE=true
+LINE_BOT_ENABLE=true
+```
+
+### 4. Webhook 簽名驗證失敗
+```bash
+# LINE 簽名問題
+LINE_WEBHOOK_VERIFY=true
+LINE_CHANNEL_SECRET=正確的_channel_secret
+
+# 檢查 webhook URL 是否正確
+https://your-domain.com/line/YOUR_TOKEN/webhook
+```
+
+## 📋 技術架構
+
+### 平台抽象層
+```
+用戶消息 → 平台檢測 → 消息轉換 → 統一處理 → 平台特定回應
+    ↓           ↓           ↓           ↓           ↓
+ Telegram    Platform    Message    Command      Response
+   LINE     Detector    Converter   Handler      Handler
+```
+
+### 核心組件
+
+#### 1. 平台檢測 (`detectEnabledPlatforms()`)
+- 根據環境變數自動檢測啟用的平台
+- 支援 auto、telegram、line、both 模式
+
+#### 2. 消息轉換 (`convertLineToTelegramMessage()`)
+- 將 LINE 事件格式轉換為 Telegram 消息格式
+- 保持現有處理邏輯的相容性
+
+#### 3. 統一發送層
+- `sendMessageWithContext()`: 自動選擇平台發送方式
+- `sendPhotoWithContext()`: 處理不同平台的圖片發送需求
+
+#### 4. LINE 專用處理
+- 自動 base64 圖片上傳轉換
+- Webhook 簽名驗證
+- LINE 特有的回應格式處理
+
+## ✅ 支援的指令
+
+所有原有 Telegram 指令都可以在 LINE 上使用：
+
+- `/help` - 取得說明
+- `/new` - 開始新對話  
+- `/img` - 圖片生成
+- `/img2` - 多模型圖片生成
+- `/setimg` - 設定圖片模型
+- `/stock` - 股票查詢
+- `/wt` - 天氣查詢
+- `/dictcn` - 中文字典
+- `/dicten` - 英文字典
+- `/boa` - 解答之書
+- `/oracle` - 淺草籤詩
+- `/poetry` - 唐詩
+- `/qi` - 奇門遁甲
+- `/password` - 隨機密碼
+- 以及所有其他自定義指令
+
+## 📈 效能最佳化
+
+### 訊息處理效率
+- 統一的消息處理流程
+- 最小化平台特定代碼
+- 智能快取和重用機制
+
+### 記憶體管理
+- 延遲載入平台特定模組
+- 動態路由註冊避免冗餘
+- 智能垃圾回收機制
+
+## 🔄 更新記錄
+
+### v2.0.0 - 多平台支援
+- ✅ 新增 LINE Bot 完整支援
+- ✅ 平台自動檢測和切換
+- ✅ 統一消息處理抽象層
+- ✅ 動態路由系統
+- ✅ 平台狀態監控頁面
+- ✅ 圖片處理跨平台相容性
+- ✅ LINE webhook 簽名驗證
+- ✅ 完整的配置文件支援
+
+### v1.x - Telegram Bot
+- ✅ 基礎 Telegram Bot 功能
+- ✅ AI 對話整合
+- ✅ 圖片生成功能
+- ✅ 指令系統
+- ✅ 用戶管理和白名單
+
+## 🤝 貢獻指南
+
+### 開發環境建置
+1. Fork 這個專案
+2. 創建功能分支：`git checkout -b feature/new-platform`
+3. 安裝依賴：`npm install`
+4. 設定環境變數
+5. 本地測試
+6. 提交 PR
+
+### 新增平台支援
+新增其他聊天平台（如 Discord、Slack）的步驟：
+
+1. **擴展平台檢測**
+```javascript
+// 在 detectEnabledPlatforms() 中新增
+if (env.YOUR_PLATFORM_TOKEN) {
+    platforms.push('your-platform');
+}
+```
+
+2. **實現平台 Context**
+```javascript
+class YourPlatformContext {
+    constructor(chatId, userId, platform = 'your-platform') {
+        // 實現平台特定內容
+    }
+}
+```
+
+3. **新增發送方法**
+```javascript
+async function sendMessageToYourPlatform(message, context, env) {
+    // 實現平台特定的發送邏輯
+}
+```
+
+4. **路由處理**
+```javascript
+// 在 handleRequest 中新增路由
+if (platforms.includes('your-platform')) {
+    app.all('/your-platform/:token/*', handleYourPlatform);
+}
+```
+
+## 📞 支援
+
+### 問題回報
+- 在 GitHub Issues 回報 bug
+- 提供詳細的錯誤訊息和環境資訊
+- 包含相關的設定檔（去除敏感資訊）
+
+### 功能建議
+- 使用 GitHub Discussions 討論新功能
+- 提供使用案例和需求描述
+- 考慮實作的複雜度和相容性
+
+### 文件改善
+- 發現文件錯誤請提交 PR
+- 新增使用範例和最佳實踐
+- 翻譯到其他語言
+
+---
+
+## 📄 授權
+
+本專案採用 MIT 授權條款。詳見 [LICENSE](LICENSE) 文件。
+
+## 🙏 致謝
+
+- Cloudflare Workers 平台支援
+- Telegram Bot API 社群
+- LINE Messaging API 開發團隊
+- OpenAI API 整合支援
+- 所有貢獻者和使用者的回饋
+
+---
+
+**🎉 恭喜！你現在擁有一個完整的多平台聊天機器人系統！**
+
+在雙平台模式下，你的使用者可以從 Telegram 或 LINE 任一平台與你的 AI 助手互動，享受完全相同的功能和體驗。系統會自動處理平台差異，確保所有功能在兩個平台上都能完美運作。
