@@ -1864,7 +1864,7 @@ async function requestCompletionsFromGeminiAI(params, context, onStream) {
   const url = `${context.USER_CONFIG.GOOGLE_COMPLETIONS_API}${context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL}:${onStream ? "streamGenerateContent" : "generateContent"}?key=${context.USER_CONFIG.GOOGLE_API_KEY}`;
   const contentsTemp = [...history || [], { role: "user", content: message }];
   if (prompt) {
-    contentsTemp.unshift({ role: "assistant", content: prompt });
+    contentsTemp.unshift({ role: "system", content: prompt });
   }
   const contents = [];
   for (const msg of contentsTemp) {
