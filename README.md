@@ -572,7 +572,7 @@ https://your-domain.com/line/YOUR_TOKEN/webhook
 
 - `/help` - 取得說明
 - `/new` - 開始新對話  
-- `/img` - 圖片生成
+- `/img` - 圖片生成（Telegram 可在上傳圖片時於 caption 使用 `/img 描述`，會把該圖片與 prompt 一併送到 Gemini 2.5）
 - `/img2` - 多模型圖片生成
 - `/setimg` - 設定圖片模型
 - `/stock` - 股票查詢
@@ -617,6 +617,11 @@ https://your-domain.com/line/YOUR_TOKEN/webhook
 - ✅ 圖片生成功能
 - ✅ 指令系統
 - ✅ 用戶管理和白名單
+
+### 2025-02 - Caption 模式圖片再生成
+- ✅ `/img` 指令支援在 Telegram 上傳圖片時於 caption 一次輸入指令與文字提示
+- ✅ 會自動把 caption 內的 prompt 與該張圖片送進 `gemini-2.5-flash-image-preview` 進行再生成
+- ✅ 一般 LLM 多模態對話仍維持原本的圖片處理流程不受影響
 
 ## 🤝 貢獻指南
 
@@ -707,3 +712,28 @@ curl -X POST https://api.telegram.org/botYOUR_BOT_TOKEN/setChatMenuButton \
 **🎉 恭喜！你現在擁有一個完整的多平台聊天機器人系統！**
 
 在雙平台模式下，你的使用者可以從 Telegram 或 LINE 任一平台與你的 AI 助手互動，享受完全相同的功能和體驗。系統會自動處理平台差異，確保所有功能在兩個平台上都能完美運作。
+
+
+```
+使用者互動流程 (UX) 的挑戰
+Telegram 的指令通常是一次性的（例如 /img prompt）。要同時發送「圖片」和「指令」有幾種方式，但各有優缺點：
+
+方案 A：引用 (Reply) 圖片模式
+
+操作方式：使用者先傳一張圖到聊天室 -> 然後對著那張圖按「回覆 (Reply)」 -> 輸入 /img 把背景變成紅色。
+優點：符合 Telegram 原生操作邏輯，不需要狀態管理（Stateless），實作相對簡單。
+缺點：使用者需要知道要用「回覆」的方式。
+方案 B：上下文模式 (Context Mode)
+
+操作方式：您提到的 /image 切換模式。輸入 /image 進入「產圖模式」 -> 之後傳送的圖片和文字都會被視為產圖請求。
+優點：體驗像是在跟一個專門的繪圖師對話。
+缺點：需要強大的狀態管理（Session/Context）。目前的程式碼架構雖然有 Context 類別，但主要用於儲存設定，對於「當前是否處於某種特殊模式」的支援較弱。且在 Cloudflare Workers 這種 Serverless 環境下，維持長期的對話狀態比較困難（通常依賴 KV 或資料庫）。
+方案 C：Caption 模式
+
+操作方式：使用者上傳圖片時，直接在圖片的「說明文字 (Caption)」欄位輸入 /img 變更風格。
+優點：一次動作完成。
+缺點：使用者容易忘記打指令，或者 Telegram 客戶端壓縮圖片導致細節遺失。
+
+```
+
+✅ 目前 `/img` 已實作 Caption 模式：在 Telegram 上傳圖片時的 caption 內輸入 `/img 想要的風格`，機器人會同時把該圖片與文字提示送到 `gemini-2.5-flash-image-preview` 進行再生成。

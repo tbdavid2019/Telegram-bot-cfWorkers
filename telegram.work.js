@@ -1388,9 +1388,10 @@ function isGeminiImageEnable(context) {
   return hasGeminiKey;
 }
 
-async function requestImageFromGemini(prompt, context) {
+async function requestImageFromGemini(prompt, context, options = {}) {
   try {
     const model = context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image-preview";
+    const imageUrls = Array.isArray(options.images) ? options.images : [];
     
     // 使用 streaming API
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
@@ -1409,17 +1410,35 @@ async function requestImageFromGemini(prompt, context) {
     
     // 使用更明確的圖片生成提示
     const imagePrompt = `Generate an image of: ${prompt}. Please create a detailed visual representation.`;
+
+    // 組裝 parts，文字放前面，若有圖片則追加 inlineData
+    const parts = [
+      {
+        "text": imagePrompt
+      }
+    ];
+    if (imageUrls.length > 0) {
+      for (const imageUrl of imageUrls) {
+        try {
+          const { data, format } = await imageToBase64String(imageUrl);
+          parts.push({
+            inlineData: {
+              mimeType: format,
+              data
+            }
+          });
+        } catch (e) {
+          console.error(`[ERROR] Failed to convert image ${imageUrl} to base64:`, e);
+        }
+      }
+    }
     
     // 根據官方範例的格式構建請求
     const body = {
       "contents": [
         {
           "role": "user",
-          "parts": [
-            {
-              "text": imagePrompt
-            }
-          ]
+          "parts": parts
         }
       ],
       "generationConfig": {
@@ -3312,16 +3331,33 @@ function formatDictionaryData(data) {
 
 
 async function commandGenerateImg(message, command, subcommand, context) {
+  const hasPhoto = Array.isArray(message.photo) && message.photo.length > 0;
   if (subcommand === "") {
     return sendMessageToTelegramWithContext(context)(ENV.I18N.command.help.img);
   }
   try {
-    const gen = loadImageGen(context)?.request;
-    if (!gen) {
+    let imgAgent = loadImageGen(context);
+    if (!imgAgent && !hasPhoto) {
       return sendMessageToTelegramWithContext(context)("ERROR: Image generator not found");
     }
     setTimeout(() => sendChatActionToTelegramWithContext(context)("upload_photo").catch(console.error), 0);
-    const img = await gen(subcommand, context);
+    let requestFn = imgAgent?.request;
+    let requestOptions = void 0;
+    if (hasPhoto) {
+      if (!isGeminiImageEnable(context)) {
+        return sendMessageToTelegramWithContext(context)("ERROR: Gemini 圖片生成功能尚未啟用或 API Key 缺失");
+      }
+      const photoUrl = await extractTelegramPhotoUrl(message, context);
+      if (!photoUrl) {
+        return sendMessageToTelegramWithContext(context)("ERROR: 無法取得 Telegram 圖片連結");
+      }
+      requestFn = requestImageFromGemini;
+      requestOptions = { images: [photoUrl] };
+    }
+    if (!requestFn) {
+      return sendMessageToTelegramWithContext(context)("ERROR: Image generator not found");
+    }
+    const img = await requestFn(subcommand, context, requestOptions);
     return sendPhotoToTelegramWithContext(context)(img);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -3977,10 +4013,25 @@ async function msgHandleGroupMessage(message, context) {
   return null;
 }
 async function msgHandleCommand(message, context) {
-  if (!message.text) {
+  let commandText = message.text;
+  if (!commandText && message.caption) {
+    commandText = message.caption;
+  }
+  if (!commandText) {
     return null;
   }
-  return await handleCommandMessage(message, context);
+  const hasOriginalText = Object.prototype.hasOwnProperty.call(message, "text");
+  const originalText = message.text;
+  if (!hasOriginalText || !message.text) {
+    message.text = commandText;
+  }
+  const result = await handleCommandMessage(message, context);
+  if (hasOriginalText) {
+    message.text = originalText;
+  } else {
+    delete message.text;
+  }
+  return result;
 }
 
 // 🌤️🔮 智能功能檢測處理器 (天氣 + 奇門遁甲)
@@ -4061,6 +4112,31 @@ async function msgSmartWeatherDetection(message, context) {
   return null;
 }
 
+async function extractTelegramPhotoUrl(message, context) {
+  if (!message.photo || message.photo.length === 0) {
+    return null;
+  }
+  let sizeIndex = 0;
+  if (ENV.TELEGRAM_PHOTO_SIZE_OFFSET >= 0) {
+    sizeIndex = Math.min(ENV.TELEGRAM_PHOTO_SIZE_OFFSET, message.photo.length - 1);
+  } else {
+    sizeIndex = Math.max(0, message.photo.length + ENV.TELEGRAM_PHOTO_SIZE_OFFSET);
+  }
+  sizeIndex = Math.max(0, Math.min(sizeIndex, message.photo.length - 1));
+  const fileId = message.photo[sizeIndex]?.file_id;
+  if (!fileId) {
+    return null;
+  }
+  let url = await getFileLink(fileId, context.SHARE_CONTEXT.currentBotToken);
+  if (!url) {
+    return null;
+  }
+  if (ENV.TELEGRAPH_ENABLE) {
+    url = await uploadImageToTelegraph(url);
+  }
+  return url;
+}
+
 async function msgChatWithLLM(message, context) {
   const { text, caption } = message;
   let content = text || caption;
@@ -4069,19 +4145,10 @@ async function msgChatWithLLM(message, context) {
   }
   const params = { message: content };
   if (message.photo && message.photo.length > 0) {
-    let sizeIndex = 0;
-    if (ENV.TELEGRAM_PHOTO_SIZE_OFFSET >= 0) {
-      sizeIndex = ENV.TELEGRAM_PHOTO_SIZE_OFFSET;
-    } else if (ENV.TELEGRAM_PHOTO_SIZE_OFFSET < 0) {
-      sizeIndex = message.photo.length + ENV.TELEGRAM_PHOTO_SIZE_OFFSET;
+    const url = await extractTelegramPhotoUrl(message, context);
+    if (url) {
+      params.images = [url];
     }
-    sizeIndex = Math.max(0, Math.min(sizeIndex, message.photo.length - 1));
-    const fileId = message.photo[sizeIndex].file_id;
-    let url = await getFileLink(fileId, context.SHARE_CONTEXT.currentBotToken);
-    if (ENV.TELEGRAPH_ENABLE) {
-      url = await uploadImageToTelegraph(url);
-    }
-    params.images = [url];
   }
   return chatWithLLM(params, context, null);
 }
