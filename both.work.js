@@ -1848,31 +1848,45 @@ var GEMINI_ROLE_MAP = {
   "system": "user",
   "user": "user"
 };
-function renderGeminiMessage(item) {
+async function renderGeminiMessage(item) {
+  const parts = [];
+  if (item.content) {
+    parts.push({
+      "text": item.content
+    });
+  }
+  if (item.images && item.images.length > 0) {
+    for (const image of item.images) {
+      const { data, format } = await imageToBase64String(image);
+      parts.push({
+        inlineData: {
+          mimeType: format,
+          data: data
+        }
+      });
+    }
+  }
   return {
     role: GEMINI_ROLE_MAP[item.role],
-    parts: [
-      {
-        "text": item.content || ""
-      }
-    ]
+    parts: parts
   };
 }
 async function requestCompletionsFromGeminiAI(params, context, onStream) {
-  const { message, prompt, history } = params;
+  const { message, images, prompt, history } = params;
   onStream = null;
   const url = `${context.USER_CONFIG.GOOGLE_COMPLETIONS_API}${context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL}:${onStream ? "streamGenerateContent" : "generateContent"}?key=${context.USER_CONFIG.GOOGLE_API_KEY}`;
-  const contentsTemp = [...history || [], { role: "user", content: message }];
+  const contentsTemp = [...history || [], { role: "user", content: message, images }];
   if (prompt) {
     contentsTemp.unshift({ role: "system", content: prompt });
   }
   const contents = [];
   for (const msg of contentsTemp) {
-    msg.role = GEMINI_ROLE_MAP[msg.role];
-    if (contents.length === 0 || contents[contents.length - 1].role !== msg.role) {
-      contents.push(renderGeminiMessage(msg));
+    const role = GEMINI_ROLE_MAP[msg.role];
+    const rendered = await renderGeminiMessage(msg);
+    if (contents.length === 0 || contents[contents.length - 1].role !== role) {
+      contents.push(rendered);
     } else {
-      contents[contents.length - 1].parts[0].text += msg.content;
+      contents[contents.length - 1].parts.push(...rendered.parts);
     }
   }
   const resp = await fetch(url, {
