@@ -680,6 +680,14 @@ if (platforms.includes('your-platform')) {
 - 新增使用範例和最佳實踐
 - 翻譯到其他語言
 
+
+
+### 清除 setChatMenuButton
+```
+curl -X POST https://api.telegram.org/botYOUR_BOT_TOKEN/setChatMenuButton \
+  -H "Content-Type: application/json" \
+  -d '{"menu_button":{"type":"default"}}'
+```
 ---
 
 ## 📄 授權
