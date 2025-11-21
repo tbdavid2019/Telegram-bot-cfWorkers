@@ -1,5 +1,10 @@
 本專案來自 fork https://github.com/TBXark/ChatGPT-Telegram-Workers
 
+## 本次更新重點
+- `/img` 指令可直接引用訊息內或回覆的 Telegram 照片，缺少圖片生成器時會友善回報
+- 影像提取更穩定：優先度選擇合適尺寸的 file_id，並支援從回覆訊息抓圖
+- 文字/圖片並送時的內容組裝更安全，若僅有圖片也會自動加入基本提示
+
 ## 要事先準備好的 三方插件的 plugin api
 要準備好這幾個 API KEY  分別去這幾個網站註冊free
 - https://etlas.io  netlasapiKey DNS查詢

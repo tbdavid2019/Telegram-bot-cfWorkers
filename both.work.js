@@ -3581,13 +3581,14 @@ function formatDictionaryData(data) {
 
 async function commandGenerateImg(message, command, subcommand, context) {
   const isTelegramPlatform = !context.SHARE_CONTEXT.platform || context.SHARE_CONTEXT.platform === "telegram";
-  const hasPhoto = isTelegramPlatform && Array.isArray(message.photo) && message.photo.length > 0;
   if (subcommand === "") {
     return sendMessageToTelegramWithContext(context)(ENV.I18N.command.help.img);
   }
   try {
+    const photoUrl = isTelegramPlatform ? await extractTelegramPhotoUrl(message, context, true) : null;
+    const hasResolvedPhoto = !!photoUrl;
     let imgAgent = loadImageGen(context);
-    if (!imgAgent && !hasPhoto) {
+    if (!imgAgent && !hasResolvedPhoto) {
       return sendMessageToTelegramWithContext(context)("ERROR: Image generator not found");
     }
     // 平台特定的動作提示
@@ -3597,13 +3598,9 @@ async function commandGenerateImg(message, command, subcommand, context) {
     
     let requestFn = imgAgent?.request;
     let requestOptions = void 0;
-    if (hasPhoto) {
+    if (hasResolvedPhoto) {
       if (!isGeminiImageEnable(context)) {
         return sendMessageToTelegramWithContext(context)("ERROR: Gemini 圖片生成功能尚未啟用或 API Key 缺失");
-      }
-      const photoUrl = await extractTelegramPhotoUrl(message, context);
-      if (!photoUrl) {
-        return sendMessageToTelegramWithContext(context)("ERROR: 無法取得 Telegram 圖片連結");
       }
       requestFn = requestImageFromGemini;
       requestOptions = { images: [photoUrl] };
@@ -4377,12 +4374,8 @@ async function msgSmartWeatherDetection(message, context) {
   return null;
 }
 
-async function extractTelegramPhotoUrl(message, context) {
-  const isTelegramPlatform = !context.SHARE_CONTEXT.platform || context.SHARE_CONTEXT.platform === "telegram";
-  if (!isTelegramPlatform) {
-    return null;
-  }
-  if (!message.photo || message.photo.length === 0) {
+function pickPhotoFromMessage(message) {
+  if (!message?.photo || message.photo.length === 0) {
     return null;
   }
   let sizeIndex = 0;
@@ -4392,7 +4385,29 @@ async function extractTelegramPhotoUrl(message, context) {
     sizeIndex = Math.max(0, message.photo.length + ENV.TELEGRAM_PHOTO_SIZE_OFFSET);
   }
   sizeIndex = Math.max(0, Math.min(sizeIndex, message.photo.length - 1));
-  const fileId = message.photo[sizeIndex]?.file_id;
+  return message.photo[sizeIndex]?.file_id || null;
+}
+
+async function extractTelegramPhotoUrl(message, context, allowReply = false) {
+  const isTelegramPlatform = !context.SHARE_CONTEXT.platform || context.SHARE_CONTEXT.platform === "telegram";
+  if (!isTelegramPlatform) {
+    return null;
+  }
+  const candidates = [];
+  const mainFileId = pickPhotoFromMessage(message);
+  if (mainFileId) {
+    candidates.push(mainFileId);
+  }
+  if (allowReply && message?.reply_to_message) {
+    const replyFileId = pickPhotoFromMessage(message.reply_to_message);
+    if (replyFileId) {
+      candidates.push(replyFileId);
+    }
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  const fileId = candidates[0];
   if (!fileId) {
     return null;
   }
@@ -4408,9 +4423,11 @@ async function extractTelegramPhotoUrl(message, context) {
 
 async function msgChatWithLLM(message, context) {
   const { text, caption } = message;
-  let content = text || caption;
+  const baseText = text || caption || "";
+  let content = baseText;
   if (ENV.EXTRA_MESSAGE_CONTEXT && context.SHARE_CONTEXT.extraMessageContext && context.SHARE_CONTEXT.extraMessageContext.text) {
-    content = context.SHARE_CONTEXT.extraMessageContext.text + "\n" + text;
+    const extra = context.SHARE_CONTEXT.extraMessageContext.text || "";
+    content = extra + (baseText ? `\n${baseText}` : "");
   }
   const params = { message: content };
   if (message.photo && message.photo.length > 0) {
@@ -4418,6 +4435,9 @@ async function msgChatWithLLM(message, context) {
     if (url) {
       params.images = [url];
     }
+  }
+  if ((!params.message || params.message.trim() === "") && params.images && params.images.length > 0) {
+    params.message = "請描述這張圖片，並說一個小故事。";
   }
   return chatWithLLM(params, context, null);
 }
