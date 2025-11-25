@@ -2213,8 +2213,8 @@ var commandAuthCheck = {
   }
 };
 var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version",   "/redo", 隱藏看看
-  "/boa",  //解答之書
   "/new", //新對話 
+  "/bo",  //解答之書原版
   "/qi", //奇門遁甲
   "/oracle", //淺草籤詩
   "/poetry", //唐詩
@@ -2225,13 +2225,14 @@ var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version", 
   "/setimg", //設定圖片生成模型
   "/dictcn",  // 新增的指令中文字典 (要加參數)
   "/dicten",  // 新增的指令英文字典 (要加參數)
-  "/system",
+  "/system", //查看系統狀態
   "/stock2",   //美國國際股市 (要加參數)
   "/stock",  //台灣股市 (要加參數)
   "/wt", // 台灣地區天氣  (要加參數)
   "/ip", // ip (要加參數)
   "/dns", //dns  (要加參數)
   "/password",  //隨機密碼
+  "/boa",  //解答之書
   "/help"
 ];
 
@@ -2329,6 +2330,10 @@ var commandHandlers = {
   "/boa": { // 解答之書
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandAnswerBook
+  }, 
+    "/bo": { // 解答之書原版
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandAnswerBookOriginal
   }, 
   "/password": { // 隨機密碼
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
@@ -2786,6 +2791,35 @@ async function commandTangPoetry(message, command, subcommand, context) {
 // 解答之書查詢
 async function commandAnswerBook(message, command, subcommand, context) {
   const url = 'https://answerbook.david888.com';
+  try {
+    const response = await fetch(url);
+    const text = await response.text(); // 先將回應作為文本讀取
+
+    // 檢查回應是否為有效的 JSON 格式
+    if (text.startsWith('{') && text.endsWith('}')) {
+      try {
+        const data = JSON.parse(text); // 嘗試解析為 JSON
+        if (data.answer) {
+          return sendMessageToTelegramWithContext(context)(`解答之書: ${data.answer}`);
+        } else {
+          return sendMessageToTelegramWithContext(context)(`錯誤: 無法獲取解答之書的答案。`);
+        }
+      } catch (jsonError) {
+        return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。回應內容: ${text}`);
+      }
+    } else {
+      // 如果回應不是有效的 JSON，直接返回錯誤訊息
+      return sendMessageToTelegramWithContext(context)(`錯誤: API回應錯誤，內容: ${text}`);
+    }
+  } catch (e) {
+    return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
+  }
+}
+
+
+// 解答之書原版查詢
+async function commandAnswerBookOriginal(message, command, subcommand, context) {
+  const url = 'https://answerbook.david888.com/answersOriginal';
   try {
     const response = await fetch(url);
     const text = await response.text(); // 先將回應作為文本讀取
@@ -4498,6 +4532,7 @@ var zh_hans_default = {
       "ip": "查詢 IP 地址資訊 如 /ip 8.8.8.8",
       "dns": "查詢 dns 地址資訊 如 /ip david888.com",
       "boa": "解答之書 命運還是機會",
+      "bo": "解答之書原版 命運還是機會",
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "隨機的唐詩",
@@ -4541,6 +4576,7 @@ var zh_hant_default = {
       "ip": "查詢 IP 地址信息 如 /ip 8.8.8.8",
       "dns": "查詢 dns 地址信息 如 /ip david888.com",
       "boa": "解答之書 命運還是機會",
+      "bo": "解答之書原版 命運還是機會",
       "password": "產生19位的隨機密碼",
       "oracle": "淺草籤詩占卜",
       "poetry": "唐詩 隨機抽一首",
@@ -4582,6 +4618,7 @@ var pt_default = {
       "qi": "奇門遁甲",
       "web": "網頁搜尋",
       "dns2": "查詢 dns 資訊",
+      "bo": "Livro das Respostas Destino ou Acaso",
       "stock": "Consultar símbolo de ações internacionais"
     },
     "new": {
@@ -4623,6 +4660,8 @@ var en_default = {
       "web": "網頁搜尋",
       "dns2": "查詢 dns 資訊",
       "weatheralert": "台灣天氣 特報 警報",
+      "boa": "Book of Answers Destiny or Chance",
+      "bo": "Book of Answers Original Destiny or Chance",
       "law": "Legal Q&A, e.g. /law Will the spreader of AI-generated false information constitute aggravated defamation?",
     },
     "new": {
