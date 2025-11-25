@@ -6,6 +6,17 @@
 import { ENV, DATABASE, CONST, UserConfig, mergeEnvironment } from '../config/env.js';
 
 /**
+ * 建立 Telegram Context
+ */
+export async function createTelegramContext(message) {
+  const context = {
+    message,
+    ...SHARE_CONTEXT
+  };
+  return context;
+}
+
+/**
  * 清理用戶配置，只保留允許的配置項
  * @param {Object} userConfig - 用戶配置對象
  * @returns {Object} 清理後的配置

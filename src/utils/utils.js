@@ -91,6 +91,29 @@ export function makeResponse200(resp) {
 }
 
 /**
+ * 建立「找不到環境變數」的 HTML
+ * @param {string} key - 環境變數名稱
+ * @returns {string} HTML 字串
+ */
+export function buildKeyNotFoundHTML(key) {
+  return `<p style="color: red">Please set the <strong>${key}</strong> environment variable in Cloudflare Workers.</p>`;
+}
+
+// 頁面連結常數
+export const helpLink = "https://github.com/TBXark/ChatGPT-Telegram-Workers/blob/master/doc/en/DEPLOY.md";
+export const issueLink = "https://github.com/TBXark/ChatGPT-Telegram-Workers/issues";
+export const initLink = "./init";
+
+/**
+ * 頁尾 HTML
+ */
+export const footer = `
+<br/>
+<p>For more information, please visit <a href="${helpLink}">${helpLink}</a></p>
+<p>If you have any questions, please visit <a href="${issueLink}">${issueLink}</a></p>
+`;
+
+/**
  * 隨機選擇陣列中的一個元素
  * @param {Array} array - 陣列
  * @returns {*} 隨機元素

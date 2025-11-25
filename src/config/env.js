@@ -245,7 +245,7 @@ function parseArray(raw) {
   return raw.split(",");
 }
 
-function mergeEnvironment(target, source) {
+export function mergeEnvironment(target, source) {
   const sourceKeys = new Set(Object.keys(source));
   for (const key of Object.keys(target)) {
     if (!sourceKeys.has(key)) {

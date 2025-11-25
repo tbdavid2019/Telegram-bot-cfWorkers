@@ -146,6 +146,30 @@ export function loadChatLLM(context) {
   return null;
 }
 
+/**
+ * 檢查 Workers AI 是否啟用
+ */
+export function isWorkersAIEnable(context) {
+  return context.USER_CONFIG.AI_IMAGE_PROVIDER === 'workers';
+}
+
+/**
+ * 從 Workers AI 請求圖片生成
+ */
+export async function requestImageFromWorkersAI(prompt, context) {
+  // Workers AI 圖片生成實現
+  const ai = context.AI_BINDING;
+  if (!ai) {
+    throw new Error('Workers AI binding not available');
+  }
+  
+  const response = await ai.run('@cf/stabilityai/stable-diffusion-xl-base-1.0', {
+    prompt: prompt
+  });
+  
+  return response;
+}
+
 export function loadImageGen(context) {
   console.log(`[DEBUG] loadImageGen called with AI_IMAGE_PROVIDER: ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
   

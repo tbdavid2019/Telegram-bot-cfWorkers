@@ -109,6 +109,20 @@ export async function requestCompletionsFromOpenAI(params, context, onStream) {
 
 // ========== 圖片生成 ==========
 
+/**
+ * 檢查 Azure 圖片生成是否啟用
+ */
+export function isAzureImageEnable(context) {
+  return isOpenAIImageEnable(context) && context.USER_CONFIG.OPENAI_API_BASE?.includes('azure.com');
+}
+
+/**
+ * 從 Azure OpenAI 請求圖片生成
+ */
+export async function requestImageFromAzureOpenAI(prompt, context) {
+  return requestImageFromOpenAI(prompt, context);
+}
+
 export async function requestImageFromOpenAI(prompt, context) {
   const url = `${getOpenAIImageApiBase(context)}/images/generations`;
   const header = {

@@ -1,0 +1,469 @@
+// 訊息中介層處理器
+import { sendMessageToTelegramWithContext } from './telegram.js';
+import { commandWeather } from '../features/weather.js';
+import { commandQimen } from '../features/divination.js';
+import { getBot, getFileLink } from './telegram.js';
+import { uploadImageToTelegraph } from '../utils/image.js';
+
+// 從環境變數和常數模組引入
+import { ENV, DATABASE, CONST } from '../config/env.js';
+
+/**
+ * 初始化聊天上下文
+ */
+export async function msgInitChatContext(message, context) {
+  await context.initContext(message);
+  return null;
+}
+
+/**
+ * 儲存最後一則訊息（用於除錯）
+ */
+export async function msgSaveLastMessage(message, context) {
+  if (ENV.DEBUG_MODE) {
+    const lastMessageKey = `last_message:${context.SHARE_CONTEXT.chatHistoryKey}`;
+    await DATABASE.put(lastMessageKey, JSON.stringify(message), { expirationTtl: 3600 });
+  }
+  return null;
+}
+
+/**
+ * 忽略舊訊息（安全模式）
+ */
+export async function msgIgnoreOldMessage(message, context) {
+  if (ENV.SAFE_MODE) {
+    let idList = [];
+    try {
+      idList = JSON.parse(await DATABASE.get(context.SHARE_CONTEXT.chatLastMessageIdKey).catch(() => "[]")) || [];
+    } catch (e) {
+      console.error(e);
+    }
+    if (idList.includes(message.message_id)) {
+      throw new Error("Ignore old message");
+    } else {
+      idList.push(message.message_id);
+      if (idList.length > 100) {
+        idList.shift();
+      }
+      await DATABASE.put(context.SHARE_CONTEXT.chatLastMessageIdKey, JSON.stringify(idList));
+    }
+  }
+  return null;
+}
+
+/**
+ * 檢查環境是否就緒
+ */
+export async function msgCheckEnvIsReady(message, context) {
+  if (!DATABASE) {
+    return sendMessageToTelegramWithContext(context)("DATABASE Not Set");
+  }
+  return null;
+}
+
+/**
+ * 白名單過濾器
+ */
+export async function msgFilterWhiteList(message, context) {
+  if (ENV.I_AM_A_GENEROUS_PERSON) {
+    return null;
+  }
+  if (context.SHARE_CONTEXT.chatType === "private") {
+    if (!ENV.CHAT_WHITE_LIST.includes(`${context.CURRENT_CHAT_CONTEXT.chat_id}`)) {
+      return sendMessageToTelegramWithContext(context)(
+        `You are not in the white list, please contact the administrator to add you to the white list. Your chat_id: ${context.CURRENT_CHAT_CONTEXT.chat_id}`
+      );
+    }
+    return null;
+  }
+  if (CONST.GROUP_TYPES.includes(context.SHARE_CONTEXT.chatType)) {
+    if (!ENV.GROUP_CHAT_BOT_ENABLE) {
+      throw new Error("Not support");
+    }
+    if (!ENV.CHAT_GROUP_WHITE_LIST.includes(`${context.CURRENT_CHAT_CONTEXT.chat_id}`)) {
+      return sendMessageToTelegramWithContext(context)(
+        `Your group are not in the white list, please contact the administrator to add you to the white list. Your chat_id: ${context.CURRENT_CHAT_CONTEXT.chat_id}`
+      );
+    }
+    return null;
+  }
+  return sendMessageToTelegramWithContext(context)(
+    `Not support chat type: ${context.SHARE_CONTEXT.chatType}`
+  );
+}
+
+/**
+ * 過濾不支援的訊息類型
+ */
+export async function msgFilterUnsupportedMessage(message, context) {
+  if (message.text) {
+    return null;
+  }
+  if (message.caption) {
+    return null;
+  }
+  if (message.photo) {
+    return null;
+  }
+  throw new Error("Not supported message type");
+}
+
+/**
+ * 處理群組訊息
+ */
+export async function msgHandleGroupMessage(message, context) {
+  if (!CONST.GROUP_TYPES.includes(context.SHARE_CONTEXT.chatType)) {
+    return null;
+  }
+  let botName = context.SHARE_CONTEXT.currentBotName;
+  if (message.reply_to_message) {
+    if (`${message.reply_to_message.from.id}` === context.SHARE_CONTEXT.currentBotId) {
+      return null;
+    } else if (ENV.EXTRA_MESSAGE_CONTEXT) {
+      context.SHARE_CONTEXT.extraMessageContext = message.reply_to_message;
+    }
+  }
+  if (!botName) {
+    const res = await getBot(context.SHARE_CONTEXT.currentBotToken);
+    context.SHARE_CONTEXT.currentBotName = res.info.bot_name;
+    botName = res.info.bot_name;
+  }
+  if (!botName) {
+    throw new Error("Not set bot name");
+  }
+  if (!message.entities) {
+    throw new Error("No entities");
+  }
+  const { text, caption } = message;
+  let originContent = text || caption || "";
+  if (!originContent) {
+    throw new Error("Empty message");
+  }
+  let content = "";
+  let offset = 0;
+  let mentioned = false;
+  for (const entity of message.entities) {
+    switch (entity.type) {
+      case "bot_command":
+        if (!mentioned) {
+          const mention = originContent.substring(
+            entity.offset,
+            entity.offset + entity.length
+          );
+          if (mention.endsWith(botName)) {
+            mentioned = true;
+          }
+          const cmd = mention.replaceAll("@" + botName, "").replaceAll(botName, "").trim();
+          content += cmd;
+          offset = entity.offset + entity.length;
+        }
+        break;
+      case "mention":
+      case "text_mention":
+        if (!mentioned) {
+          const mention = originContent.substring(
+            entity.offset,
+            entity.offset + entity.length
+          );
+          if (mention === botName || mention === "@" + botName) {
+            mentioned = true;
+          }
+        }
+        content += originContent.substring(offset, entity.offset);
+        offset = entity.offset + entity.length;
+        break;
+    }
+  }
+  content += originContent.substring(offset, originContent.length);
+  message.text = content.trim();
+  if (!mentioned) {
+    throw new Error("No mentioned");
+  }
+  return null;
+}
+
+/**
+ * 處理指令訊息
+ */
+export async function msgHandleCommand(message, context) {
+  let commandText = message.text;
+  if (!commandText && message.caption) {
+    commandText = message.caption;
+  }
+  if (!commandText) {
+    return null;
+  }
+  
+  // 不是指令則跳過
+  if (!commandText.startsWith('/')) {
+    return null;
+  }
+  
+  const hasOriginalText = Object.prototype.hasOwnProperty.call(message, "text");
+  const originalText = message.text;
+  if (!hasOriginalText || !message.text) {
+    message.text = commandText;
+  }
+  
+  // 導入命令處理器
+  const { handleCommandMessage } = await import('./commands.js');
+  const result = await handleCommandMessage(message, context);
+  
+  if (hasOriginalText) {
+    message.text = originalText;
+  } else {
+    delete message.text;
+  }
+  return result;
+}
+
+/**
+ * 智能功能檢測處理器（天氣 + 奇門遁甲）
+ */
+export async function msgSmartWeatherDetection(message, context) {
+  // 只處理文字消息
+  if (!message.text) {
+    return null;
+  }
+
+  // 跳過命令消息（以 / 開頭）
+  if (message.text.startsWith('/')) {
+    return null;
+  }
+
+  const text = message.text.toLowerCase();
+  
+  // 檢測天氣相關關鍵字
+  const weatherKeywords = ['天氣', '氣象', '溫度', '下雨', '晴天', '陰天', '颱風', '氣溫'];
+  const hasWeatherKeyword = weatherKeywords.some(keyword => text.includes(keyword));
+  
+  if (hasWeatherKeyword) {
+    console.log('🌤️ 檢測到天氣查詢:', message.text);
+
+    // 提取台灣地區名稱
+    const taiwanCities = [
+      '台北', '新北', '桃園', '台中', '台南', '高雄', 
+      '基隆', '新竹', '苗栗', '彰化', '南投', '雲林', 
+      '嘉義', '屏東', '宜蘭', '花蓮', '台東', '澎湖', 
+      '金門', '連江', '馬祖'
+    ];
+    
+    let location = '台北'; // 預設地點
+    
+    // 查找消息中提到的城市
+    for (const city of taiwanCities) {
+      if (message.text.includes(city)) {
+        location = city;
+        break;
+      }
+    }
+
+    console.log(`🌤️ 自動查詢 ${location} 天氣`);
+
+    // 直接調用天氣命令
+    return await commandWeather(
+      { text: `/wt ${location}` }, 
+      '/wt', 
+      location, 
+      context
+    );
+  }
+
+  // 檢測奇門遁甲相關關鍵字
+  const qimenKeywords = [
+    '奇門', '遁甲', '奇門遁甲', '占卜', '卜卦'
+  ];
+  
+  const hasQimenKeyword = qimenKeywords.some(keyword => text.includes(keyword));
+  
+  if (hasQimenKeyword) {
+    console.log('🔮 檢測到奇門遁甲查詢:', message.text);
+    
+    // 直接使用用戶的完整問題
+    const question = message.text;
+    
+    console.log(`🔮 自動進行奇門遁甲占卜: ${question}`);
+    
+    // 直接調用奇門遁甲命令
+    return await commandQimen(
+      { text: `/qi ${question}` },
+      '/qi',
+      question,
+      context
+    );
+  }
+
+  // 都沒有匹配到
+  return null;
+}
+
+/**
+ * 從訊息中挑選照片
+ */
+export function pickPhotoFromMessage(message) {
+  if (!message?.photo || message.photo.length === 0) {
+    return null;
+  }
+  let sizeIndex = 0;
+  if (ENV.TELEGRAM_PHOTO_SIZE_OFFSET >= 0) {
+    sizeIndex = Math.min(ENV.TELEGRAM_PHOTO_SIZE_OFFSET, message.photo.length - 1);
+  } else {
+    sizeIndex = Math.max(0, message.photo.length + ENV.TELEGRAM_PHOTO_SIZE_OFFSET);
+  }
+  sizeIndex = Math.max(0, Math.min(sizeIndex, message.photo.length - 1));
+  return message.photo[sizeIndex]?.file_id || null;
+}
+
+/**
+ * 提取 Telegram 照片 URL
+ */
+export async function extractTelegramPhotoUrl(message, context, allowReply = false) {
+  const candidates = [];
+  const mainFileId = pickPhotoFromMessage(message);
+  if (mainFileId) {
+    candidates.push(mainFileId);
+  }
+  if (allowReply && message?.reply_to_message) {
+    const replyFileId = pickPhotoFromMessage(message.reply_to_message);
+    if (replyFileId) {
+      candidates.push(replyFileId);
+    }
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  const fileId = candidates[0];
+  let url = await getFileLink(fileId, context.SHARE_CONTEXT.currentBotToken);
+  if (!url) {
+    return null;
+  }
+  if (ENV.TELEGRAPH_ENABLE) {
+    url = await uploadImageToTelegraph(url);
+  }
+  return url;
+}
+
+/**
+ * 與 LLM 聊天
+ */
+export async function msgChatWithLLM(message, context) {
+  const { text, caption } = message;
+  const baseText = text || caption || "";
+  let content = baseText;
+  if (ENV.EXTRA_MESSAGE_CONTEXT && context.SHARE_CONTEXT.extraMessageContext && context.SHARE_CONTEXT.extraMessageContext.text) {
+    const extra = context.SHARE_CONTEXT.extraMessageContext.text || "";
+    content = extra + (baseText ? `\n${baseText}` : "");
+  }
+  const params = { message: content };
+  if (message.photo && message.photo.length > 0) {
+    const url = await extractTelegramPhotoUrl(message, context);
+    if (url) {
+      params.images = [url];
+    }
+  }
+  if ((!params.message || params.message.trim() === "") && params.images && params.images.length > 0) {
+    params.message = "請描述這張圖片，並說一個小故事。";
+  }
+  
+  // 這裡需要調用 chatWithLLM 函數
+  // 該函數將在 agent/llm.js 中實作
+  const { chatWithLLM } = await import('../agent/llm.js');
+  return chatWithLLM(params, context, null);
+}
+
+/**
+ * 載入訊息
+ */
+export function loadMessage(body) {
+  if (body?.edited_message) {
+    throw new Error("Ignore edited message");
+  }
+  if (body?.message) {
+    return body?.message;
+  } else {
+    throw new Error("Invalid message");
+  }
+}
+
+/**
+ * 中介層鏈
+ * 按順序執行所有中介層處理器
+ */
+export const messageMiddleware = [
+  msgInitChatContext,
+  msgSaveLastMessage,
+  msgIgnoreOldMessage,
+  msgCheckEnvIsReady,
+  msgFilterWhiteList,
+  msgFilterUnsupportedMessage,
+  msgHandleGroupMessage,
+  msgHandleCommand,
+  msgSmartWeatherDetection,
+  msgChatWithLLM
+];
+
+/**
+ * 執行中介層鏈
+ */
+export async function executeMiddleware(message, context) {
+  for (const middleware of messageMiddleware) {
+    const result = await middleware(message, context);
+    if (result !== null) {
+      return result; // 中介層返回非 null 表示處理完成
+    }
+  }
+  return null;
+}
+
+/**
+ * 處理訊息的主函數
+ * @param {string} token - Bot Token
+ * @param {Object} body - 請求 body
+ * @returns {Promise<Response|null>}
+ */
+export async function handleMessage(token, body) {
+  const { Context } = await import('./context.js');
+  const { errorToString } = await import('../utils/utils.js');
+  
+  const context = new Context();
+  context.initTelegramContext(token);
+  
+  const message = loadMessage(body);
+  
+  const handlers = [
+    // 初始化聊天上下文: 生成chat_id, reply_to_message_id(群組消息), SHARE_CONTEXT
+    msgInitChatContext,
+    // 檢查環境是否準備好: DATABASE
+    msgCheckEnvIsReady,
+    // 過濾非白名單用戶, 提前過濾減少KV消耗
+    msgFilterWhiteList,
+    // 過濾不支援的消息(拋出異常結束消息處理)
+    msgFilterUnsupportedMessage,
+    // 處理群消息，判斷是否需要響應此條消息
+    msgHandleGroupMessage,
+    // 忽略舊消息
+    msgIgnoreOldMessage,
+    // DEBUG: 保存最後一條消息,按照需求自行調整此中介層位置
+    msgSaveLastMessage,
+    // 處理命令消息
+    msgHandleCommand,
+    // 🌤️🔮 智能功能檢測 (天氣 + 奇門遁甲)
+    msgSmartWeatherDetection,
+    // 與LLM聊天
+    msgChatWithLLM
+  ];
+  
+  for (const handler of handlers) {
+    try {
+      const result = await handler(message, context);
+      if (result) {
+        return result;
+      }
+    } catch (e) {
+      console.error(e);
+      return new Response(errorToString(e), { status: 500 });
+    }
+  }
+  
+  return null;
+}
