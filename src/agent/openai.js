@@ -1,17 +1,65 @@
 /**
  * OpenAI API 相關功能
  * 包含 Chat Completions 和 DALL-E / GPT-Image 圖片生成
+ * 支援 LLM Profiles (多個 OpenAI 相容服務)
  */
 
 import { ENV } from '../config/env.js';
 import { requestChatCompletions } from './request.js';
 import { imageToBase64String, renderBase64DataURI } from '../utils/image.js';
+import { getActiveLLMProfile } from './agents.js';
 
 // ========== API Key 管理 ==========
 
+/**
+ * 從 context 取得 OpenAI API Key
+ * 優先使用 LLM Profile 的設定
+ */
 export function openAIKeyFromContext(context) {
+  // 優先使用 LLM Profile
+  const profile = getActiveLLMProfile(context);
+  if (profile && profile.apiKey) {
+    return profile.apiKey;
+  }
+  
+  // 回退到原本的設定
   const length = context.USER_CONFIG.OPENAI_API_KEY.length;
   return context.USER_CONFIG.OPENAI_API_KEY[Math.floor(Math.random() * length)];
+}
+
+/**
+ * 從 context 取得 API Base URL
+ * 優先使用 LLM Profile 的設定
+ */
+export function getOpenAIApiBase(context) {
+  // 優先使用 LLM Profile
+  const profile = getActiveLLMProfile(context);
+  if (profile && profile.apiBase) {
+    return profile.apiBase;
+  }
+  
+  // 回退到原本的設定
+  return context.USER_CONFIG.OPENAI_API_BASE;
+}
+
+/**
+ * 從 context 取得 Chat Model
+ * 優先使用臨時覆蓋的 model，其次是 LLM Profile，最後是預設設定
+ */
+export function getOpenAIChatModel(context) {
+  // 優先使用臨時覆蓋的 model
+  if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+    return context.USER_CONFIG.CURRENT_LLM_MODEL;
+  }
+  
+  // 其次使用 LLM Profile
+  const profile = getActiveLLMProfile(context);
+  if (profile && profile.model) {
+    return profile.model;
+  }
+  
+  // 回退到原本的設定
+  return context.USER_CONFIG.OPENAI_CHAT_MODEL;
 }
 
 export function openAIImageKeyFromContext(context) {
@@ -36,6 +84,13 @@ export function getOpenAIImageApiBase(context) {
 // ========== 狀態檢查 ==========
 
 export function isOpenAIEnable(context) {
+  // 檢查是否有 LLM Profile 可用
+  const profile = getActiveLLMProfile(context);
+  if (profile && profile.apiKey) {
+    return true;
+  }
+  
+  // 回退檢查原本的設定
   return context.USER_CONFIG.OPENAI_API_KEY.length > 0;
 }
 
@@ -86,7 +141,7 @@ export async function renderOpenAIMessage(item) {
 
 export async function requestCompletionsFromOpenAI(params, context, onStream) {
   const { message, images, prompt, history } = params;
-  const url = `${context.USER_CONFIG.OPENAI_API_BASE}/chat/completions`;
+  const url = `${getOpenAIApiBase(context)}/chat/completions`;
   const header = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${openAIKeyFromContext(context)}`
@@ -98,7 +153,7 @@ export async function requestCompletionsFromOpenAI(params, context, onStream) {
   }
   
   const body = {
-    model: context.USER_CONFIG.OPENAI_CHAT_MODEL,
+    model: getOpenAIChatModel(context),
     ...context.USER_CONFIG.OPENAI_API_EXTRA_PARAMS,
     messages: await Promise.all(messages.map(renderOpenAIMessage)),
     stream: onStream != null

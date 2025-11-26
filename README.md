@@ -1,9 +1,174 @@
 本專案來自 fork https://github.com/TBXark/ChatGPT-Telegram-Workers
 
 ## 本次更新重點
+- 🆕 **`/llmchange` 指令**：支援在多個 OpenAI API 相容服務之間快速切換（Groq、DeepSeek、OpenAI 等）
 - `/img` 指令可直接引用訊息內或回覆的 Telegram 照片，缺少圖片生成器時會友善回報
 - 影像提取更穩定：優先度選擇合適尺寸的 file_id，並支援從回覆訊息抓圖
 - 文字/圖片並送時的內容組裝更安全，若僅有圖片也會自動加入基本提示
+
+---
+
+# 🔄 LLM Profile 多模型切換功能
+
+支援在多個 OpenAI API 相容服務之間快速切換，無需每次都修改環境變數！
+
+## ✨ 功能特點
+
+- **多 Profile 管理**：同時設定多個 LLM 服務（OpenAI、Groq、DeepSeek、Ollama 等）
+- **一鍵切換**：使用 `/llmchange` 指令快速切換不同服務
+- **臨時覆蓋模型**：可在切換時指定特定模型，無需修改配置
+- **使用者隔離**：每個使用者/群組有獨立的 LLM 設定
+- **權限控制**：群組中只有管理員可以切換
+
+## 📝 環境變數設定
+
+在 Cloudflare Workers 的環境變數中新增：
+
+### LLM_PROFILES（必填）
+
+JSON 格式，定義所有可用的 LLM Profile：
+
+```json
+{
+  "openai": {
+    "name": "OpenAI GPT-4o",
+    "apiBase": "https://api.openai.com/v1",
+    "apiKey": "sk-xxx",
+    "model": "gpt-4o"
+  },
+  "groq": {
+    "name": "Groq Llama",
+    "apiBase": "https://api.groq.com/openai/v1",
+    "apiKey": "gsk-xxx",
+    "model": "llama-3.3-70b-versatile"
+  },
+  "deepseek": {
+    "name": "DeepSeek",
+    "apiBase": "https://api.deepseek.com/v1",
+    "apiKey": "sk-xxx",
+    "model": "deepseek-chat"
+  },
+  "gemini": {
+    "name": "Gemini OpenAI 相容",
+    "apiBase": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "apiKey": "AIza-xxx",
+    "model": "gemini-2.0-flash"
+  },
+  "ollama": {
+    "name": "本地 Ollama",
+    "apiBase": "http://localhost:11434/v1",
+    "apiKey": "ollama",
+    "model": "llama3.2"
+  }
+}
+```
+
+**在 Cloudflare Dashboard 中設定時，需要壓縮成一行：**
+
+```
+LLM_PROFILES = {"openai":{"name":"OpenAI GPT-4o","apiBase":"https://api.openai.com/v1","apiKey":"sk-xxx","model":"gpt-4o"},"groq":{"name":"Groq Llama","apiBase":"https://api.groq.com/openai/v1","apiKey":"gsk-xxx","model":"llama-3.3-70b-versatile"},"deepseek":{"name":"DeepSeek","apiBase":"https://api.deepseek.com/v1","apiKey":"sk-xxx","model":"deepseek-chat"}}
+```
+
+### DEFAULT_LLM_PROFILE（選填）
+
+預設使用的 Profile 名稱：
+
+```
+DEFAULT_LLM_PROFILE = openai
+```
+
+## 🎮 使用指令
+
+### 查看目前設定和可用選項
+
+```
+/llmchange
+```
+
+輸出範例：
+```
+🤖 LLM 設定
+━━━━━━━━━━━━━━━
+📍 目前使用: openai
+📦 模型: gpt-4o
+
+可用的 Profiles:
+✓ openai - OpenAI GPT-4o (gpt-4o)
+• groq - Groq Llama (llama-3.3-70b-versatile)
+• deepseek - DeepSeek (deepseek-chat)
+
+使用方式:
+/llmchange <profile> [model]
+例: /llmchange groq
+例: /llmchange openai gpt-4-turbo
+```
+
+### 切換到其他 Profile
+
+```
+/llmchange groq
+```
+
+輸出：
+```
+✅ 已切換到 groq
+📦 模型: llama-3.3-70b-versatile
+```
+
+### 切換並指定特定模型
+
+```
+/llmchange groq mixtral-8x7b-32768
+```
+
+輸出：
+```
+✅ 已切換到 groq
+📦 模型: mixtral-8x7b-32768 (覆蓋預設: llama-3.3-70b-versatile)
+```
+
+### 切換回預設模型
+
+```
+/llmchange openai
+```
+
+## 🔐 權限控制
+
+| 場景 | 誰可以使用 |
+|------|-----------|
+| 私聊 | 所有使用者 |
+| 群組 | 僅管理員和建立者 |
+
+## 📊 使用者隔離
+
+每個使用者/群組的 LLM 設定是獨立的：
+
+- ✅ 使用者 A 切換到 Groq，不會影響使用者 B
+- ✅ 群組 X 使用 DeepSeek，群組 Y 可以使用 OpenAI
+- ✅ 設定會持久保存，重啟 Bot 後仍有效
+
+## 🔧 與現有設定的相容性
+
+| 現有設定 | 影響 |
+|---------|------|
+| `AI_PROVIDER = gemini` | ✅ 繼續使用 Gemini 獨立模式，直到使用 `/llmchange` 切換 |
+| `OPENAI_API_KEY` | ✅ 保留作為 fallback |
+| `GOOGLE_API_KEY` | ✅ Gemini 獨立模式繼續有效 |
+
+## 💡 常見服務的 API Base
+
+| 服務 | API Base |
+|------|----------|
+| OpenAI | `https://api.openai.com/v1` |
+| Groq | `https://api.groq.com/openai/v1` |
+| DeepSeek | `https://api.deepseek.com/v1` |
+| Together AI | `https://api.together.xyz/v1` |
+| Ollama (本地) | `http://localhost:11434/v1` |
+| Gemini (OpenAI 相容) | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| Azure OpenAI | `https://{resource}.openai.azure.com/openai/deployments/{model}` |
+
+---
 
 ## 要事先準備好的 三方插件的 plugin api
 要準備好這幾個 API KEY  分別去這幾個網站註冊free
@@ -629,6 +794,9 @@ AI Agent:    ████████████████████ 100% (
 ```
 
 #### 🎯 核心功能指令 (17個)
+
+**LLM 切換**
+- `/llmchange` - 切換 LLM 模型 (支援多個 OpenAI 相容服務)
 
 **天氣相關**
 - `/wt` - 查詢天氣

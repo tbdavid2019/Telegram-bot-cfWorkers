@@ -6,6 +6,43 @@
 import { isOpenAIEnable, isOpenAIImageEnable, requestCompletionsFromOpenAI, requestImageFromOpenAI } from './openai.js';
 import { isGeminiAIEnable, isGeminiImageEnable, requestCompletionsFromGeminiAI, requestImageFromGemini } from './gemini.js';
 
+// ========== LLM Profile 工具函數 ==========
+
+/**
+ * 取得目前啟用的 LLM Profile
+ * @param {Object} context - 上下文物件
+ * @returns {Object|null} Profile 物件或 null
+ */
+export function getActiveLLMProfile(context) {
+  const profileName = context.USER_CONFIG.CURRENT_LLM_PROFILE 
+                   || context.USER_CONFIG.DEFAULT_LLM_PROFILE;
+  
+  if (!profileName) return null;
+  
+  const profiles = context.USER_CONFIG.LLM_PROFILES || {};
+  return profiles[profileName] || null;
+}
+
+/**
+ * 取得目前使用的 Profile 名稱
+ * @param {Object} context - 上下文物件
+ * @returns {string} Profile 名稱
+ */
+export function getCurrentProfileName(context) {
+  return context.USER_CONFIG.CURRENT_LLM_PROFILE 
+      || context.USER_CONFIG.DEFAULT_LLM_PROFILE 
+      || "";
+}
+
+/**
+ * 取得所有可用的 LLM Profiles
+ * @param {Object} context - 上下文物件
+ * @returns {Object} Profiles 物件
+ */
+export function getAllLLMProfiles(context) {
+  return context.USER_CONFIG.LLM_PROFILES || {};
+}
+
 // TODO: 導入其他 AI 服務
 // import { isAzureEnable, requestCompletionsFromAzureOpenAI } from './azure.js';
 // import { isWorkersAIEnable, requestCompletionsFromWorkersAI } from './workersai.js';
@@ -82,26 +119,22 @@ export const imageGenAgents = [
 // ========== 工具函數 ==========
 
 export function currentChatModel(agentName, context) {
+  // 如果使用 LLM Profile
+  if (agentName === "openai") {
+    const profile = getActiveLLMProfile(context);
+    if (profile) {
+      // 如果有臨時覆蓋的 model
+      if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+        return context.USER_CONFIG.CURRENT_LLM_MODEL;
+      }
+      return profile.model || context.USER_CONFIG.OPENAI_CHAT_MODEL;
+    }
+    return context.USER_CONFIG.OPENAI_CHAT_MODEL;
+  }
+  
   switch (agentName) {
-    // case "azure":
-    //   try {
-    //     const url = new URL(context.USER_CONFIG.AZURE_COMPLETIONS_API);
-    //     return url.pathname.split("/")[3];
-    //   } catch {
-    //     return context.USER_CONFIG.AZURE_COMPLETIONS_API;
-    //   }
-    case "openai":
-      return context.USER_CONFIG.OPENAI_CHAT_MODEL;
-    // case "workers":
-    //   return context.USER_CONFIG.WORKERS_CHAT_MODEL;
     case "gemini":
       return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL;
-    // case "mistral":
-    //   return context.USER_CONFIG.MISTRAL_CHAT_MODEL;
-    // case "cohere":
-    //   return context.USER_CONFIG.COHERE_CHAT_MODEL;
-    // case "anthropic":
-    //   return context.USER_CONFIG.ANTHROPIC_CHAT_MODEL;
     default:
       return null;
   }
@@ -109,20 +142,10 @@ export function currentChatModel(agentName, context) {
 
 export function chatModelKey(agentName) {
   switch (agentName) {
-    // case "azure":
-    //   return "AZURE_COMPLETIONS_API";
     case "openai":
       return "OPENAI_CHAT_MODEL";
-    // case "workers":
-    //   return "WORKERS_CHAT_MODEL";
     case "gemini":
       return "GOOGLE_COMPLETIONS_MODEL";
-    // case "mistral":
-    //   return "MISTRAL_CHAT_MODEL";
-    // case "cohere":
-    //   return "COHERE_CHAT_MODEL";
-    // case "anthropic":
-    //   return "ANTHROPIC_CHAT_MODEL";
     default:
       return null;
   }

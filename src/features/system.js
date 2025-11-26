@@ -1,6 +1,6 @@
 // 系統指令模組
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
-import { loadChatLLM } from '../agent/agents.js';
+import { loadChatLLM, getActiveLLMProfile, getCurrentProfileName } from '../agent/agents.js';
 import { loadHistory } from '../agent/llm.js';
 import { chatWithLLM } from '../agent/llm.js';
 
@@ -34,20 +34,10 @@ function mergeEnvironment(target, source) {
  */
 function chatModelKey(agentName) {
   switch (agentName) {
-    case "azure":
-      return "AZURE_COMPLETIONS_API";
     case "openai":
       return "OPENAI_CHAT_MODEL";
-    case "workers":
-      return "WORKERS_CHAT_MODEL";
     case "gemini":
       return "GOOGLE_COMPLETIONS_MODEL";
-    case "mistral":
-      return "MISTRAL_CHAT_MODEL";
-    case "cohere":
-      return "COHERE_CHAT_MODEL";
-    case "anthropic":
-      return "ANTHROPIC_CHAT_MODEL";
     default:
       return null;
   }
@@ -57,26 +47,21 @@ function chatModelKey(agentName) {
  * 取得當前聊天模型
  */
 function currentChatModel(agentName, context) {
+  if (agentName === "openai") {
+    // 優先使用 LLM Profile
+    const profile = getActiveLLMProfile(context);
+    if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+      return context.USER_CONFIG.CURRENT_LLM_MODEL;
+    }
+    if (profile && profile.model) {
+      return profile.model;
+    }
+    return context.USER_CONFIG.OPENAI_CHAT_MODEL;
+  }
+  
   switch (agentName) {
-    case "azure":
-      try {
-        const url = new URL(context.USER_CONFIG.AZURE_COMPLETIONS_API);
-        return url.pathname.split("/")[3];
-      } catch {
-        return context.USER_CONFIG.AZURE_COMPLETIONS_API;
-      }
-    case "openai":
-      return context.USER_CONFIG.OPENAI_CHAT_MODEL;
-    case "workers":
-      return context.USER_CONFIG.WORKERS_CHAT_MODEL;
     case "gemini":
       return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL;
-    case "mistral":
-      return context.USER_CONFIG.MISTRAL_CHAT_MODEL;
-    case "cohere":
-      return context.USER_CONFIG.COHERE_CHAT_MODEL;
-    case "anthropic":
-      return context.USER_CONFIG.ANTHROPIC_CHAT_MODEL;
     default:
       return null;
   }
@@ -87,14 +72,10 @@ function currentChatModel(agentName, context) {
  */
 function imageModelKey(agentName) {
   switch (agentName) {
-    case "azure":
-      return "AZURE_DALLE_API";
     case "openai":
       return "DALL_E_MODEL";
     case "gemini":
       return "GEMINI_IMAGE_MODEL";
-    case "workers":
-      return "WORKERS_IMAGE_MODEL";
     default:
       return null;
   }
@@ -105,13 +86,6 @@ function imageModelKey(agentName) {
  */
 function currentImageModel(agentName, context) {
   switch (agentName) {
-    case "azure":
-      try {
-        const url = new URL(context.USER_CONFIG.AZURE_DALLE_API);
-        return url.pathname.split("/")[3];
-      } catch {
-        return context.USER_CONFIG.AZURE_DALLE_API;
-      }
     case "openai":
       if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
           context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
@@ -119,9 +93,7 @@ function currentImageModel(agentName, context) {
       }
       return context.USER_CONFIG.DALL_E_MODEL || "dall-e-3";
     case "gemini":
-      return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL || "gemini-2.0-flash-exp";
-    case "workers":
-      return "@cf/black-forest-labs/flux-1-schnell";
+      return context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-2.0-flash-exp";
     default:
       return "unknown";
   }
@@ -299,13 +271,31 @@ Current version: ${current.sha}(${timeFormat(current.ts)})`);
 export async function commandSystem(message, command, subcommand, context) {
   let chatAgent = loadChatLLM(context)?.name;
   let imageAgent = loadImageGen(context)?.name;
+  
+  // 取得 LLM Profile 資訊
+  const currentProfileName = getCurrentProfileName(context);
+  const currentProfile = getActiveLLMProfile(context);
+  
   const agent = {
     AI_PROVIDER: chatAgent,
     AI_IMAGE_PROVIDER: imageAgent
   };
+  
+  // 如果使用 LLM Profile，顯示 profile 資訊
+  if (currentProfileName && currentProfile) {
+    agent.LLM_PROFILE = currentProfileName;
+    agent.LLM_PROFILE_NAME = currentProfile.name || currentProfileName;
+  }
+  
   if (chatModelKey(chatAgent)) {
     agent[chatModelKey(chatAgent)] = currentChatModel(chatAgent, context);
   }
+  
+  // 如果有臨時覆蓋的 model，也顯示
+  if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+    agent.CURRENT_LLM_MODEL = context.USER_CONFIG.CURRENT_LLM_MODEL + " (覆蓋)";
+  }
+  
   if (imageModelKey(imageAgent)) {
     agent[imageModelKey(imageAgent)] = currentImageModel(imageAgent, context);
   }
@@ -321,9 +311,14 @@ export async function commandSystem(message, command, subcommand, context) {
     context.USER_CONFIG.CLOUDFLARE_ACCOUNT_ID = "******";
     context.USER_CONFIG.CLOUDFLARE_TOKEN = "******";
     context.USER_CONFIG.GOOGLE_API_KEY = "******";
-    context.USER_CONFIG.MISTRAL_API_KEY = "******";
-    context.USER_CONFIG.COHERE_API_KEY = "******";
-    context.USER_CONFIG.ANTHROPIC_API_KEY = "******";
+    // 隱藏 LLM_PROFILES 中的 API Keys
+    if (context.USER_CONFIG.LLM_PROFILES) {
+      const maskedProfiles = {};
+      for (const [name, profile] of Object.entries(context.USER_CONFIG.LLM_PROFILES)) {
+        maskedProfiles[name] = { ...profile, apiKey: "******" };
+      }
+      context.USER_CONFIG.LLM_PROFILES = maskedProfiles;
+    }
     const config = trimUserConfig(context.USER_CONFIG);
     msg = "<pre>\n" + msg;
     msg += `USER_CONFIG: ${JSON.stringify(config, null, 2)}\n`;

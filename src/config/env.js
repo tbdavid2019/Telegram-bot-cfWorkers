@@ -81,30 +81,16 @@ export class UserConfig {
   GOOGLE_COMPLETIONS_API = "https://generativelanguage.googleapis.com/v1beta/models/";
   // Google Gemini Model
   GOOGLE_COMPLETIONS_MODEL = "gemini-2.5-flash";
-  // -- Mistral 配置 --
-  //
-  // mistral api key
-  MISTRAL_API_KEY = null;
-  // mistral api base
-  MISTRAL_API_BASE = "https://api.mistral.ai/v1";
-  // mistral api model
-  MISTRAL_CHAT_MODEL = "mistral-tiny";
-  // -- Cohere 配置 --
-  //
-  // cohere api key
-  COHERE_API_KEY = null;
-  // cohere api base
-  COHERE_API_BASE = "https://api.cohere.com/v1";
-  // cohere api model
-  COHERE_CHAT_MODEL = "command-r-plus";
-  // -- Anthropic 配置 --
-  //
-  // Anthropic api key
-  ANTHROPIC_API_KEY = null;
-  // Anthropic api base
-  ANTHROPIC_API_BASE = "https://api.anthropic.com/v1";
-  // Anthropic api model
-  ANTHROPIC_CHAT_MODEL = "claude-3-haiku-20240307";
+  // -- LLM Profiles 配置 --
+  // 支援多個 OpenAI API 相容服務的配置
+  // JSON 格式: {"openai":{"name":"OpenAI","apiBase":"...","apiKey":"...","model":"..."}}
+  LLM_PROFILES = {};
+  // 預設使用的 LLM Profile
+  DEFAULT_LLM_PROFILE = "";
+  // 目前使用的 LLM Profile (使用者可透過 /llmchange 切換)
+  CURRENT_LLM_PROFILE = "";
+  // 臨時覆蓋的 LLM Model (使用者可透過 /llmchange profile model 指定)
+  CURRENT_LLM_MODEL = "";
 }
 
 export class Environment {
@@ -148,14 +134,12 @@ export class Environment {
   CHAT_WHITE_LIST = [];
   // 用户配置
   LOCK_USER_CONFIG_KEYS = [
-    // 默认为API BASE 防止被替换导致token 泄露
+    // 默認為API BASE 防止被替換導致token 泄露
     "OPENAI_API_BASE",
     "GOOGLE_COMPLETIONS_API",
-    "MISTRAL_API_BASE",
-    "COHERE_API_BASE",
-    "ANTHROPIC_API_BASE",
     "AZURE_COMPLETIONS_API",
-    "AZURE_DALLE_API"
+    "AZURE_DALLE_API",
+    "LLM_PROFILES"
   ];
   // -- 群组相关 --
   //
@@ -216,16 +200,17 @@ const ENV_TYPES = {
   CLOUDFLARE_ACCOUNT_ID: "string",
   CLOUDFLARE_TOKEN: "string",
   GOOGLE_API_KEY: "string",
-  MISTRAL_API_KEY: "string",
-  COHERE_API_KEY: "string",
-  ANTHROPIC_API_KEY: "string",
   GPT_IMAGE_MODEL: "string",
   GPT_IMAGE_SIZE: "string",
   OPENAI_IMAGE_API_KEY: "array",
   OPENAI_IMAGE_API_BASE: "string",
   GEMINI_IMAGE_MODEL: "string",
   GEMINI_IMAGE_API_KEY: "array",
-  GEMINI_IMAGE_API_BASE: "string"
+  GEMINI_IMAGE_API_BASE: "string",
+  LLM_PROFILES: "object",
+  DEFAULT_LLM_PROFILE: "string",
+  CURRENT_LLM_PROFILE: "string",
+  CURRENT_LLM_MODEL: "string"
 };
 
 const ENV_KEY_MAPPER = {

@@ -42,6 +42,7 @@ import {
   commandSystem,
   commandRegenerate
 } from '../features/system.js';
+import { commandLLMChange } from '../features/llm.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -49,6 +50,7 @@ import {
  */
 export const commandSortList = [
   "/new",           // 新對話 
+  "/llmchange",     // 切換 LLM
   "/bo",            // 解答之書原版
   "/qi",            // 奇門遁甲
   "/oracle",        // 淺草籤詩
@@ -193,6 +195,14 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandSetImageProvider,
     description: "設定圖片生成服務 - 使用: /setimg [provider]"
+  },
+
+  // LLM 切換
+  "/llmchange": {
+    scopes: ["all_private_chats", "all_chat_administrators"],
+    fn: commandLLMChange,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
+    description: "切換 LLM 模型 - 使用: /llmchange [profile] [model]"
   },
 
   // 系統指令
