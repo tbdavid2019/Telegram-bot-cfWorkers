@@ -83,7 +83,7 @@ export class UserConfig {
   GOOGLE_COMPLETIONS_MODEL = "gemini-2.5-flash";
   // -- LLM Profiles 配置 --
   // 支援多個 OpenAI API 相容服務的配置
-  // JSON 格式: {"openai":{"name":"OpenAI","apiBase":"...","apiKey":"...","model":"..."}}
+  // JSON 格式: {"openai":{"name":"OpenAI","apiBase":"...","apiKeyEnv":"OPENAI_API_KEY","model":"..."}}
   LLM_PROFILES = {};
   // 預設使用的 LLM Profile
   DEFAULT_LLM_PROFILE = "";
@@ -91,6 +91,12 @@ export class UserConfig {
   CURRENT_LLM_PROFILE = "";
   // 臨時覆蓋的 LLM Model (使用者可透過 /llmchange profile model 指定)
   CURRENT_LLM_MODEL = "";
+  
+  // -- LLM API Keys (從環境變數讀取) --
+  // OpenRouter API Key
+  OPENROUTER_API_KEY = null;
+  // Bedrock API Key (自訂服務)
+  BEDROCK_API_KEY = null;
 }
 
 export class Environment {
@@ -210,7 +216,9 @@ const ENV_TYPES = {
   LLM_PROFILES: "object",
   DEFAULT_LLM_PROFILE: "string",
   CURRENT_LLM_PROFILE: "string",
-  CURRENT_LLM_MODEL: "string"
+  CURRENT_LLM_MODEL: "string",
+  OPENROUTER_API_KEY: "string",
+  BEDROCK_API_KEY: "string"
 };
 
 const ENV_KEY_MAPPER = {

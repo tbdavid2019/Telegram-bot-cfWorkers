@@ -5,8 +5,60 @@
 
 import { isOpenAIEnable, isOpenAIImageEnable, requestCompletionsFromOpenAI, requestImageFromOpenAI } from './openai.js';
 import { isGeminiAIEnable, isGeminiImageEnable, requestCompletionsFromGeminiAI, requestImageFromGemini } from './gemini.js';
+import { ENV } from '../config/env.js';
 
 // ========== LLM Profile 工具函數 ==========
+
+/**
+ * 從環境變數取得 API Key
+ * @param {Object} profile - Profile 物件
+ * @param {Object} context - 上下文物件
+ * @returns {string} API Key
+ */
+export function getProfileApiKey(profile, context) {
+  if (!profile) return null;
+  
+  // 如果 profile 有直接的 apiKey，使用它
+  if (profile.apiKey) {
+    return profile.apiKey;
+  }
+  
+  // 如果 profile 有 apiKeyEnv，從環境變數讀取
+  if (profile.apiKeyEnv) {
+    const envVarName = profile.apiKeyEnv;
+    
+    // 1. 從 ENV 直接讀取（wrangler.toml 中的 vars）
+    if (ENV[envVarName]) {
+      const key = ENV[envVarName];
+      if (Array.isArray(key) && key.length > 0) {
+        return key[0];
+      }
+      if (key) return key;
+    }
+    
+    // 2. 從 USER_CONFIG 讀取（包含 merge 過的環境變數）
+    if (context.USER_CONFIG && context.USER_CONFIG[envVarName]) {
+      const key = context.USER_CONFIG[envVarName];
+      if (Array.isArray(key) && key.length > 0) {
+        return key[0];
+      }
+      if (key) return key;
+    }
+    
+    // 3. 從 ENV.USER_CONFIG 讀取
+    if (ENV.USER_CONFIG && ENV.USER_CONFIG[envVarName]) {
+      const key = ENV.USER_CONFIG[envVarName];
+      if (Array.isArray(key) && key.length > 0) {
+        return key[0];
+      }
+      if (key) return key;
+    }
+    
+    console.log(`[getProfileApiKey] Could not find API key for: ${envVarName}`);
+  }
+  
+  return null;
+}
 
 /**
  * 取得目前啟用的 LLM Profile

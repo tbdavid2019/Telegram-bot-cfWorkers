@@ -1,0 +1,197 @@
+# ============================================================
+# Telegram Bot - Cloudflare Workers 配置
+# 支援多個 Bot 部署到不同的 Worker
+# ============================================================
+
+# 主要入口檔案
+main = "dist/telegram.work.modular.js"
+compatibility_date = "2024-01-01"
+
+# ============================================================
+# 共用設定（所有環境都會繼承）
+# ============================================================
+[vars]
+LANGUAGE = "zh-tw"
+I_AM_A_GENEROUS_PERSON = "true"
+CHAT_COMPLETE_API_TIMEOUT = "60"
+
+# ============================================================
+# Bot 1: tgbotaws (bedrockGPT)
+# 預設使用 Bedrock
+# 部署指令: npx wrangler deploy --env aws
+# ============================================================
+[env.aws]
+name = "tgbotaws"
+
+[env.aws.vars]
+TELEGRAM_BOT_NAME = "bedrockGPT"
+DEFAULT_LLM_PROFILE = "bedrock"
+AI_PROVIDER = "openai"
+
+# Telegram Token
+TELEGRAM_AVAILABLE_TOKENS = "YOUR-TELEGRAM-BOT-TOKEN"
+
+# 語言與基本設定
+LANGUAGE = "zh-TW"
+I_AM_A_GENEROUS_PERSON = "true"
+CHAT_COMPLETE_API_TIMEOUT = "60000"
+
+# 群組聊天設定
+GROUP_CHAT_BOT_ENABLE = "true"
+GROUP_CHAT_BOT_SHARE_MODE = "true"
+
+# 白名單
+CHAT_WHITE_LIST = "YOUR-USER-ID-1,YOUR-USER-ID-2"
+CHAT_GROUP_WHITE_LIST = "-YOUR-GROUP-ID-1,-YOUR-GROUP-ID-2"
+
+# LLM 主要設定
+OPENAI_API_BASE = "https://bedrock.glsoft.ai/api/v1"
+OPENAI_API_KEY = "sk-YOUR-KEY-HERE"
+OPENAI_CHAT_MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+# LLM Profiles 用的 API Keys
+OPENROUTER_API_KEY = "sk-YOUR-KEY-HERE"
+GOOGLE_API_KEY = "AIza-YOUR-KEY-HERE"
+BEDROCK_API_KEY = "YOUR-BEDROCK-KEY"
+
+# 圖片生成設定
+AI_IMAGE_PROVIDER = "gemini"
+DALL_E_MODEL = "gpt-image-1-mini"
+DALL_E_IMAGE_STYLE = "natural"
+OPENAI_IMAGE_API_BASE = "https://api.openai.com/v1"
+OPENAI_IMAGE_API_KEY = "sk-YOUR-KEY-HERE"
+GEMINI_IMAGE_API_KEY = "AIza-YOUR-KEY-HERE"
+GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview"
+WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
+
+# Cloudflare
+CLOUDFLARE_ACCOUNT_ID = "YOUR-CF-ACCOUNT-ID"
+CLOUDFLARE_TOKEN = "YOUR-CF-TOKEN"
+
+# LLM Profiles - 使用 apiKeyEnv 參照環境變數
+LLM_PROFILES = '''
+{
+  "openai": {
+    "name": "OpenAI GPT-5.1",
+    "apiBase": "https://api.openai.com/v1",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "model": "gpt-5.1"
+  },
+  "openrouter": {
+    "name": "OpenRouter Grok",
+    "apiBase": "https://openrouter.ai/api/v1",
+    "apiKeyEnv": "OPENROUTER_API_KEY",
+    "model": "x-ai/grok-4.1-fast:free"
+  },
+  "gemini": {
+    "name": "Gemini Flash",
+    "apiBase": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "apiKeyEnv": "GOOGLE_API_KEY",
+    "model": "models/gemini-flash-latest"
+  },
+  "bedrock": {
+    "name": "AWS Bedrock Claude",
+    "apiBase": "https://bedrock.glsoft.ai/api/v1",
+    "apiKeyEnv": "BEDROCK_API_KEY",
+    "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  }
+}
+'''
+
+# KV Namespace 綁定
+[[env.aws.kv_namespaces]]
+binding = "DATABASE"
+id = "YOUR-KV-NAMESPACE-ID"
+
+# ============================================================
+# Bot 2: tgbotchatgpt (oli_cerebrum_bot)
+# 預設使用 OpenAI
+# 部署指令: npx wrangler deploy --env chatgpt
+# ============================================================
+[env.chatgpt]
+name = "tgbotchatgpt"
+
+[env.chatgpt.vars]
+# Telegram 設定
+TELEGRAM_AVAILABLE_TOKENS = "YOUR-TELEGRAM-BOT-TOKEN"
+TELEGRAM_BOT_NAME = "oli_cerebrum_bot"
+
+# 語言與基本設定
+LANGUAGE = "zh-TW"
+I_AM_A_GENEROUS_PERSON = "false"
+CHAT_COMPLETE_API_TIMEOUT = "60000"
+
+# 群組聊天設定
+GROUP_CHAT_BOT_ENABLE = "true"
+GROUP_CHAT_BOT_SHARE_MODE = "true"
+
+# 白名單
+CHAT_WHITE_LIST = "YOUR-USER-ID-1,YOUR-USER-ID-2"
+CHAT_GROUP_WHITE_LIST = "-YOUR-GROUP-ID-1,-YOUR-GROUP-ID-2"
+
+# LLM 主要設定
+OPENAI_API_BASE = "https://gateway.ai.cloudflare.com/v1/YOUR-CF-ACCOUNT-ID/YOUR-GATEWAY-NAME/openai"
+OPENAI_API_KEY = "sk-YOUR-KEY-HERE"
+OPENAI_CHAT_MODEL = "gpt-5-chat-latest"
+
+# Google/Gemini API Key
+GOOGLE_API_KEY = "AIza-YOUR-KEY-HERE"
+
+# OpenRouter API Key
+OPENROUTER_API_KEY = "sk-YOUR-KEY-HERE"
+
+# Bedrock API Key
+BEDROCK_API_KEY = "YOUR-BEDROCK-KEY"
+
+# 圖片生成設定
+AI_IMAGE_PROVIDER = "gemini"
+DALL_E_MODEL = "gpt-image-1-mini"
+DALL_E_IMAGE_SIZE = "1024x1024"
+DALL_E_IMAGE_STYLE = "natural"
+OPENAI_IMAGE_API_BASE = "https://api.openai.com/v1"
+OPENAI_IMAGE_API_KEY = "sk-YOUR-KEY-HERE"
+GEMINI_IMAGE_API_KEY = "AIza-YOUR-KEY-HERE"
+GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview"
+
+# Cloudflare 設定
+CLOUDFLARE_ACCOUNT_ID = "YOUR-CF-ACCOUNT-ID"
+CLOUDFLARE_TOKEN = "YOUR-CF-TOKEN"
+WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
+
+DEFAULT_LLM_PROFILE = "openai"
+AI_PROVIDER = "openai"
+
+# LLM Profiles - 使用 apiKeyEnv 參照環境變數，不直接存放 API Key
+LLM_PROFILES = '''
+{
+  "openai": {
+    "name": "OpenAI GPT-5.1",
+    "apiBase": "https://api.openai.com/v1",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "model": "gpt-5.1"
+  },
+  "openrouter": {
+    "name": "OpenRouter Grok",
+    "apiBase": "https://openrouter.ai/api/v1",
+    "apiKeyEnv": "OPENROUTER_API_KEY",
+    "model": "x-ai/grok-4.1-fast:free"
+  },
+  "gemini": {
+    "name": "Gemini Flash",
+    "apiBase": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "apiKeyEnv": "GOOGLE_API_KEY",
+    "model": "models/gemini-flash-latest"
+  },
+  "bedrock": {
+    "name": "AWS Bedrock Claude",
+    "apiBase": "https://bedrock.glsoft.ai/api/v1",
+    "apiKeyEnv": "BEDROCK_API_KEY",
+    "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  }
+}
+'''
+
+# KV Namespace 綁定 (需要填入你的 KV ID)
+[[env.chatgpt.kv_namespaces]]
+binding = "DATABASE"
+id = "YOUR-KV-NAMESPACE-ID"

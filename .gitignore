@@ -21,6 +21,13 @@ dist/
 .DS_Store
 Thumbs.db
 
-# 環境變數
+# 環境變數（敏感資訊）
 .env
 .env.local
+.dev.vars
+.dev.vars.*
+setup-secrets.sh
+
+# Wrangler 配置（包含敏感 API Keys）
+wrangler.toml
+# wrangler.toml.example 是範本，可以提交

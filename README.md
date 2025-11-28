@@ -1,5 +1,179 @@
 本專案來自 fork https://github.com/TBXark/ChatGPT-Telegram-Workers
 
+---
+
+# 📋 目錄
+
+- [環境變數完整說明](#-環境變數完整說明)
+- [快速開始](#-快速開始)
+- [多 Bot 部署指南](#-多-bot-部署指南)
+- [LLM Profile 多模型切換](#-llm-profile-多模型切換功能)
+- [圖片生成設定](#多供應商圖片生成設定指南)
+- [功能指令說明](#-功能指令說明)
+- [專案架構](#️-專案架構與模組化)
+
+---
+
+# 📦 環境變數完整說明
+
+## 📋 完整變數總覽表
+
+| 類別 | 變數名稱 | 說明 |
+|------|----------|------|
+| **Telegram** | `TELEGRAM_AVAILABLE_TOKENS` | Bot Token |
+| | `TELEGRAM_BOT_NAME` | Bot 名稱 |
+| **白名單** | `CHAT_WHITE_LIST` | 允許的用戶 ID |
+| | `CHAT_GROUP_WHITE_LIST` | 允許的群組 ID |
+| **群組設定** | `GROUP_CHAT_BOT_ENABLE` | 啟用群組聊天 |
+| | `GROUP_CHAT_BOT_SHARE_MODE` | 共享對話記憶 |
+| **LLM** | `OPENAI_API_BASE` | OpenAI 相容 API URL |
+| | `OPENAI_API_KEY` | OpenAI API Key |
+| | `OPENAI_CHAT_MODEL` | 預設模型 |
+| | `OPENROUTER_API_KEY` | OpenRouter Key |
+| | `GOOGLE_API_KEY` | Google/Gemini Key |
+| | `BEDROCK_API_KEY` | Bedrock Key |
+| **圖片生成** | `AI_IMAGE_PROVIDER` | 圖片供應商選擇 (auto/openai/gemini) |
+| | `DALL_E_MODEL` | DALL-E 模型 |
+| | `DALL_E_IMAGE_STYLE` | 圖片風格 (vivid/natural) |
+| | `OPENAI_IMAGE_API_BASE` | 圖片 API URL |
+| | `OPENAI_IMAGE_API_KEY` | 圖片 API Key |
+| | `GEMINI_IMAGE_API_KEY` | Gemini 圖片 Key |
+| | `GEMINI_IMAGE_MODEL` | Gemini 圖片模型 |
+| | `WORKERS_IMAGE_MODEL` | CF Workers AI 模型 |
+| **Cloudflare** | `CLOUDFLARE_ACCOUNT_ID` | CF 帳號 ID |
+| | `CLOUDFLARE_TOKEN` | CF API Token |
+| **第三方插件** | `netlasapiKey` | Netlas DNS 查詢 |
+| | `infoapiKey` | IPInfo IP 查詢 |
+| | `cwaapiKey` | 臺灣天氣查詢 |
+| | `FMPapiKey` | 國際股市查詢 |
+| **其他** | `LANGUAGE` | 語言設定 (zh-TW) |
+| | `I_AM_A_GENEROUS_PERSON` | 略過白名單 |
+| | `CHAT_COMPLETE_API_TIMEOUT` | API 超時秒數 |
+| | `DEFAULT_LLM_PROFILE` | 預設 LLM Profile |
+
+---
+
+以下是各變數的詳細說明：
+
+## Telegram 設定
+
+| 變數名稱 | 必填 | 說明 | 範例值 |
+|----------|------|------|--------|
+| `TELEGRAM_AVAILABLE_TOKENS` | ✅ | Telegram Bot Token（從 @BotFather 取得） | `7511604126:AAF...` |
+| `TELEGRAM_BOT_NAME` | ✅ | Bot 名稱 | `my_awesome_bot` |
+
+## 權限控制（白名單）
+
+| 變數名稱 | 必填 | 說明 | 範例值 |
+|----------|------|------|--------|
+| `CHAT_WHITE_LIST` | ❌ | 允許使用的用戶 ID，逗號分隔。留空 = 所有人 | `650289664,280274865` |
+| `CHAT_GROUP_WHITE_LIST` | ❌ | 允許使用的群組 ID（負數），逗號分隔 | `-1002244643664,-1001581614602` |
+
+## 群組聊天設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `GROUP_CHAT_BOT_ENABLE` | ❌ | 是否啟用群組聊天 | `true` |
+| `GROUP_CHAT_BOT_SHARE_MODE` | ❌ | 群組中是否共享對話記憶 | `true` |
+
+## LLM API 設定（主要對話用）
+
+| 變數名稱 | 必填 | 說明 | 範例值 |
+|----------|------|------|--------|
+| `OPENAI_API_BASE` | ❌ | OpenAI 相容 API 的基礎 URL | `https://api.openai.com/v1` |
+| `OPENAI_API_KEY` | ✅ | OpenAI API Key | `sk-proj-xxx` |
+| `OPENAI_CHAT_MODEL` | ❌ | 預設聊天模型 | `gpt-4o` |
+
+## LLM Profiles 用的 API Keys
+
+這些 Key 會被 `wrangler.toml` 中 `LLM_PROFILES` 的 `apiKeyEnv` 參照：
+
+| 變數名稱 | 必填 | 說明 | 範例值 |
+|----------|------|------|--------|
+| `OPENROUTER_API_KEY` | ❌ | OpenRouter API Key | `sk-or-v1-xxx` |
+| `GOOGLE_API_KEY` | ❌ | Google Gemini API Key | `AIzaSy-xxx` |
+| `BEDROCK_API_KEY` | ❌ | AWS Bedrock 或自訂服務的 Key | `your-key` |
+
+## 圖片生成設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `AI_IMAGE_PROVIDER` | ❌ | 圖片供應商 | `auto` |
+| `DALL_E_MODEL` | ❌ | DALL-E 模型 | `gpt-image-1-mini` |
+| `DALL_E_IMAGE_STYLE` | ❌ | 圖片風格（vivid / natural） | `natural` |
+| `OPENAI_IMAGE_API_BASE` | ❌ | 圖片 API Base（可與對話 API 不同） | `https://api.openai.com/v1` |
+| `OPENAI_IMAGE_API_KEY` | ❌ | 圖片 API Key（可與對話 API 不同） | `sk-proj-xxx` |
+| `GEMINI_IMAGE_API_KEY` | ❌ | Gemini 圖片生成專用 Key | `AIzaSy-xxx` |
+| `GEMINI_IMAGE_MODEL` | ❌ | Gemini 圖片模型 | `gemini-2.0-flash-exp-image-generation` |
+| `WORKERS_IMAGE_MODEL` | ❌ | Cloudflare Workers AI 模型 | `@cf/stabilityai/stable-diffusion-xl-base-1.0` |
+
+## Cloudflare 設定（Workers AI 用）
+
+| 變數名稱 | 必填 | 說明 | 範例值 |
+|----------|------|------|--------|
+| `CLOUDFLARE_ACCOUNT_ID` | ❌ | Cloudflare 帳號 ID | `379570860738dd...` |
+| `CLOUDFLARE_TOKEN` | ❌ | Cloudflare API Token | `wkB6jAWcbm...` |
+
+## 語言設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `LANGUAGE` | ❌ | 回應語言 | `zh-TW` |
+
+## 第三方 Plugin API Keys
+
+| 變數名稱 | 功能 | 申請網站 |
+|----------|------|----------|
+| `netlasapiKey` | DNS 查詢 | https://netlas.io |
+| `infoapiKey` | IP 查詢 | https://ipinfo.io |
+| `cwaapiKey` | 臺灣天氣查詢 | https://opendata.cwa.gov.tw |
+| `FMPapiKey` | 國際股市查詢 | https://financialmodelingprep.com |
+
+## 其他設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `I_AM_A_GENEROUS_PERSON` | ❌ | 設為 true 可略過白名單 | `false` |
+| `CHAT_COMPLETE_API_TIMEOUT` | ❌ | API 請求超時秒數 | `60` |
+| `DEFAULT_LLM_PROFILE` | ❌ | 預設使用的 LLM Profile | `openai` |
+
+---
+
+# 🚀 快速開始
+
+## 1. 複製 wrangler.toml 範本
+
+```bash
+cp wrangler.toml.example wrangler.toml
+```
+
+## 2. 編輯 `wrangler.toml` 填入你的值
+
+在 `[env.aws.vars]` 或 `[env.chatgpt.vars]` 區塊中填入：
+
+必填項目：
+- `TELEGRAM_AVAILABLE_TOKENS` - 從 @BotFather 取得
+- `OPENAI_API_KEY` - 或其他 LLM 的 API Key
+
+## 3. 本地測試
+
+```bash
+pnpm install
+pnpm run build
+npx wrangler dev --env aws
+```
+
+## 4. 部署
+
+```bash
+npx wrangler deploy --env aws
+npx wrangler deploy --env chatgpt
+```
+
+> ⚠️ **注意**：`wrangler.toml` 包含敏感的 API Keys，已加入 `.gitignore`，不會提交到 Git。
+
+---
+
 ## 本次更新重點
 - 🆕 **`/llmchange` 指令**：支援在多個 OpenAI API 相容服務之間快速切換（Groq、DeepSeek、OpenAI 等）
 - `/img` 指令可直接引用訊息內或回覆的 Telegram 照片，缺少圖片生成器時會友善回報
@@ -22,60 +196,165 @@
 
 ## 📝 環境變數設定
 
-在 Cloudflare Workers 的環境變數中新增：
+本專案所有配置都在 `wrangler.toml` 中管理，包括 API Keys。
 
-### LLM_PROFILES（必填）
+> ⚠️ **安全提醒**：`wrangler.toml` 包含敏感資訊，已加入 `.gitignore`，不會提交到 Git。
 
-JSON 格式，定義所有可用的 LLM Profile：
+#### LLM_PROFILES 結構
+
+在 `wrangler.toml` 中，`LLM_PROFILES` 使用 `apiKeyEnv` 參照環境變數名稱，而不是直接存放 API Key：
 
 ```json
 {
   "openai": {
     "name": "OpenAI GPT-4o",
     "apiBase": "https://api.openai.com/v1",
-    "apiKey": "sk-xxx",
+    "apiKeyEnv": "OPENAI_API_KEY",
     "model": "gpt-4o"
   },
   "groq": {
     "name": "Groq Llama",
     "apiBase": "https://api.groq.com/openai/v1",
-    "apiKey": "gsk-xxx",
+    "apiKeyEnv": "GROQ_API_KEY",
     "model": "llama-3.3-70b-versatile"
-  },
-  "deepseek": {
-    "name": "DeepSeek",
-    "apiBase": "https://api.deepseek.com/v1",
-    "apiKey": "sk-xxx",
-    "model": "deepseek-chat"
-  },
-  "gemini": {
-    "name": "Gemini OpenAI 相容",
-    "apiBase": "https://generativelanguage.googleapis.com/v1beta/openai",
-    "apiKey": "AIza-xxx",
-    "model": "gemini-2.0-flash"
-  },
-  "ollama": {
-    "name": "本地 Ollama",
-    "apiBase": "http://localhost:11434/v1",
-    "apiKey": "ollama",
-    "model": "llama3.2"
   }
 }
 ```
 
-**在 Cloudflare Dashboard 中設定時，需要壓縮成一行：**
+#### 設定 API Keys
+
+直接在 `wrangler.toml` 的 `[env.xxx.vars]` 區塊中填入所有 API Keys。
+
+### 方式二：Cloudflare Dashboard
+
+直接在 Cloudflare Dashboard 的 Workers 設定頁面添加環境變數。
+
+---
+
+# 🚀 多 Bot 部署指南
+
+本專案支援**同一套程式碼部署到多個 Cloudflare Workers**，每個 Worker 服務不同的 Telegram Bot。
+
+## 📁 檔案結構
 
 ```
-LLM_PROFILES = {"openai":{"name":"OpenAI GPT-4o","apiBase":"https://api.openai.com/v1","apiKey":"sk-xxx","model":"gpt-4o"},"groq":{"name":"Groq Llama","apiBase":"https://api.groq.com/openai/v1","apiKey":"gsk-xxx","model":"llama-3.3-70b-versatile"},"deepseek":{"name":"DeepSeek","apiBase":"https://api.deepseek.com/v1","apiKey":"sk-xxx","model":"deepseek-chat"}}
+wrangler.toml              # 主配置檔（包含所有環境變數，不提交 Git）
+wrangler.toml.example      # 範本檔案（提交 Git）
 ```
 
-### DEFAULT_LLM_PROFILE（選填）
+## ⚙️ wrangler.toml 結構
 
-預設使用的 Profile 名稱：
+每個環境 (`[env.xxx]`) 包含該 Bot 的所有設定：
 
+```toml
+# ===== Bot 1 =====
+[env.aws]
+name = "tgbotaws"
+
+[env.aws.vars]
+# Telegram 設定
+TELEGRAM_AVAILABLE_TOKENS = "你的Bot-Token"
+TELEGRAM_BOT_NAME = "bedrockGPT"
+
+# LLM 設定
+OPENAI_API_KEY = "sk-xxx"
+OPENAI_API_BASE = "https://api.openai.com/v1"
+OPENROUTER_API_KEY = "sk-or-xxx"
+GOOGLE_API_KEY = "AIza-xxx"
+BEDROCK_API_KEY = "xxx"
+
+# 其他設定...
+DEFAULT_LLM_PROFILE = "bedrock"
+LLM_PROFILES = '''
+{ ... }
+'''
+
+[[env.aws.kv_namespaces]]
+binding = "DATABASE"
+id = "你的KV-ID"
+
+# ===== Bot 2 =====
+[env.chatgpt]
+name = "tgbotchatgpt"
+
+[env.chatgpt.vars]
+# 同樣結構，填入不同的值...
 ```
-DEFAULT_LLM_PROFILE = openai
+
+---
+
+## 🔧 本地開發
+
+```bash
+# 測試 Bot 1
+npx wrangler dev --env aws
+
+# 測試 Bot 2
+npx wrangler dev --env chatgpt
 ```
+
+---
+
+## 🚀 生產環境部署
+
+直接部署，所有設定都在 `wrangler.toml` 中：
+
+```bash
+pnpm run build
+npx wrangler deploy --env aws
+npx wrangler deploy --env chatgpt
+```
+
+---
+
+## ➕ 新增第三個 Bot
+
+### 1. 在 Cloudflare 建立 KV Namespace
+
+到 Cloudflare Dashboard → Workers & Pages → KV → Create namespace
+
+記下新的 KV ID（例如 `abc123...`）
+
+### 2. 在 `wrangler.toml` 新增環境
+
+```toml
+# ===== Bot 3 =====
+[env.newbot]
+name = "tgbot-newbot"
+
+[env.newbot.vars]
+TELEGRAM_AVAILABLE_TOKENS = "你的新Bot-Token"
+TELEGRAM_BOT_NAME = "newBotName"
+OPENAI_API_KEY = "sk-xxx"
+# ... 其他所有變數
+
+DEFAULT_LLM_PROFILE = "openai"
+LLM_PROFILES = '''
+{ ... }
+'''
+
+[[env.newbot.kv_namespaces]]
+binding = "DATABASE"
+id = "abc123你的新KV-ID"
+```
+
+### 3. 部署新 Bot
+
+```bash
+npx wrangler deploy --env newbot
+```
+
+---
+
+## 📊 環境對照表
+
+| 環境名稱 | Worker 名稱 | Bot 名稱 | 預設 LLM | 部署指令 |
+|---------|------------|----------|----------|----------|
+| `aws` | tgbotaws | bedrockGPT | bedrock | `npx wrangler deploy --env aws` |
+| `chatgpt` | tgbotchatgpt | chatGPT | openai | `npx wrangler deploy --env chatgpt` |
+| `newbot` | tgbot-newbot | (你的Bot) | (自訂) | `npx wrangler deploy --env newbot` |
+
+---
 
 ## 🎮 使用指令
 

@@ -50,7 +50,6 @@ import { commandLLMChange } from '../features/llm.js';
  */
 export const commandSortList = [
   "/new",           // 新對話 
-  "/llmchange",     // 切換 LLM
   "/bo",            // 解答之書原版
   "/qi",            // 奇門遁甲
   "/oracle",        // 淺草籤詩
@@ -70,6 +69,7 @@ export const commandSortList = [
   "/dns",           // DNS 查詢 (要加參數)
   "/password",      // 隨機密碼
   "/boa",           // 解答之書
+  "/llmchange",     // 切換 LLM
   "/help"           // 幫助
 ];
 

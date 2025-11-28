@@ -7,7 +7,7 @@
 import { ENV } from '../config/env.js';
 import { requestChatCompletions } from './request.js';
 import { imageToBase64String, renderBase64DataURI } from '../utils/image.js';
-import { getActiveLLMProfile } from './agents.js';
+import { getActiveLLMProfile, getProfileApiKey } from './agents.js';
 
 // ========== API Key 管理 ==========
 
@@ -18,13 +18,18 @@ import { getActiveLLMProfile } from './agents.js';
 export function openAIKeyFromContext(context) {
   // 優先使用 LLM Profile
   const profile = getActiveLLMProfile(context);
-  if (profile && profile.apiKey) {
-    return profile.apiKey;
+  if (profile) {
+    const apiKey = getProfileApiKey(profile, context);
+    if (apiKey) return apiKey;
   }
   
   // 回退到原本的設定
-  const length = context.USER_CONFIG.OPENAI_API_KEY.length;
-  return context.USER_CONFIG.OPENAI_API_KEY[Math.floor(Math.random() * length)];
+  if (context.USER_CONFIG.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0) {
+    const length = context.USER_CONFIG.OPENAI_API_KEY.length;
+    return context.USER_CONFIG.OPENAI_API_KEY[Math.floor(Math.random() * length)];
+  }
+  
+  return null;
 }
 
 /**
@@ -86,12 +91,13 @@ export function getOpenAIImageApiBase(context) {
 export function isOpenAIEnable(context) {
   // 檢查是否有 LLM Profile 可用
   const profile = getActiveLLMProfile(context);
-  if (profile && profile.apiKey) {
-    return true;
+  if (profile) {
+    const apiKey = getProfileApiKey(profile, context);
+    if (apiKey) return true;
   }
   
   // 回退檢查原本的設定
-  return context.USER_CONFIG.OPENAI_API_KEY.length > 0;
+  return context.USER_CONFIG.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0;
 }
 
 export function isOpenAIImageEnable(context) {
