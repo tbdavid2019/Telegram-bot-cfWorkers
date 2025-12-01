@@ -1,11 +1,21 @@
 // 系統指令模組
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
-import { loadChatLLM, getActiveLLMProfile, getCurrentProfileName } from '../agent/agents.js';
+import { loadChatLLM, loadImageGen, getActiveLLMProfile, getCurrentProfileName } from '../agent/agents.js';
 import { loadHistory } from '../agent/llm.js';
 import { chatWithLLM } from '../agent/llm.js';
 
 // 從環境變數和配置引入
 import { ENV, DATABASE, CONST, CUSTOM_COMMAND, CUSTOM_COMMAND_DESCRIPTION } from '../config/env.js';
+
+// 導入 commandHandlers（延遲導入避免循環依賴）
+let commandHandlers = null;
+async function getCommandHandlers() {
+  if (!commandHandlers) {
+    const module = await import('../telegram/commands.js');
+    commandHandlers = module.commandHandlers;
+  }
+  return commandHandlers;
+}
 
 /**
  * 修剪使用者配置（移除空值）
@@ -100,20 +110,26 @@ function currentImageModel(agentName, context) {
 }
 
 /**
- * 載入圖片生成器（從 image-gen.js 移植）
- */
-function loadImageGen(context) {
-  // 簡化版本，實際使用時需要從 image-gen.js 導入
-  return null;
-}
-
-/**
  * /help - 顯示幫助訊息
+ * 只顯示 commandSortList 中的公開指令，不顯示系統級指令
  */
 export async function commandGetHelp(message, command, subcommand, context) {
+  // 動態導入 commandSortList 避免循環依賴
+  const { commandSortList } = await import('../telegram/commands.js');
+  
   let helpMsg = ENV.I18N.command.help.summary + "\n";
-  helpMsg += Object.keys(commandHandlers || {}).map((key) => `${key}：${ENV.I18N.command.help[key.substring(1)]}`).join("\n");
-  helpMsg += Object.keys(CUSTOM_COMMAND || {}).filter((key) => !!CUSTOM_COMMAND_DESCRIPTION[key]).map((key) => `${key}：${CUSTOM_COMMAND_DESCRIPTION[key]}`).join("\n");
+  
+  // 只顯示 commandSortList 中的指令
+  helpMsg += commandSortList
+    .map((key) => `${key}：${ENV.I18N.command.help[key.substring(1)] || ''}`)
+    .join("\n");
+  
+  // 加上自訂指令
+  helpMsg += Object.keys(CUSTOM_COMMAND || {})
+    .filter((key) => !!CUSTOM_COMMAND_DESCRIPTION[key])
+    .map((key) => `${key}：${CUSTOM_COMMAND_DESCRIPTION[key]}`)
+    .join("\n");
+  
   return sendMessageToTelegramWithContext(context)(helpMsg);
 }
 

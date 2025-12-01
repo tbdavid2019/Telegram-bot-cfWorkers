@@ -224,25 +224,25 @@ export const commandHandlers = {
   "/setenv": {
     scopes: [],
     fn: commandUpdateUserConfig,
-    needAuth: (msg, ctx) => true, // 需要權限檢查
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "設定環境變數 - 使用: /setenv KEY=VALUE"
   },
   "/setenvs": {
     scopes: [],
     fn: commandUpdateUserConfigs,
-    needAuth: (msg, ctx) => true,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "批次設定環境變數"
   },
   "/delenv": {
     scopes: [],
     fn: commandDeleteUserConfig,
-    needAuth: (msg, ctx) => true,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "刪除環境變數"
   },
   "/clearenv": {
     scopes: [],
     fn: commandClearUserConfig,
-    needAuth: (msg, ctx) => true,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "清除所有環境變數"
   },
   "/version": {
@@ -253,7 +253,7 @@ export const commandHandlers = {
   "/system": {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandSystem,
-    needAuth: (msg, ctx) => true,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "顯示系統狀態"
   },
   "/redo": {

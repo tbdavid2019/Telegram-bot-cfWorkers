@@ -25,9 +25,10 @@ function trimUserConfig(userConfig) {
  * 
  * 使用範例：
  *   /llmchange              → 列出所有可用 profiles 和目前設定
- *   /llmchange groq         → 切換到 Groq（使用該 profile 預設的 model）
+ *   /llmchange gemini       → 切換到 Gemini（使用該 profile 預設的 model）
  *   /llmchange openai gpt-4-turbo → 切換到 OpenAI 並指定 model
- *   /llmchange groq mixtral-8x7b-32768 → 切換到 Groq 並覆蓋 model
+ *   /llmchange openrouter-kimi    → 切換到 OpenRouter Kimi K2
+ *   /llmchange bedrock      → 切換到 AWS Bedrock Claude
  */
 export async function commandLLMChange(message, command, subcommand, context) {
   const profiles = getAllLLMProfiles(context);
@@ -156,9 +157,9 @@ async function showLLMStatus(context, profiles, profileNames) {
   
   msg += `\n`;
   msg += `*使用方式:*\n`;
-  msg += `/llmchange <profile> [model]\n`;
-  msg += `例: \`/llmchange groq\`\n`;
-  msg += `例: \`/llmchange openai gpt-4-turbo\`\n`;
+  msg += `/llmchange <profile>\n`;
+  msg += `例: \`/llmchange gemini\`\n`;
+  msg += `例: \`/llmchange openrouter-kimi\`\n`;
   
   context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
   return sendMessageToTelegramWithContext(context)(msg);
