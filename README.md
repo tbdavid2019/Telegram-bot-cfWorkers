@@ -303,6 +303,10 @@ npx wrangler dev --env chatgpt
 pnpm run build
 npx wrangler deploy --env aws
 npx wrangler deploy --env chatgpt
+
+或
+
+npm run build && npx wrangler deploy --env aws
 ```
 
 ---

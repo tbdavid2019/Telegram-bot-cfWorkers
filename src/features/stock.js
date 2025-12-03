@@ -5,6 +5,56 @@
 
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 
+// 台股熱門股票快捷列表
+const TW_HOT_STOCKS = [
+  { name: '台積電', code: '2330' },
+  { name: '鴻海', code: '2317' },
+  { name: '緯穎', code: '6669' },
+  { name: '富邦金', code: '2881' },
+  { name: '國泰金', code: '2882' },
+  { name: '中華電', code: '2412' },
+  { name: '聯發科', code: '2454' },
+  { name: '台達電', code: '2308' },
+];
+
+// 美股熱門股票快捷列表
+const US_HOT_STOCKS = [
+  { name: 'Tesla', code: 'TSLA' },
+  { name: 'NVIDIA', code: 'NVDA' },
+  { name: 'Google', code: 'GOOGL' },
+  { name: 'Amazon', code: 'AMZN' },
+  { name: 'Microsoft', code: 'MSFT' },
+  { name: 'Apple', code: 'AAPL' },
+  { name: 'Meta', code: 'META' },
+  { name: 'AMD', code: 'AMD' },
+];
+
+/**
+ * 處理台股查詢的 callback query（按鈕點擊）
+ */
+export async function handleStockTWCallback(message, context) {
+  const callbackData = message.callback_query?.data;
+  if (!callbackData || !callbackData.startsWith('/stock:')) {
+    return null;
+  }
+  
+  const stockCode = callbackData.replace('/stock:', '');
+  return fetchTWStock(stockCode, context);
+}
+
+/**
+ * 處理美股查詢的 callback query（按鈕點擊）
+ */
+export async function handleStock2Callback(message, context) {
+  const callbackData = message.callback_query?.data;
+  if (!callbackData || !callbackData.startsWith('/stock2:')) {
+    return null;
+  }
+  
+  const stockCode = callbackData.replace('/stock2:', '');
+  return fetchUSStock(stockCode, context);
+}
+
 /**
  * 台灣股票查詢指令
  * 使用 Yahoo Finance API，支援台股和美股
@@ -16,10 +66,54 @@ import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 export async function commandStockTW(message, command, subcommand, context) {
   const stockCode = subcommand.trim().toUpperCase();
 
+  // 如果沒有提供股票代碼，顯示快捷按鈕選單
   if (!stockCode) {
-    return sendMessageToTelegramWithContext(context)('請提供股票代碼。用法：/stock <股票代碼或美股代碼>');
+    return showTWStockButtons(context);
   }
 
+  return fetchTWStock(stockCode, context);
+}
+
+/**
+ * 顯示台股快捷按鈕選單
+ */
+async function showTWStockButtons(context) {
+  let msg = `🇹🇼 *台股查詢*\n`;
+  msg += `━━━━━━━━━━━━━━━\n`;
+  msg += `請選擇熱門股票或手動輸入：\n\n`;
+  msg += `*手動查詢方式:*\n`;
+  msg += `/stock <股票代碼>\n`;
+  msg += `例: \`/stock 2330\`\n`;
+  
+  // 建立 inline keyboard 按鈕（每行 2 個按鈕）
+  const buttons = [];
+  let row = [];
+  
+  for (let i = 0; i < TW_HOT_STOCKS.length; i++) {
+    const stock = TW_HOT_STOCKS[i];
+    row.push({
+      text: `${stock.name} (${stock.code})`,
+      callback_data: `/stock:${stock.code}`
+    });
+    
+    if (row.length === 2 || i === TW_HOT_STOCKS.length - 1) {
+      buttons.push(row);
+      row = [];
+    }
+  }
+  
+  context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({
+    inline_keyboard: buttons
+  });
+  
+  context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
+  return sendMessageToTelegramWithContext(context)(msg);
+}
+
+/**
+ * 查詢台股資料
+ */
+async function fetchTWStock(stockCode, context) {
   // 智慧判斷股票類型並格式化代碼
   const formattedCode = formatStockCode(stockCode);
   
@@ -195,36 +289,90 @@ function getMarketEmoji(stockType) {
 export async function commandStock(message, command, subcommand, context) {
   const stockSymbol = subcommand.trim().toUpperCase();
 
+  // 如果沒有提供股票代碼，顯示快捷按鈕選單
   if (!stockSymbol) {
-    return sendMessageToTelegramWithContext(context)('請提供股票代號。用法：/stock2 <股票代號>');
+    return showUSStockButtons(context);
   }
 
-  const apiKey = 'psHDQQHMeQMi9fpTXvxa8D6JR8zaPB9q';
-  const url = `https://financialmodelingprep.com/api/v3/quote/${stockSymbol}?apikey=${apiKey}`;
+  return fetchUSStock(stockSymbol, context);
+}
+
+/**
+ * 顯示美股快捷按鈕選單
+ */
+async function showUSStockButtons(context) {
+  let msg = `🇺🇸 *美股/國際股查詢*\n`;
+  msg += `━━━━━━━━━━━━━━━\n`;
+  msg += `請選擇熱門股票或手動輸入：\n\n`;
+  msg += `*手動查詢方式:*\n`;
+  msg += `/stock2 <股票代碼>\n`;
+  msg += `例: \`/stock2 TSLA\`\n`;
   
+  // 建立 inline keyboard 按鈕（每行 2 個按鈕）
+  const buttons = [];
+  let row = [];
+  
+  for (let i = 0; i < US_HOT_STOCKS.length; i++) {
+    const stock = US_HOT_STOCKS[i];
+    row.push({
+      text: `${stock.name} (${stock.code})`,
+      callback_data: `/stock2:${stock.code}`
+    });
+    
+    if (row.length === 2 || i === US_HOT_STOCKS.length - 1) {
+      buttons.push(row);
+      row = [];
+    }
+  }
+  
+  context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({
+    inline_keyboard: buttons
+  });
+  
+  context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
+  return sendMessageToTelegramWithContext(context)(msg);
+}
+
+/**
+ * 查詢美股資料（使用 Yahoo Finance API）
+ */
+async function fetchUSStock(stockSymbol, context) {
   try {
+    // 使用 Yahoo Finance API v8（與台股相同）
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${stockSymbol}`;
+    
     const response = await fetch(url, {
-      method: 'GET',
       headers: {
-        'User-Agent': 'request'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     });
 
-    const data = await response.json();
-
-    if (data && data.length > 0) {
-      const stockInfo = data[0];
-      const formattedStockInfo = formatStockInfo(stockInfo);
-      return sendMessageToTelegramWithContext(context)(formattedStockInfo);
-    } else {
-      return sendMessageToTelegramWithContext(context)(
-        `未找到 ${stockSymbol} 的股票信息。請確認股票代號是否正確。`
-      );
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
+
+    const data = await response.json();
+    
+    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+      throw new Error(`找不到股票代碼 ${stockSymbol} 的資料`);
+    }
+
+    const result = data.chart.result[0];
+    const meta = result.meta;
+    const quote = result.indicators.quote[0];
+    
+    if (!meta || !quote) {
+      throw new Error('股票資料格式錯誤');
+    }
+
+    const formattedStockInfo = formatUniversalStockData(meta, quote, stockSymbol, 'us');
+    return sendMessageToTelegramWithContext(context)(formattedStockInfo);
     
   } catch (e) {
-    console.error('Fetch error:', e);
-    return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
+    console.error(`Stock2 Query Error: ${e.message}`);
+    return sendMessageToTelegramWithContext(context)(
+      `查詢股票失敗: ${e.message}\n\n建議:\n1. 確認股票代碼正確 (如: TSLA, AAPL)\n2. 檢查是否為交易時間\n3. 稍後再試`
+    );
   }
 }
 

@@ -3,7 +3,30 @@
  * 天氣查詢功能
  */
 
-import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext, answerCallbackQuery } from '../telegram/telegram.js';
+
+// 預設的快捷城市列表
+const QUICK_CITIES = [
+  { name: '高雄市', callback: '/wt:高雄市' },
+  { name: '台北市', callback: '/wt:台北市' },
+  { name: '嘉義市', callback: '/wt:嘉義市' },
+  { name: '台中市', callback: '/wt:台中市' },
+  { name: '新竹市', callback: '/wt:新竹市' },
+  { name: '台南市', callback: '/wt:台南市' },
+];
+
+/**
+ * 處理天氣查詢的 callback query（按鈕點擊）
+ */
+export async function handleWeatherCallback(message, context) {
+  const callbackData = message.callback_query?.data;
+  if (!callbackData || !callbackData.startsWith('/wt:')) {
+    return null;
+  }
+  
+  const cityName = callbackData.replace('/wt:', '');
+  return fetchAndSendWeather(cityName, context);
+}
 
 /**
  * 天氣查詢指令
@@ -15,10 +38,57 @@ import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 export async function commandWeather(message, command, subcommand, context) {
   const locationName = subcommand.trim();
 
+  // 如果沒有提供城市名稱，顯示快捷按鈕選單
   if (!locationName) {
-    return sendMessageToTelegramWithContext(context)('請提供地區名稱。用法：/wt <地區名稱>');
+    return showWeatherCityButtons(context);
   }
 
+  return fetchAndSendWeather(locationName, context);
+}
+
+/**
+ * 顯示城市快捷按鈕選單
+ */
+async function showWeatherCityButtons(context) {
+  let msg = `🌤️ *天氣查詢*\n`;
+  msg += `━━━━━━━━━━━━━━━\n`;
+  msg += `請選擇城市或手動輸入：\n\n`;
+  msg += `*手動查詢方式:*\n`;
+  msg += `/wt <城市名稱>\n`;
+  msg += `例: \`/wt 花蓮市\`\n`;
+  msg += `例: \`/wt Tokyo\`\n`;
+  
+  // 建立 inline keyboard 按鈕（每行 2 個按鈕）
+  const buttons = [];
+  let row = [];
+  
+  for (let i = 0; i < QUICK_CITIES.length; i++) {
+    const city = QUICK_CITIES[i];
+    row.push({
+      text: city.name,
+      callback_data: city.callback
+    });
+    
+    // 每 2 個按鈕換一行
+    if (row.length === 2 || i === QUICK_CITIES.length - 1) {
+      buttons.push(row);
+      row = [];
+    }
+  }
+  
+  // 設定 inline keyboard
+  context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({
+    inline_keyboard: buttons
+  });
+  
+  context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
+  return sendMessageToTelegramWithContext(context)(msg);
+}
+
+/**
+ * 查詢並發送天氣資訊
+ */
+async function fetchAndSendWeather(locationName, context) {
   const url = `https://wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
 
   try {

@@ -209,6 +209,29 @@ export function sendChatActionToTelegramWithContext(context) {
   };
 }
 
+// ========== Callback Query ==========
+
+/**
+ * 回應 Callback Query（Inline Keyboard 按鈕點擊）
+ * @param {string} token - Bot Token
+ * @param {string} callbackQueryId - Callback Query ID
+ * @param {string} text - 可選的提示文字
+ */
+export async function answerCallbackQuery(token, callbackQueryId, text = null) {
+  const body = { callback_query_id: callbackQueryId };
+  if (text) {
+    body.text = text;
+  }
+  return await fetch(
+    `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/answerCallbackQuery`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }
+  ).then((res) => res.json());
+}
+
 // ========== Webhook ==========
 
 export async function bindTelegramWebHook(token, url) {

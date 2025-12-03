@@ -1,7 +1,9 @@
 // 訊息中介層處理器
-import { sendMessageToTelegramWithContext } from './telegram.js';
-import { commandWeather } from '../features/weather.js';
+import { sendMessageToTelegramWithContext, answerCallbackQuery } from './telegram.js';
+import { commandWeather, handleWeatherCallback } from '../features/weather.js';
 import { commandQimen } from '../features/divination.js';
+import { handleLLMChangeCallback } from '../features/llm.js';
+import { handleStockTWCallback, handleStock2Callback } from '../features/stock.js';
 import { getBot, getFileLink } from './telegram.js';
 import { uploadImageToTelegraph } from '../utils/image.js';
 
@@ -13,6 +15,43 @@ import { ENV, DATABASE, CONST } from '../config/env.js';
  */
 export async function msgInitChatContext(message, context) {
   await context.initContext(message);
+  return null;
+}
+
+/**
+ * 處理 Callback Query（Inline Keyboard 按鈕點擊）
+ */
+export async function msgHandleCallbackQuery(message, context) {
+  if (!message.callback_query) {
+    return null;
+  }
+  
+  const callbackData = message.callback_query.data;
+  
+  // 先回應 callback query（移除按鈕上的 loading 狀態）
+  await answerCallbackQuery(context.SHARE_CONTEXT.currentBotToken, message.callback_query.id);
+  
+  // 處理 LLM 切換
+  if (callbackData.startsWith('/llmchange:')) {
+    return handleLLMChangeCallback(message, context);
+  }
+  
+  // 處理天氣查詢
+  if (callbackData.startsWith('/wt:')) {
+    return handleWeatherCallback(message, context);
+  }
+  
+  // 處理台股查詢
+  if (callbackData.startsWith('/stock:')) {
+    return handleStockTWCallback(message, context);
+  }
+  
+  // 處理美股查詢
+  if (callbackData.startsWith('/stock2:')) {
+    return handleStock2Callback(message, context);
+  }
+  
+  // 未知的 callback，忽略
   return null;
 }
 
@@ -378,6 +417,15 @@ export function loadMessage(body) {
   if (body?.edited_message) {
     throw new Error("Ignore edited message");
   }
+  if (body?.callback_query) {
+    // 處理 inline keyboard 的回調
+    return {
+      ...body.callback_query.message,
+      callback_query: body.callback_query,
+      text: body.callback_query.data, // 把 callback data 當作 text
+      from: body.callback_query.from
+    };
+  }
   if (body?.message) {
     return body?.message;
   } else {
@@ -435,6 +483,8 @@ export async function handleMessage(token, body) {
     msgInitChatContext,
     // 檢查環境是否準備好: DATABASE
     msgCheckEnvIsReady,
+    // 處理 Callback Query（Inline Keyboard 按鈕點擊）- 要在白名單檢查後
+    msgHandleCallbackQuery,
     // 過濾非白名單用戶, 提前過濾減少KV消耗
     msgFilterWhiteList,
     // 過濾不支援的消息(拋出異常結束消息處理)
