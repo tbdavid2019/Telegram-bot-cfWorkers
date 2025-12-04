@@ -81,7 +81,7 @@ var UserConfig = class {
   // Google Gemini API
   GOOGLE_COMPLETIONS_API = "https://generativelanguage.googleapis.com/v1beta/models/";
   // Google Gemini Model
-  GOOGLE_COMPLETIONS_MODEL = "gemini-2.5-flash";
+  GOOGLE_COMPLETIONS_MODEL = "models/gemini-flash-latest";
   // -- Mistral 配置 --
   //
   // mistral api key

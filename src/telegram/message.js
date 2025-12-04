@@ -6,6 +6,7 @@ import { handleLLMChangeCallback } from '../features/llm.js';
 import { handleStockTWCallback, handleStock2Callback } from '../features/stock.js';
 import { getBot, getFileLink } from './telegram.js';
 import { uploadImageToTelegraph } from '../utils/image.js';
+import { recordUserActivity } from '../utils/stats.js';
 
 // 從環境變數和常數模組引入
 import { ENV, DATABASE, CONST } from '../config/env.js';
@@ -15,6 +16,15 @@ import { ENV, DATABASE, CONST } from '../config/env.js';
  */
 export async function msgInitChatContext(message, context) {
   await context.initContext(message);
+  return null;
+}
+
+/**
+ * 記錄使用者統計（在初始化後執行）
+ */
+export async function msgRecordStats(message, context) {
+  // 非同步記錄，不阻塞主流程
+  recordUserActivity(context).catch(e => console.error('Stats error:', e));
   return null;
 }
 
@@ -481,6 +491,8 @@ export async function handleMessage(token, body) {
   const handlers = [
     // 初始化聊天上下文: 生成chat_id, reply_to_message_id(群組消息), SHARE_CONTEXT
     msgInitChatContext,
+    // 記錄使用者統計
+    msgRecordStats,
     // 檢查環境是否準備好: DATABASE
     msgCheckEnvIsReady,
     // 處理 Callback Query（Inline Keyboard 按鈕點擊）- 要在白名單檢查後

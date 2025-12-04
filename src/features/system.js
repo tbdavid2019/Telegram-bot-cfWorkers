@@ -3,6 +3,7 @@ import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 import { loadChatLLM, loadImageGen, getActiveLLMProfile, getCurrentProfileName } from '../agent/agents.js';
 import { loadHistory } from '../agent/llm.js';
 import { chatWithLLM } from '../agent/llm.js';
+import { getStats } from '../utils/stats.js';
 
 // 從環境變數和配置引入
 import { ENV, DATABASE, CONST, CUSTOM_COMMAND, CUSTOM_COMMAND_DESCRIPTION } from '../config/env.js';
@@ -292,6 +293,10 @@ export async function commandSystem(message, command, subcommand, context) {
   const currentProfileName = getCurrentProfileName(context);
   const currentProfile = getActiveLLMProfile(context);
   
+  // 取得使用統計
+  const botId = context.SHARE_CONTEXT.currentBotId;
+  const stats = await getStats(botId);
+  
   const agent = {
     AI_PROVIDER: chatAgent,
     AI_IMAGE_PROVIDER: imageAgent
@@ -315,7 +320,21 @@ export async function commandSystem(message, command, subcommand, context) {
   if (imageModelKey(imageAgent)) {
     agent[imageModelKey(imageAgent)] = currentImageModel(imageAgent, context);
   }
-  let msg = `AGENT: ${JSON.stringify(agent, null, 2)}\n`;
+  
+  // 組合訊息
+  let msg = `📊 <b>系統狀態</b>\n`;
+  msg += `━━━━━━━━━━━━━━━\n\n`;
+  
+  // 使用統計
+  msg += `👥 <b>使用統計</b>\n`;
+  msg += `  • 總使用者數: ${stats.totalUsers}\n`;
+  msg += `  • 總群組數: ${stats.totalGroups}\n`;
+  msg += `  • 總訊息數: ${stats.totalMessages}\n`;
+  msg += `  • 今日訊息數: ${stats.todayMessages}\n\n`;
+  
+  // AI 設定
+  msg += `🤖 <b>AI 設定</b>\n`;
+  msg += `<pre>${JSON.stringify(agent, null, 2)}</pre>\n`;
   
   if (ENV.DEV_MODE) {
     const shareCtx = { ...context.SHARE_CONTEXT };
@@ -336,12 +355,11 @@ export async function commandSystem(message, command, subcommand, context) {
       context.USER_CONFIG.LLM_PROFILES = maskedProfiles;
     }
     const config = trimUserConfig(context.USER_CONFIG);
-    msg = "<pre>\n" + msg;
-    msg += `USER_CONFIG: ${JSON.stringify(config, null, 2)}\n`;
-    msg += `CHAT_CONTEXT: ${JSON.stringify(context.CURRENT_CHAT_CONTEXT, null, 2)}\n`;
-    msg += `SHARE_CONTEXT: ${JSON.stringify(shareCtx, null, 2)}\n`;
-    msg += "</pre>";
+    msg += `\n<b>USER_CONFIG:</b>\n<pre>${JSON.stringify(config, null, 2)}</pre>\n`;
+    msg += `<b>CHAT_CONTEXT:</b>\n<pre>${JSON.stringify(context.CURRENT_CHAT_CONTEXT, null, 2)}</pre>\n`;
+    msg += `<b>SHARE_CONTEXT:</b>\n<pre>${JSON.stringify(shareCtx, null, 2)}</pre>\n`;
   }
+  
   context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
   return sendMessageToTelegramWithContext(context)(msg);
 }
