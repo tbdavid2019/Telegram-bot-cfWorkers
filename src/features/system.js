@@ -44,6 +44,7 @@ function mergeEnvironment(target, source) {
  * 取得當前聊天模型名稱
  */
 function chatModelKey(agentName) {
+  // 如果使用 LLM Profile，統一顯示為 LLM_MODEL
   switch (agentName) {
     case "openai":
       return "OPENAI_CHAT_MODEL";
@@ -58,19 +59,23 @@ function chatModelKey(agentName) {
  * 取得當前聊天模型
  */
 function currentChatModel(agentName, context) {
-  if (agentName === "openai") {
-    // 優先使用 LLM Profile
-    const profile = getActiveLLMProfile(context);
-    if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
-      return context.USER_CONFIG.CURRENT_LLM_MODEL;
-    }
-    if (profile && profile.model) {
-      return profile.model;
-    }
-    return context.USER_CONFIG.OPENAI_CHAT_MODEL;
+  // 優先使用 LLM Profile 的 model（無論是 openai 還是 gemini provider）
+  const profile = getActiveLLMProfile(context);
+  
+  // 如果有臨時覆蓋的 model，最優先
+  if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+    return context.USER_CONFIG.CURRENT_LLM_MODEL;
   }
   
+  // 如果有 active profile，使用 profile 的 model
+  if (profile && profile.model) {
+    return profile.model;
+  }
+  
+  // 否則使用環境變數的預設值
   switch (agentName) {
+    case "openai":
+      return context.USER_CONFIG.OPENAI_CHAT_MODEL;
     case "gemini":
       return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL;
     default:
@@ -302,19 +307,21 @@ export async function commandSystem(message, command, subcommand, context) {
     AI_IMAGE_PROVIDER: imageAgent
   };
   
-  // 如果使用 LLM Profile，顯示 profile 資訊
+  // 如果使用 LLM Profile，顯示 profile 資訊（這是主要的模型來源）
   if (currentProfileName && currentProfile) {
     agent.LLM_PROFILE = currentProfileName;
     agent.LLM_PROFILE_NAME = currentProfile.name || currentProfileName;
-  }
-  
-  if (chatModelKey(chatAgent)) {
-    agent[chatModelKey(chatAgent)] = currentChatModel(chatAgent, context);
-  }
-  
-  // 如果有臨時覆蓋的 model，也顯示
-  if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
-    agent.CURRENT_LLM_MODEL = context.USER_CONFIG.CURRENT_LLM_MODEL + " (覆蓋)";
+    agent.LLM_MODEL = currentProfile.model || "未設定";
+    
+    // 如果有臨時覆蓋的 model
+    if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+      agent.LLM_MODEL = context.USER_CONFIG.CURRENT_LLM_MODEL + " (覆蓋)";
+    }
+  } else {
+    // 沒有使用 LLM Profile，顯示傳統的環境變數設定
+    if (chatModelKey(chatAgent)) {
+      agent[chatModelKey(chatAgent)] = currentChatModel(chatAgent, context);
+    }
   }
   
   if (imageModelKey(imageAgent)) {
