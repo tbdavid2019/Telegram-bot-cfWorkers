@@ -68,7 +68,6 @@ export const commandSortList = [
   "/ip",            // IP 查詢 (要加參數)
   "/dns",           // DNS 查詢 (要加參數)
   "/password",      // 隨機密碼
-  "/boa",           // 解答之書
   "/llmchange",     // 切換 LLM
   "/help"           // 幫助
 ];

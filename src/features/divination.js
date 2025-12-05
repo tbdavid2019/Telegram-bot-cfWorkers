@@ -194,7 +194,7 @@ export async function commandAnswerBook(message, command, subcommand, context) {
  * @param {Object} context - 上下文對象
  */
 export async function commandAnswerBookOriginal(message, command, subcommand, context) {
-  const url = 'https://answerbook.david888.com/answersOriginal';
+  const url = 'https://answerbook.david888.com/answersOriginal?lang=zh-TW';
   try {
     const response = await fetch(url);
     const text = await response.text();

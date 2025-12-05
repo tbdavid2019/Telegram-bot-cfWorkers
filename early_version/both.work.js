@@ -2462,7 +2462,6 @@ var commandAuthCheck = {
   }
 };
 var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version",   "/redo", 隱藏看看
-  "/boa",  //解答之書
   "/new", //新對話 
   "/qi", //奇門遁甲
   "/oracle", //淺草籤詩

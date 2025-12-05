@@ -2819,7 +2819,7 @@ async function commandAnswerBook(message, command, subcommand, context) {
 
 // 解答之書原版查詢
 async function commandAnswerBookOriginal(message, command, subcommand, context) {
-  const url = 'https://answerbook.david888.com/answersOriginal';
+  const url = 'https://answerbook.david888.com/answersOriginal?lang=zh-TW';
   try {
     const response = await fetch(url);
     const text = await response.text(); // 先將回應作為文本讀取
