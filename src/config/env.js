@@ -99,6 +99,8 @@ export class UserConfig {
   OPENROUTER_API_KEY = null;
   // Bedrock API Key (自訂服務)
   BEDROCK_API_KEY = null;
+  // Groq API Key
+  GROQ_API_KEY = null;
 }
 
 export class Environment {
@@ -211,6 +213,7 @@ const ENV_TYPES = {
   CLOUDFLARE_TOKEN: "string",
   GOOGLE_API_KEY: "string",
   GOOGLE_MAPS_API_KEY: "string",
+  ENABLE_LOCATION_SERVICE: "boolean",
   GPT_IMAGE_MODEL: "string",
   GPT_IMAGE_SIZE: "string",
   OPENAI_IMAGE_API_KEY: "array",
@@ -223,7 +226,8 @@ const ENV_TYPES = {
   CURRENT_LLM_PROFILE: "string",
   CURRENT_LLM_MODEL: "string",
   OPENROUTER_API_KEY: "string",
-  BEDROCK_API_KEY: "string"
+  BEDROCK_API_KEY: "string",
+  GROQ_API_KEY: "string"
 };
 
 const ENV_KEY_MAPPER = {

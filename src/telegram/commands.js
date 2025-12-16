@@ -456,7 +456,14 @@ export async function bindCommandForTelegram(token) {
     ).then((res) => res.json());
   }
 
-  return { ok: true, result };
+  return {
+    ok: true,
+    result,
+    debug: {
+      ENABLE_LOCATION_SERVICE: ENV.ENABLE_LOCATION_SERVICE,
+      GPS_IN_LIST: scopeCommandMap.all_private_chats?.includes('/gps')
+    }
+  };
 }
 
 /**
