@@ -1,15 +1,15 @@
 // 指令路由系統
-import { 
-  commandWeather, 
-  commandWeatherAlert 
+import {
+  commandWeather,
+  commandWeatherAlert
 } from '../features/weather.js';
-import { 
-  commandStockTW, 
-  commandStock 
+import {
+  commandStockTW,
+  commandStock
 } from '../features/stock.js';
-import { 
-  commandDictCN, 
-  commandDictEN 
+import {
+  commandDictCN,
+  commandDictEN
 } from '../features/dictionary.js';
 import {
   commandQimen,
@@ -43,6 +43,7 @@ import {
   commandRegenerate
 } from '../features/system.js';
 import { commandLLMChange } from '../features/llm.js';
+import { commandGPS } from '../features/location.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -56,6 +57,7 @@ export const commandSortList = [
   "/poetry",        // 唐詩
   "/law",           // 法律問答
   "/weatheralert",  // 天氣特報警報
+  "/gps",           // GPS 位置
   "/img",           // 產生圖片
   "/img2",          // 產生圖片2 (支援更多模型)
   "/setimg",        // 設定圖片生成模型
@@ -67,6 +69,7 @@ export const commandSortList = [
   "/wt",            // 台灣地區天氣 (要加參數)
   "/ip",            // IP 查詢 (要加參數)
   "/dns",           // DNS 查詢 (要加參數)
+  "/gps",           // 附近地點查詢
   "/password",      // 隨機密碼
   "/llmchange",     // 切換 LLM
   "/help"           // 幫助
@@ -170,6 +173,11 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandDnsLookup2,
     description: "DNS 查詢 (Netlify) - 使用: /dns2 [網域]"
+  },
+  "/gps": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandGPS,
+    description: "附近地點查詢 - 使用: /gps [地點類型] [半徑(公尺)]"
   },
 
   // 搜尋相關
@@ -301,7 +309,7 @@ export function getCommandHandler(command) {
  */
 export async function executeCommand(command, message, subcommand, context) {
   const handler = getCommandHandler(command);
-  
+
   if (!handler) {
     throw new Error(`未知指令: ${command}`);
   }
@@ -339,7 +347,7 @@ export async function commandEcho(message, command, subcommand, context) {
 export async function handleCommandMessage(message, context) {
   const { sendMessageToTelegramWithContext, getChatRoleWithContext } = await import('./telegram.js');
   const { ENV, CUSTOM_COMMAND } = await import('../config/env.js');
-  
+
   // 開發模式下添加 echo 指令
   if (ENV.DEV_MODE) {
     commandHandlers["/echo"] = {
@@ -349,17 +357,17 @@ export async function handleCommandMessage(message, context) {
       needAuth: commandAuthCheck.default
     };
   }
-  
+
   // 處理自訂指令
   if (CUSTOM_COMMAND[message.text]) {
     message.text = CUSTOM_COMMAND[message.text];
   }
-  
+
   // 遍歷指令處理器
   for (const key in commandHandlers) {
     if (message.text === key || message.text.startsWith(key + " ")) {
       const command = commandHandlers[key];
-      
+
       // 權限檢查
       try {
         if (command.needAuth) {
@@ -377,7 +385,7 @@ export async function handleCommandMessage(message, context) {
       } catch (e) {
         return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
       }
-      
+
       // 執行指令
       const subcommand = message.text.substring(key.length).trim();
       try {
@@ -387,7 +395,7 @@ export async function handleCommandMessage(message, context) {
       }
     }
   }
-  
+
   return null;
 }
 
@@ -398,15 +406,19 @@ export async function handleCommandMessage(message, context) {
  */
 export async function bindCommandForTelegram(token) {
   const { ENV } = await import('../config/env.js');
-  
+
   const scopeCommandMap = {
     all_private_chats: [],
     all_group_chats: [],
     all_chat_administrators: []
   };
-  
+
   for (const key of commandSortList) {
     if (ENV.HIDE_COMMAND_BUTTONS.includes(key)) {
+      continue;
+    }
+    // 如果位置服務未啟用，則隱藏 /gps 指令
+    if (key === '/gps' && !ENV.ENABLE_LOCATION_SERVICE) {
       continue;
     }
     if (Object.prototype.hasOwnProperty.call(commandHandlers, key) && commandHandlers[key].scopes) {
@@ -418,7 +430,7 @@ export async function bindCommandForTelegram(token) {
       }
     }
   }
-  
+
   const result = {};
   for (const scope in scopeCommandMap) {
     result[scope] = await fetch(
@@ -432,8 +444,8 @@ export async function bindCommandForTelegram(token) {
           commands: scopeCommandMap[scope].map((command) => ({
             command,
             // 優先使用 commandHandlers 中的 description，再使用 I18N，最後用指令名稱
-            description: commandHandlers[command]?.description 
-              || ENV.I18N?.command?.help?.[command.substring(1)] 
+            description: commandHandlers[command]?.description
+              || ENV.I18N?.command?.help?.[command.substring(1)]
               || command.substring(1)
           })),
           scope: {
@@ -443,7 +455,7 @@ export async function bindCommandForTelegram(token) {
       }
     ).then((res) => res.json());
   }
-  
+
   return { ok: true, result };
 }
 

@@ -31,6 +31,7 @@
 | | `OPENAI_CHAT_MODEL` | 預設模型 |
 | | `OPENROUTER_API_KEY` | OpenRouter Key |
 | | `GOOGLE_API_KEY` | Google/Gemini Key |
+| | `GOOGLE_MAPS_API_KEY` | Google Maps Key (Places New) |
 | | `BEDROCK_API_KEY` | Bedrock Key |
 | **圖片生成** | `AI_IMAGE_PROVIDER` | 圖片供應商選擇 (auto/openai/gemini) |
 | | `DALL_E_MODEL` | DALL-E 模型 |
@@ -48,6 +49,7 @@
 | | `FMPapiKey` | 國際股市查詢 |
 | **其他** | `LANGUAGE` | 語言設定 (zh-TW) |
 | | `I_AM_A_GENEROUS_PERSON` | 略過白名單 |
+| | `ENABLE_LOCATION_SERVICE` | 啟用位置/GPS服務 |
 | | `CHAT_COMPLETE_API_TIMEOUT` | API 超時秒數 |
 | | `DEFAULT_LLM_PROFILE` | 預設 LLM Profile |
 
@@ -92,6 +94,7 @@
 |----------|------|------|--------|
 | `OPENROUTER_API_KEY` | ❌ | OpenRouter API Key | `sk-or-v1-xxx` |
 | `GOOGLE_API_KEY` | ❌ | Google Gemini API Key | `AIzaSy-xxx` |
+| `GOOGLE_MAPS_API_KEY` | ❌ | Google Maps Places API Key | `AIzaSy-xxx` |
 | `BEDROCK_API_KEY` | ❌ | AWS Bedrock 或自訂服務的 Key | `your-key` |
 
 ## 圖片生成設定
@@ -134,8 +137,43 @@
 | 變數名稱 | 必填 | 說明 | 預設值 |
 |----------|------|------|--------|
 | `I_AM_A_GENEROUS_PERSON` | ❌ | 設為 true 可略過白名單 | `false` |
+| `ENABLE_LOCATION_SERVICE` | ❌ | 啟用 GPS/Google Maps 功能 | `false` |
 | `CHAT_COMPLETE_API_TIMEOUT` | ❌ | API 請求超時秒數 | `60` |
 | `DEFAULT_LLM_PROFILE` | ❌ | 預設使用的 LLM Profile | `openai` |
+
+| `DEFAULT_LLM_PROFILE` | ❌ | 預設使用的 LLM Profile | `openai` |
+
+---
+
+# 🌍 Google Maps 附近地點查詢功能
+
+Bot 現在支援使用 Google Maps Places API (New) 查詢附近的設施！
+
+## ✨ 功能特點
+
+- **📍 支援位置訊息**：直接在 Telegram 聊天中傳送「位置 (Location)」，Bot 接收後會自動詢問需求
+- **🤖 `/gps` 指令**：使用指令呼叫「分享位置」按鈕，操作更直覺
+- **🏢 多種地點類型**：一鍵查詢附近的：
+    - ⛽ 加油站
+    - 🅿️ 停車場
+    - 🏪 便利商店
+    - ☕ 咖啡廳
+    - 🍽️ 餐廳
+    - 🏧 ATM
+- **🔗 Google Maps 整合**：搜尋結果附帶 Google Maps 連結、評分、營業狀態和距離
+
+## 📝 設定說明
+
+本功能使用 **Google Maps Places API (New)**。
+
+1. **API Key**：
+    - 建議使用專用的 `GOOGLE_MAPS_API_KEY` 環境變數。
+    - **相容性**：若未設定，Bot 會嘗試使用 `GOOGLE_API_KEY` (Gemini 用) 作為備用。
+
+2. **Google Cloud Console 設定**：
+    - 請前往 Google Cloud Console。
+    - 確保已啟用 **"Places API (New)"**。
+    - 建議為 `GOOGLE_MAPS_API_KEY` 設定嚴格的 API 限制，**只允許 Places API (New)**，以符合最小權限原則。
 
 ---
 
@@ -175,10 +213,12 @@ npx wrangler deploy --env chatgpt
 ---
 
 ## 本次更新重點
+- 🆕 **Google Maps 附近地點查詢**：支援傳送位置或使用 `/gps` 查詢附近的加油站、餐廳、便利商店等
 - 🆕 **`/llmchange` 指令**：支援在多個 OpenAI API 相容服務之間快速切換（Groq、DeepSeek、OpenAI 等）
 - `/img` 指令可直接引用訊息內或回覆的 Telegram 照片，缺少圖片生成器時會友善回報
 - 影像提取更穩定：優先度選擇合適尺寸的 file_id，並支援從回覆訊息抓圖
 - 文字/圖片並送時的內容組裝更安全，若僅有圖片也會自動加入基本提示
+
 
 ---
 

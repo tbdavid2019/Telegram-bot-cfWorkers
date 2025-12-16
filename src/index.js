@@ -7,9 +7,9 @@
 import { ENV, initEnv, API_GUARD } from './config/env.js';
 
 // ===== Telegram 模組 =====
-import { 
-  sendMessageToTelegram, 
-  sendPhotoToTelegram, 
+import {
+  sendMessageToTelegram,
+  sendPhotoToTelegram,
   sendChatActionToTelegram,
   bindTelegramWebHook,
   getBot
@@ -32,13 +32,13 @@ import { createTelegramContext, Context } from './telegram/context.js';
 
 // ===== 工具模組 =====
 import { Router } from './utils/router.js';
-import { 
-  errorToString, 
-  renderHTML, 
-  makeResponse200, 
+import {
+  errorToString,
+  renderHTML,
+  makeResponse200,
   buildKeyNotFoundHTML,
   footer,
-  initLink 
+  initLink
 } from './utils/utils.js';
 
 // ===== i18n 多語言支援 =====
@@ -68,6 +68,7 @@ const i18nData = {
         img: '生成图片 - 使用: /img [描述]',
         img2: '生成图片(多模型) - 使用: /img2 [描述]',
         setimg: '设置图片生成模型',
+        gps: '查询附近设施 - 使用: /gps',
         llmchange: '切换 LLM 模型',
         help: '显示此帮助信息',
         new: '开始新对话',
@@ -108,6 +109,7 @@ const i18nData = {
         img: '產生圖片 - 使用: /img [描述]',
         img2: '產生圖片(多模型) - 使用: /img2 [描述]',
         setimg: '設定圖片生成模型',
+        gps: '查詢附近設施 - 使用: /gps',
         llmchange: '切換 LLM 模型',
         help: '顯示此幫助訊息',
         new: '開始新對話',
@@ -148,6 +150,7 @@ const i18nData = {
         img: 'Generate image - Usage: /img [description]',
         img2: 'Generate image (multi-model) - Usage: /img2 [description]',
         setimg: 'Set image generation model',
+        gps: 'Find nearby places - Usage: /gps',
         llmchange: 'Switch LLM model',
         help: 'Show this help message',
         new: 'Start new conversation',
@@ -203,7 +206,7 @@ async function bindWebHookAction(request) {
   const result = {};
   const domain = new URL(request.url).host;
   const hookMode = API_GUARD ? "safehook" : "webhook";
-  
+
   for (const token of ENV.TELEGRAM_AVAILABLE_TOKENS) {
     const url = `https://${domain}/telegram/${token.trim()}/${hookMode}`;
     const id = token.split(":")[0];
@@ -212,7 +215,7 @@ async function bindWebHookAction(request) {
       command: await bindCommandForTelegram(token).catch((e) => errorToString(e))
     };
   }
-  
+
   const HTML = renderHTML(`
     <h1>ChatGPT-Telegram-Workers</h1>
     <h2>${domain}</h2>
@@ -237,7 +240,7 @@ async function loadBotInfo() {
     const id = token.split(":")[0];
     result[id] = await getBot(token);
   }
-  
+
   const HTML = renderHTML(`
     <h1>ChatGPT-Telegram-Workers</h1>
     <br/>
@@ -293,21 +296,21 @@ async function telegramSafeHook(request) {
  */
 async function handleRequest(request) {
   const router = new Router();
-  
+
   // 路由定義
   router.get('/', defaultIndexAction);
   router.get('/init', bindWebHookAction);
   router.post('/telegram/:token/webhook', telegramWebhook);
   router.post('/telegram/:token/safehook', telegramSafeHook);
-  
+
   // 開發/除錯模式下的路由
   if (ENV.DEV_MODE || ENV.DEBUG_MODE) {
     router.get('/telegram/:token/bot', loadBotInfo);
   }
-  
+
   // 404 處理
   router.all('*', () => new Response('Not Found', { status: 404 }));
-  
+
   return router.fetch(request);
 }
 
@@ -323,7 +326,7 @@ export default {
     try {
       // 初始化環境變數
       initEnv(env, i18n);
-      
+
       // 處理請求
       return await handleRequest(request);
     } catch (e) {

@@ -28,7 +28,7 @@ export class UserConfig {
   OPENAI_API_BASE = "https://api.openai.com/v1";
   // OpenAI API Extra Params
   OPENAI_API_EXTRA_PARAMS = {};
-   // -- DALLE 配置 --
+  // -- DALLE 配置 --
   // DALL-E的模型名称
   DALL_E_MODEL = "dall-e-3";
   // DALL-E图片尺寸
@@ -81,6 +81,8 @@ export class UserConfig {
   GOOGLE_COMPLETIONS_API = "https://generativelanguage.googleapis.com/v1beta/models/";
   // Google Gemini Model
   GOOGLE_COMPLETIONS_MODEL = "gemini-2.5-flash";
+  // Google Maps API Key
+  GOOGLE_MAPS_API_KEY = null;
   // -- LLM Profiles 配置 --
   // 支援多個 OpenAI API 相容服務的配置
   // JSON 格式: {"openai":{"name":"OpenAI","apiBase":"...","apiKeyEnv":"OPENAI_API_KEY","model":"..."}}
@@ -91,7 +93,7 @@ export class UserConfig {
   CURRENT_LLM_PROFILE = "";
   // 臨時覆蓋的 LLM Model (使用者可透過 /llmchange profile model 指定)
   CURRENT_LLM_MODEL = "";
-  
+
   // -- LLM API Keys (從環境變數讀取) --
   // OpenRouter API Key
   OPENROUTER_API_KEY = null;
@@ -175,6 +177,8 @@ export class Environment {
   EXTRA_MESSAGE_CONTEXT = false;
   // 开启Telegraph图床
   TELEGRAPH_ENABLE = false;
+  // 开启位置服务 (Google Maps)
+  ENABLE_LOCATION_SERVICE = false;
   // -- 模式开关 --
   //
   // 使用流模式
@@ -206,6 +210,7 @@ const ENV_TYPES = {
   CLOUDFLARE_ACCOUNT_ID: "string",
   CLOUDFLARE_TOKEN: "string",
   GOOGLE_API_KEY: "string",
+  GOOGLE_MAPS_API_KEY: "string",
   GPT_IMAGE_MODEL: "string",
   GPT_IMAGE_SIZE: "string",
   OPENAI_IMAGE_API_KEY: "array",
