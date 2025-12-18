@@ -101,6 +101,8 @@ export class UserConfig {
   BEDROCK_API_KEY = null;
   // Groq API Key
   GROQ_API_KEY = null;
+  // 小米 API Key
+  XIAOMI_API_KEY = null;
 }
 
 export class Environment {
@@ -227,6 +229,7 @@ const ENV_TYPES = {
   CURRENT_LLM_MODEL: "string",
   OPENROUTER_API_KEY: "string",
   BEDROCK_API_KEY: "string",
+  XIAOMI_API_KEY: "string",
   GROQ_API_KEY: "string"
 };
 
