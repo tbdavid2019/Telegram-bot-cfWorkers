@@ -99,7 +99,7 @@ export async function commandTempleOracleJP(message, command, subcommand, contex
 
           const results = data.oracle.result;
           const resultMessages = Object.entries(results).map(([key, value]) => `${key}: ${value}`).join('\n');
-          
+
           const responseMessage = `淺草籤詩:\n類型: ${type}\n詩句: ${poem}\n解釋: ${explanation}\n\n結果:\n${resultMessages}`;
 
           return sendMessageToTelegramWithContext(context)(responseMessage);
@@ -162,7 +162,7 @@ export async function commandTangPoetry(message, command, subcommand, context) {
  * @param {Object} context - 上下文對象
  */
 export async function commandAnswerBook(message, command, subcommand, context) {
-  const url = 'https://answerbook.david888.com';
+  const url = 'https://answerbook.david888.com/answers';
   try {
     const response = await fetch(url);
     const text = await response.text();

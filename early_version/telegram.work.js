@@ -29,7 +29,7 @@ var UserConfig = class {
   OPENAI_API_BASE = "https://api.openai.com/v1";
   // OpenAI API Extra Params
   OPENAI_API_EXTRA_PARAMS = {};
-   // -- DALLE 配置 --
+  // -- DALLE 配置 --
   // DALL-E的模型名称
   DALL_E_MODEL = "dall-e-3";
   // DALL-E图片尺寸
@@ -594,24 +594,24 @@ async function sendPhotoToTelegram(photo, token, context) {
   const url = `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendPhoto`;
   let body;
   const headers = {};
-  
+
   // 處理 base64 data URL
   if (typeof photo === "string" && photo.startsWith("data:image/")) {
     try {
       // 提取 base64 數據
       const [header, base64Data] = photo.split(',');
       const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/png';
-      
+
       // 將 base64 轉換為 Uint8Array
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      
+
       // 創建 Blob
       const blob = new Blob([bytes], { type: mimeType });
-      
+
       // 使用 FormData 發送
       body = new FormData();
       body.append("photo", blob, "generated_image.png");
@@ -656,7 +656,7 @@ async function sendPhotoToTelegram(photo, token, context) {
       }
     }
   }
-  
+
   return await fetch(
     url,
     {
@@ -1031,16 +1031,16 @@ LineDecoder.NEWLINE_REGEXP = /\r\n|[\n\r]/g;
 // src/agent/request.js
 function fixOpenAICompatibleOptions(options) {
   options = options || {};
-  options.streamBuilder = options.streamBuilder || function(r, c) {
+  options.streamBuilder = options.streamBuilder || function (r, c) {
     return new Stream(r, c);
   };
-  options.contentExtractor = options.contentExtractor || function(d) {
+  options.contentExtractor = options.contentExtractor || function (d) {
     return d?.choices?.[0]?.delta?.content;
   };
-  options.fullContentExtractor = options.fullContentExtractor || function(d) {
+  options.fullContentExtractor = options.fullContentExtractor || function (d) {
     return d.choices?.[0]?.message.content;
   };
-  options.errorExtractor = options.errorExtractor || function(d) {
+  options.errorExtractor = options.errorExtractor || function (d) {
     return d.error?.message;
   };
   return options;
@@ -1264,7 +1264,7 @@ function isOpenAIEnable(context) {
 function isOpenAIImageEnable(context) {
   // 檢查是否有專門的圖片 API Key，或者有一般的 OpenAI API Key
   return (context.USER_CONFIG.OPENAI_IMAGE_API_KEY && context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length > 0) ||
-         (context.USER_CONFIG.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0);
+    (context.USER_CONFIG.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0);
 }
 async function renderOpenAIMessage(item) {
   const res = {
@@ -1279,9 +1279,11 @@ async function renderOpenAIMessage(item) {
     for (const image of item.images) {
       switch (ENV.TELEGRAM_IMAGE_TRANSFER_MODE) {
         case "base64":
-          res.content.push({ type: "image_url", image_url: {
-            url: renderBase64DataURI(await imageToBase64String(image))
-          } });
+          res.content.push({
+            type: "image_url", image_url: {
+              url: renderBase64DataURI(await imageToBase64String(image))
+            }
+          });
           break;
         case "url":
         default:
@@ -1317,16 +1319,16 @@ async function requestImageFromOpenAI(prompt, context) {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${openAIImageKeyFromContext(context)}`
   };
-  
+
   // 檢查是否使用 gpt-image-1 模型
-  const isGptImage1 = context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
-                      context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1";
-  
+  const isGptImage1 = context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" ||
+    context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1";
+
   const body = {
     prompt,
     n: 1
   };
-  
+
   if (isGptImage1) {
     // GPT-Image-1 配置
     body.model = "gpt-image-1";
@@ -1335,29 +1337,29 @@ async function requestImageFromOpenAI(prompt, context) {
     // DALL-E 配置
     body.model = context.USER_CONFIG.DALL_E_MODEL;
     body.size = context.USER_CONFIG.DALL_E_IMAGE_SIZE;
-    
+
     if (body.model === "dall-e-3") {
       body.quality = context.USER_CONFIG.DALL_E_IMAGE_QUALITY;
       body.style = context.USER_CONFIG.DALL_E_IMAGE_STYLE;
     }
   }
-  
+
   const resp = await fetch(url, {
     method: "POST",
     headers: header,
     body: JSON.stringify(body)
   }).then((res) => res.json());
-  
+
   if (resp.error?.message) {
     throw new Error(resp.error.message);
   }
-  
+
   // 處理 gpt-image-1 的 base64 回應
   if (isGptImage1 && resp?.data?.[0]?.b64_json) {
     // 將 base64 轉換為 data URL，讓 sendPhotoToTelegram 處理
     return `data:image/png;base64,${resp.data[0].b64_json}`;
   }
-  
+
   // 處理 DALL-E 的 URL 回應
   return resp?.data?.[0]?.url;
 }
@@ -1380,11 +1382,11 @@ function getGeminiImageApiBase(context) {
 
 function isGeminiImageEnable(context) {
   const hasGeminiKey = context.USER_CONFIG.GEMINI_IMAGE_API_KEY && context.USER_CONFIG.GEMINI_IMAGE_API_KEY.length > 0;
-  
+
   console.log(`[DEBUG] isGeminiImageEnable check:
     GEMINI_IMAGE_API_KEY available: ${hasGeminiKey}
     Result: ${hasGeminiKey}`);
-  
+
   return hasGeminiKey;
 }
 
@@ -1392,22 +1394,22 @@ async function requestImageFromGemini(prompt, context, options = {}) {
   try {
     const model = context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image-preview";
     const imageUrls = Array.isArray(options.images) ? options.images : [];
-    
+
     // 使用 streaming API
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
     const apiKey = geminiImageKeyFromContext(context);
-    
+
     console.log(`[DEBUG] Gemini Native API Stream Request:
       URL: ${url}
       Model: ${model}
       API Key: ${apiKey ? `${apiKey.substring(0, 10)}...` : 'null'}
       Prompt: ${prompt}`);
-    
+
     const header = {
       "Content-Type": "application/json",
       "x-goog-api-key": apiKey
     };
-    
+
     // 使用更明確的圖片生成提示
     const imagePrompt = `Generate an image of: ${prompt}. Please create a detailed visual representation.`;
 
@@ -1432,7 +1434,7 @@ async function requestImageFromGemini(prompt, context, options = {}) {
         }
       }
     }
-    
+
     // 根據官方範例的格式構建請求
     const body = {
       "contents": [
@@ -1445,36 +1447,36 @@ async function requestImageFromGemini(prompt, context, options = {}) {
         "response_modalities": ["IMAGE"]
       }
     };
-    
+
     console.log(`[DEBUG] Request body:`, JSON.stringify(body, null, 2));
-    
+
     const response = await fetch(url, {
       method: "POST",
       headers: header,
       body: JSON.stringify(body)
     });
-    
+
     console.log(`[DEBUG] Response status: ${response.status} ${response.statusText}`);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.log(`[DEBUG] Error response:`, errorText);
       throw new Error(`API Error ${response.status}: ${errorText}`);
     }
-    
+
     // 處理 streaming 響應 - 拼接所有片段
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let fullResponse = '';
-    
+
     try {
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) {
           break;
         }
-        
+
         // 將所有片段拼接起來
         const chunk = decoder.decode(value, { stream: true });
         fullResponse += chunk;
@@ -1483,11 +1485,11 @@ async function requestImageFromGemini(prompt, context, options = {}) {
     } finally {
       reader.releaseLock();
     }
-    
+
     console.log(`[DEBUG] Full response assembled, total length: ${fullResponse.length}`);
     console.log(`[DEBUG] Response starts with:`, fullResponse.substring(0, 200));
     console.log(`[DEBUG] Response ends with:`, fullResponse.substring(fullResponse.length - 200));
-    
+
     // 解析完整的 JSON 響應
     let data;
     try {
@@ -1495,7 +1497,7 @@ async function requestImageFromGemini(prompt, context, options = {}) {
       console.log(`[DEBUG] Successfully parsed complete JSON response`);
     } catch (parseError) {
       console.log(`[DEBUG] Failed to parse full response as single JSON:`, parseError.message);
-      
+
       // 如果不是有效的JSON，嘗試查找JSON數組
       const arrayMatch = fullResponse.match(/\[.*\]/s);
       if (arrayMatch) {
@@ -1510,49 +1512,49 @@ async function requestImageFromGemini(prompt, context, options = {}) {
         throw new Error(`Failed to parse streaming response: ${parseError.message}`);
       }
     }
-    
+
     console.log(`[DEBUG] Searching for image data in response...`);
-    
+
     // 如果 data 是數組，遍歷所有元素
     const responses = Array.isArray(data) ? data : [data];
-    
+
     for (let i = 0; i < responses.length; i++) {
       const responseItem = responses[i];
       console.log(`[DEBUG] Checking response item ${i}:`, Object.keys(responseItem));
-      
-      if (responseItem.candidates && responseItem.candidates[0] && 
-          responseItem.candidates[0].content && responseItem.candidates[0].content.parts) {
-        
+
+      if (responseItem.candidates && responseItem.candidates[0] &&
+        responseItem.candidates[0].content && responseItem.candidates[0].content.parts) {
+
         console.log(`[DEBUG] Found ${responseItem.candidates[0].content.parts.length} parts in response ${i}`);
-        
+
         for (let j = 0; j < responseItem.candidates[0].content.parts.length; j++) {
           const part = responseItem.candidates[0].content.parts[j];
           console.log(`[DEBUG] Part ${j} keys:`, Object.keys(part));
-          
+
           // 檢查 inlineData (根據官方範例)
           if (part.inlineData && part.inlineData.data) {
             console.log(`[DEBUG] Found inlineData with ${part.inlineData.data.length} characters`);
             const mimeType = part.inlineData.mimeType || 'image/png';
             return `data:${mimeType};base64,${part.inlineData.data}`;
           }
-          
+
           // 也檢查 inline_data (備用格式)
           if (part.inline_data && part.inline_data.data) {
             console.log(`[DEBUG] Found inline_data with ${part.inline_data.data.length} characters`);
             const mimeType = part.inline_data.mime_type || 'image/png';
             return `data:${mimeType};base64,${part.inline_data.data}`;
           }
-          
+
           if (part.text) {
             console.log(`[DEBUG] Part ${j} contains text:`, part.text.substring(0, 100));
           }
         }
       }
     }
-    
+
     console.log(`[DEBUG] No image data found in any response items`);
     throw new Error("No image data found in streaming response");
-    
+
   } catch (error) {
     console.error(`[ERROR] Gemini Native API Request failed:`, error);
     throw error;
@@ -1597,13 +1599,13 @@ async function requestCompletionsFromWorkersAI(params, context, onStream) {
     stream: onStream !== null
   };
   const options = {};
-  options.contentExtractor = function(data) {
+  options.contentExtractor = function (data) {
     return data?.response;
   };
-  options.fullContentExtractor = function(data) {
+  options.fullContentExtractor = function (data) {
     return data?.result?.response;
   };
-  options.errorExtractor = function(data) {
+  options.errorExtractor = function (data) {
     return data?.errors?.[0]?.message;
   };
   return requestChatCompletions(url, header, body, context, onStream, null, options);
@@ -1746,16 +1748,16 @@ async function requestCompletionsFromCohereAI(params, context, onStream) {
     delete body.preamble;
   }
   const options = {};
-  options.streamBuilder = function(r, c) {
+  options.streamBuilder = function (r, c) {
     return new Stream(r, c, null, cohereSseJsonParser);
   };
-  options.contentExtractor = function(data) {
+  options.contentExtractor = function (data) {
     return data?.text;
   };
-  options.fullContentExtractor = function(data) {
+  options.fullContentExtractor = function (data) {
     return data?.text;
   };
-  options.errorExtractor = function(data) {
+  options.errorExtractor = function (data) {
     return data?.message;
   };
   return requestChatCompletions(url, header, body, context, onStream, null, options);
@@ -1803,16 +1805,16 @@ async function requestCompletionsFromAnthropicAI(params, context, onStream) {
     delete body.system;
   }
   const options = {};
-  options.streamBuilder = function(r, c) {
+  options.streamBuilder = function (r, c) {
     return new Stream(r, c, null, anthropicSseJsonParser);
   };
-  options.contentExtractor = function(data) {
+  options.contentExtractor = function (data) {
     return data?.delta?.text;
   };
-  options.fullContentExtractor = function(data) {
+  options.fullContentExtractor = function (data) {
     return data?.content?.[0].text;
   };
-  options.errorExtractor = function(data) {
+  options.errorExtractor = function (data) {
     return data?.error?.message;
   };
   return requestChatCompletions(url, header, body, context, onStream, null, options);
@@ -1994,7 +1996,7 @@ var imageGenAgents = [
 ];
 function loadImageGen(context) {
   console.log(`[DEBUG] loadImageGen called with AI_IMAGE_PROVIDER: ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
-  
+
   for (const imgGen of imageGenAgents) {
     console.log(`[DEBUG] Checking if ${imgGen.name} === ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
     if (imgGen.name === context.USER_CONFIG.AI_IMAGE_PROVIDER) {
@@ -2002,7 +2004,7 @@ function loadImageGen(context) {
       return imgGen;
     }
   }
-  
+
   console.log(`[DEBUG] No matching provider found, checking enable() functions...`);
   for (const imgGen of imageGenAgents) {
     const enabled = imgGen.enable(context);
@@ -2012,7 +2014,7 @@ function loadImageGen(context) {
       return imgGen;
     }
   }
-  
+
   console.log(`[DEBUG] No enabled provider found`);
   return null;
 }
@@ -2027,8 +2029,8 @@ function currentImageModel(agentName, context) {
       }
     case "openai":
       // 檢查是否使用 gpt-image-1
-      if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
-          context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
+      if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" ||
+        context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
         return "gpt-image-1";
       }
       return context.USER_CONFIG.DALL_E_MODEL;
@@ -2237,7 +2239,7 @@ var commandSortList = [   //把原生指令  "/setenv", "/delenv"   "/version", 
 ];
 
 
-var commandHandlers = { 
+var commandHandlers = {
   "/help": {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandGetHelp
@@ -2330,11 +2332,11 @@ var commandHandlers = {
   "/boa": { // 解答之書
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandAnswerBook
-  }, 
-    "/bo": { // 解答之書原版
+  },
+  "/bo": { // 解答之書原版
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandAnswerBookOriginal
-  }, 
+  },
   "/password": { // 隨機密碼
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: generateRandomPassword
@@ -2362,7 +2364,7 @@ var commandHandlers = {
   "/law": { // 法律問答
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandLaw
-  },          
+  },
 };
 
 
@@ -2499,7 +2501,7 @@ async function sendLongMessage(context, message, maxLength = 4000) {
         parts.push(currentPart.trim());
         currentPart = '';
       }
-      
+
       // 如果單行就超過限制，強制分割
       if (line.length > maxLength) {
         let remainingLine = line;
@@ -2526,7 +2528,7 @@ async function sendLongMessage(context, message, maxLength = 4000) {
   for (let i = 0; i < parts.length; i++) {
     const partMessage = i === 0 ? parts[i] : `(續 ${i + 1}/${parts.length})\n\n${parts[i]}`;
     await sendMessageToTelegramWithContext(context)(partMessage);
-    
+
     // 在多段訊息之間添加小延遲，避免發送過快
     if (i < parts.length - 1) {
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -2576,32 +2578,32 @@ async function commandLaw(message, command, subcommand, context) {
     if (text.startsWith('{') && text.endsWith('}')) {
       try {
         const data = JSON.parse(text);
-        
+
         // 檢查是否有 AI 回答
         let aiAnswer = '';
         if (data.choices && data.choices[0] && data.choices[0].message) {
           aiAnswer = data.choices[0].message.content || '';
         }
-        
+
         // 組裝回答
         let reply = `【法律問答】\n問題：${question}\n\n`;
-        
+
         if (aiAnswer) {
           reply += `AI 分析：\n${aiAnswer}\n\n`;
         }
-        
+
         // 檢查是否有相關判決案例
         if (data.related_cases && Array.isArray(data.related_cases) && data.related_cases.length > 0) {
           reply += `📚 相關判決案例：\n\n`;
-          
+
           // 只顯示前3個最相關的案例
           const casesToShow = data.related_cases.slice(0, 3);
-          
+
           casesToShow.forEach((case_item, index) => {
             reply += `${index + 1}. ${case_item.title || '判決案例'}\n`;
             reply += `   法院：${case_item.court || '未知'}\n`;
             reply += `   案號：${case_item.case_number || '未知'}\n`;
-            
+
             if (case_item.summary) {
               // 摘要太長時截取前200字
               let summary = case_item.summary;
@@ -2610,23 +2612,23 @@ async function commandLaw(message, command, subcommand, context) {
               }
               reply += `   摘要：${summary}\n`;
             }
-            
+
             if (case_item.score) {
               reply += `   相關度：${(case_item.score * 100).toFixed(1)}%\n`;
             }
-            
+
             reply += '\n';
           });
-          
+
           if (data.related_cases.length > 3) {
             reply += `還有 ${data.related_cases.length - 3} 個相關案例...\n\n`;
           }
         }
-        
+
         reply += '※ 此回答僅供參考，如有具體法律問題請諮詢專業律師。';
-        
+
         return sendLongMessage(context, reply);
-        
+
       } catch (e) {
         return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析API回應。錯誤詳情: ${e.message}`);
       }
@@ -2636,14 +2638,14 @@ async function commandLaw(message, command, subcommand, context) {
     if (text.includes('data: ')) {
       const lines = text.split('\n');
       let fullResponse = '';
-      
+
       for (const line of lines) {
         if (line.startsWith('data: ') && !line.includes('[DONE]')) {
           try {
             const dataStr = line.substring(6);
             if (dataStr.trim()) {
               const data = JSON.parse(dataStr);
-              
+
               // 支援不同的 API 回應格式
               if (data.content) {
                 // 台灣法律 API 格式: {"done": false, "content": "內容"}
@@ -2659,7 +2661,7 @@ async function commandLaw(message, command, subcommand, context) {
           }
         }
       }
-      
+
       if (fullResponse) {
         const reply = `【法律問答】\n問題：${question}\n\n回答：\n${fullResponse}\n\n※ 此回答僅供參考，如有具體法律問題請諮詢專業律師。`;
         return sendLongMessage(context, reply);
@@ -2688,7 +2690,7 @@ async function commandDDGSearch(message, command, subcommand, context) {
   }
 
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&kl=wt-wt&no_redirect=1&no_html=1&skip_disambig=1`;
-  
+
   try {
     const response = await fetch(url);
     const data = await response.json();
@@ -2738,7 +2740,7 @@ async function commandTempleOracleJP(message, command, subcommand, context) {
           // 構建結果訊息
           const results = data.oracle.result;
           const resultMessages = Object.entries(results).map(([key, value]) => `${key}: ${value}`).join('\n');
-          
+
           const responseMessage = `淺草籤詩:\n類型: ${type}\n詩句: ${poem}\n解釋: ${explanation}\n\n結果:\n${resultMessages}`;
 
           return sendMessageToTelegramWithContext(context)(responseMessage);
@@ -2790,7 +2792,7 @@ async function commandTangPoetry(message, command, subcommand, context) {
 
 // 解答之書查詢
 async function commandAnswerBook(message, command, subcommand, context) {
-  const url = 'https://answerbook.david888.com';
+  const url = 'https://answerbook.david888.com/answers';
   try {
     const response = await fetch(url);
     const text = await response.text(); // 先將回應作為文本讀取
@@ -3078,11 +3080,11 @@ async function commandStockTW(message, command, subcommand, context) {
 
   // 智慧判斷股票類型並格式化代碼
   const formattedCode = formatStockCode(stockCode);
-  
+
   try {
     // 使用 Yahoo Finance API v8
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${formattedCode}`;
-    
+
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -3094,7 +3096,7 @@ async function commandStockTW(message, command, subcommand, context) {
     }
 
     const data = await response.json();
-    
+
     if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
       throw new Error(`找不到股票代碼 ${stockCode} 的資料`);
     }
@@ -3102,7 +3104,7 @@ async function commandStockTW(message, command, subcommand, context) {
     const result = data.chart.result[0];
     const meta = result.meta;
     const quote = result.indicators.quote[0];
-    
+
     if (!meta || !quote) {
       throw new Error("股票資料格式錯誤");
     }
@@ -3110,9 +3112,9 @@ async function commandStockTW(message, command, subcommand, context) {
     const stockType = detectStockType(formattedCode);
     const formattedStockInfo = formatUniversalStockData(meta, quote, stockCode, stockType);
     return sendMessageToTelegramWithContext(context)(formattedStockInfo);
-    
+
   } catch (e) {
-    console.error(`Stock Query Error: ${e.message}`); 
+    console.error(`Stock Query Error: ${e.message}`);
     return sendMessageToTelegramWithContext(context)(`查詢股票失敗: ${e.message}\n\n建議:\n1. 台股請輸入數字代碼 (如: 2330)\n2. 美股請輸入英文代碼 (如: TSLA, AAPL)\n3. 檢查是否為交易時間\n4. 稍後再試`);
   }
 }
@@ -3123,12 +3125,12 @@ function formatStockCode(stockCode) {
   if (stockCode.includes('.') || /^[A-Z]+$/.test(stockCode)) {
     return stockCode;
   }
-  
+
   // 如果是純數字，判斷為台股，加上 .TW
   if (/^\d+$/.test(stockCode)) {
     return `${stockCode}.TW`;
   }
-  
+
   // 其他情況（混合字母數字）直接返回，讓 API 自行判斷
   return stockCode;
 }
@@ -3150,27 +3152,27 @@ function formatUniversalStockData(meta, quote, originalCode, stockType) {
   const symbol = meta.symbol || originalCode;
   const currency = meta.currency || 'USD';
   const exchangeName = meta.exchangeName || meta.fullExchangeName || '未知交易所';
-  
+
   // 股票完整名稱 - 優先使用 longName 或 shortName
   const stockName = meta.longName || meta.shortName || meta.displayName || '';
-  
+
   // 當前價格
   const currentPrice = meta.regularMarketPrice || meta.previousClose;
   const previousClose = meta.previousClose;
-  
+
   // 計算漲跌
   const change = currentPrice - previousClose;
   const changePercent = ((change / previousClose) * 100);
-  
+
   // 今日開高低量
   const dayHigh = meta.regularMarketDayHigh || 'N/A';
   const dayLow = meta.regularMarketDayLow || 'N/A';
   const dayOpen = quote.open ? quote.open[quote.open.length - 1] : meta.regularMarketOpen || 'N/A';
   const volume = meta.regularMarketVolume || 'N/A';
-  
+
   // 根據股票類型設定標題和格式
   const marketEmoji = getMarketEmoji(stockType);
-  
+
   // 格式化數字
   const formatNumber = (num) => {
     if (typeof num !== 'number') return num;
@@ -3239,7 +3241,7 @@ async function commandStock(message, command, subcommand, context) {
 
   const apiKey = "psHDQQHMeQMi9fpTXvxa8D6JR8zaPB9q"; // 你的 API 密钥
   const url = `https://financialmodelingprep.com/api/v3/quote/${stockSymbol}?apikey=${apiKey}`;
-  
+
   try {
     const response = await fetch(url, {
       method: 'GET',
@@ -3259,7 +3261,7 @@ async function commandStock(message, command, subcommand, context) {
         `未找到 ${stockSymbol} 的股票信息。請確認股票代號是否正確。`
       );
     }
-    
+
   } catch (e) {
     console.error("Fetch error:", e);
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -3309,7 +3311,7 @@ async function commandDictEN(message, command, subcommand, context) {
   if (!subcommand) {
     return sendMessageToTelegramWithContext(context)("Please provide a word to look up. Usage: /dicten <word>");
   }
-  
+
   try {
     const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(subcommand)}`);
     const data = await response.json();
@@ -3399,23 +3401,23 @@ async function commandGenerateImg2(message, command, subcommand, context) {
   if (subcommand === "") {
     return sendMessageToTelegramWithContext(context)("請提供圖片描述，例如：`/img2 月光下的沙灘`");
   }
-  
+
   try {
     // 檢查可用的圖片生成器
     const availableGenerators = [];
-    
+
     for (const imgGen of imageGenAgents) {
       if (imgGen.enable(context)) {
         availableGenerators.push(imgGen);
       }
     }
-    
+
     if (availableGenerators.length === 0) {
       return sendMessageToTelegramWithContext(context)("ERROR: 沒有可用的圖片生成器，請檢查 API 密鑰設定");
     }
-    
+
     setTimeout(() => sendChatActionToTelegramWithContext(context)("upload_photo").catch(console.error), 0);
-    
+
     // 同時調用所有可用的生成器
     const imagePromises = availableGenerators.map(async (gen) => {
       try {
@@ -3426,9 +3428,9 @@ async function commandGenerateImg2(message, command, subcommand, context) {
         return { generator: gen.name, error: e.message, success: false };
       }
     });
-    
+
     const results = await Promise.all(imagePromises);
-    
+
     // 發送成功的圖片
     let successCount = 0;
     for (const result of results) {
@@ -3437,19 +3439,19 @@ async function commandGenerateImg2(message, command, subcommand, context) {
         await sendPhotoToTelegramWithContext(context)(result.image);
       }
     }
-    
+
     // 如果沒有成功的圖片，發送錯誤信息
     if (successCount === 0) {
       const errorMessages = results.map(r => `${r.generator}: ${r.error}`).join('\n');
       return sendMessageToTelegramWithContext(context)(`所有圖片生成都失敗了：\n${errorMessages}`);
     }
-    
+
     // 如果有部分成功，發送總結信息
     if (successCount < results.length) {
       const failedGenerators = results.filter(r => !r.success).map(r => r.generator).join(', ');
       return sendMessageToTelegramWithContext(context)(`成功生成 ${successCount}/${results.length} 張圖片\n失敗的生成器: ${failedGenerators}`);
     }
-    
+
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
   }
@@ -3457,13 +3459,13 @@ async function commandGenerateImg2(message, command, subcommand, context) {
 
 async function commandSetImageProvider(message, command, subcommand, context) {
   const validProviders = ["auto", "openai", "azure", "gemini", "workers"];
-  
+
   if (subcommand === "") {
     // 顯示當前設定和可用選項
     const currentProvider = context.USER_CONFIG.AI_IMAGE_PROVIDER || "auto";
     const currentImageAgent = loadImageGen(context);
     const currentModel = currentImageAgent ? currentImageModel(currentImageAgent.name, context) : "未知";
-    
+
     let msg = `🎨 **圖片生成設定**\n\n`;
     msg += `📋 **當前設定**: ${currentProvider}\n`;
     msg += `🤖 **當前模型**: ${currentModel}\n\n`;
@@ -3475,33 +3477,33 @@ async function commandSetImageProvider(message, command, subcommand, context) {
     msg += `• workers - Cloudflare Workers AI\n\n`;
     msg += `💡 **使用方法**: \`/setimg <provider>\`\n`;
     msg += `📝 **範例**: \`/setimg gemini\``;
-    
+
     context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
     return sendMessageToTelegramWithContext(context)(msg);
   }
-  
+
   const provider = subcommand.toLowerCase().trim();
-  
+
   if (!validProviders.includes(provider)) {
     return sendMessageToTelegramWithContext(context)(
       `❌ 無效的圖片生成服務: ${provider}\n\n` +
       `✅ 可用選項: ${validProviders.join(", ")}`
     );
   }
-  
+
   try {
     // 更新配置
     context.USER_CONFIG.AI_IMAGE_PROVIDER = provider;
-    
+
     // 保存配置到資料庫
     await DATABASE.put(
       context.SHARE_CONTEXT.configStoreKey,
       JSON.stringify(trimUserConfig(context.USER_CONFIG))
     );
-    
+
     // 檢查設定的服務是否可用
     let statusMsg = `✅ **圖片生成服務已設定為**: ${provider}\n\n`;
-    
+
     if (provider !== "auto") {
       const imageAgent = loadImageGen(context);
       if (imageAgent && imageAgent.name === provider) {
@@ -3521,10 +3523,10 @@ async function commandSetImageProvider(message, command, subcommand, context) {
         statusMsg += `❌ **錯誤**: 沒有可用的圖片生成服務`;
       }
     }
-    
+
     context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
     return sendMessageToTelegramWithContext(context)(statusMsg);
-    
+
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
   }
@@ -4078,24 +4080,24 @@ async function msgSmartWeatherDetection(message, context) {
   }
 
   const text = message.text.toLowerCase();
-  
+
   // 檢測天氣相關關鍵字
   const weatherKeywords = ['天氣', '氣象', '溫度', '下雨', '晴天', '陰天', '颱風', '氣溫'];
   const hasWeatherKeyword = weatherKeywords.some(keyword => text.includes(keyword));
-  
+
   if (hasWeatherKeyword) {
     console.log('🌤️ 檢測到天氣查詢:', message.text);
 
     // 提取台灣地區名稱
     const taiwanCities = [
-      '台北', '新北', '桃園', '台中', '台南', '高雄', 
-      '基隆', '新竹', '苗栗', '彰化', '南投', '雲林', 
-      '嘉義', '屏東', '宜蘭', '花蓮', '台東', '澎湖', 
+      '台北', '新北', '桃園', '台中', '台南', '高雄',
+      '基隆', '新竹', '苗栗', '彰化', '南投', '雲林',
+      '嘉義', '屏東', '宜蘭', '花蓮', '台東', '澎湖',
       '金門', '連江', '馬祖'
     ];
-    
+
     let location = '台北'; // 預設地點
-    
+
     // 查找消息中提到的城市
     for (const city of taiwanCities) {
       if (message.text.includes(city)) {
@@ -4108,9 +4110,9 @@ async function msgSmartWeatherDetection(message, context) {
 
     // 直接調用天氣命令
     return await commandWeather(
-      { text: `/wt ${location}` }, 
-      '/wt', 
-      location, 
+      { text: `/wt ${location}` },
+      '/wt',
+      location,
       context
     );
   }
@@ -4119,17 +4121,17 @@ async function msgSmartWeatherDetection(message, context) {
   const qimenKeywords = [
     '奇門', '遁甲', '奇門遁甲', '占卜', '卜卦'
   ];
-  
+
   const hasQimenKeyword = qimenKeywords.some(keyword => text.includes(keyword));
-  
+
   if (hasQimenKeyword) {
     console.log('🔮 檢測到奇門遁甲查詢:', message.text);
-    
+
     // 直接使用用戶的完整問題
     const question = message.text;
-    
+
     console.log(`🔮 自動進行奇門遁甲占卜: ${question}`);
-    
+
     // 直接調用奇門遁甲命令
     return await commandQimen(
       { text: `/qi ${question}` },
