@@ -39,6 +39,12 @@ export async function msgHandleCallbackQuery(message, context) {
 
   const callbackData = message.callback_query.data;
 
+  // 🆕 處理指令發現系統的按鈕點擊
+  if (callbackData && callbackData.startsWith('cmd:')) {
+    const { handleCommandCallback } = await import('../agent/command-invoker.js');
+    return await handleCommandCallback(message.callback_query, context);
+  }
+
   // 先回應 callback query（移除按鈕上的 loading 狀態）
   await answerCallbackQuery(context.SHARE_CONTEXT.currentBotToken, message.callback_query.id);
 
@@ -279,79 +285,7 @@ export async function msgHandleCommand(message, context) {
  * 智能功能檢測處理器（天氣 + 奇門遁甲）
  */
 export async function msgSmartWeatherDetection(message, context) {
-  // 只處理文字消息
-  if (!message.text) {
-    return null;
-  }
-
-  // 跳過命令消息（以 / 開頭）
-  if (message.text.startsWith('/')) {
-    return null;
-  }
-
-  const text = message.text.toLowerCase();
-
-  // 檢測天氣相關關鍵字
-  const weatherKeywords = ['天氣', '氣象', '溫度', '下雨', '晴天', '陰天', '颱風', '氣溫'];
-  const hasWeatherKeyword = weatherKeywords.some(keyword => text.includes(keyword));
-
-  if (hasWeatherKeyword) {
-    console.log('🌤️ 檢測到天氣查詢:', message.text);
-
-    // 提取台灣地區名稱
-    const taiwanCities = [
-      '台北', '新北', '桃園', '台中', '台南', '高雄',
-      '基隆', '新竹', '苗栗', '彰化', '南投', '雲林',
-      '嘉義', '屏東', '宜蘭', '花蓮', '台東', '澎湖',
-      '金門', '連江', '馬祖'
-    ];
-
-    let location = '台北'; // 預設地點
-
-    // 查找消息中提到的城市
-    for (const city of taiwanCities) {
-      if (message.text.includes(city)) {
-        location = city;
-        break;
-      }
-    }
-
-    console.log(`🌤️ 自動查詢 ${location} 天氣`);
-
-    // 直接調用天氣命令
-    return await commandWeather(
-      { text: `/wt ${location}` },
-      '/wt',
-      location,
-      context
-    );
-  }
-
-  // 檢測奇門遁甲相關關鍵字
-  const qimenKeywords = [
-    '奇門', '遁甲', '奇門遁甲', '占卜', '卜卦'
-  ];
-
-  const hasQimenKeyword = qimenKeywords.some(keyword => text.includes(keyword));
-
-  if (hasQimenKeyword) {
-    console.log('🔮 檢測到奇門遁甲查詢:', message.text);
-
-    // 直接使用用戶的完整問題
-    const question = message.text;
-
-    console.log(`🔮 自動進行奇門遁甲占卜: ${question}`);
-
-    // 直接調用奇門遁甲命令
-    return await commandQimen(
-      { text: `/qi ${question}` },
-      '/qi',
-      question,
-      context
-    );
-  }
-
-  // 都沒有匹配到
+  // 舊的自動檢測邏輯已移除，統一使用 LLM 指令發現系統
   return null;
 }
 

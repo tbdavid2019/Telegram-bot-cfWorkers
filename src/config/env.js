@@ -183,6 +183,8 @@ export class Environment {
   TELEGRAPH_ENABLE = false;
   // 开启位置服务 (Google Maps)
   ENABLE_LOCATION_SERVICE = false;
+  // 开启 LLM 指令发现功能
+  ENABLE_COMMAND_DISCOVERY = false;
   // -- 模式开关 --
   //
   // 使用流模式
@@ -216,6 +218,7 @@ const ENV_TYPES = {
   GOOGLE_API_KEY: "string",
   GOOGLE_MAPS_API_KEY: "string",
   ENABLE_LOCATION_SERVICE: "boolean",
+  ENABLE_COMMAND_DISCOVERY: "boolean",
   GPT_IMAGE_MODEL: "string",
   GPT_IMAGE_SIZE: "string",
   OPENAI_IMAGE_API_KEY: "array",

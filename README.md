@@ -2,6 +2,48 @@
 
 ---
 
+## 🆕 最新功能：LLM 指令發現系統
+
+**讓 LLM 自動理解並建議使用 Bot 指令！**
+
+### 功能特點
+
+- ✅ **自動指令發現** - LLM 自動了解所有可用的 Bot 指令
+- ✅ **智能權限檢查** - 只顯示用戶有權限使用的指令
+- ✅ **一鍵執行** - 透過 Inline Keyboard 按鈕快速執行指令
+- ✅ **無超時問題** - 完美適配 Cloudflare Workers 環境
+- ✅ **動態 LLM 切換** - 支援 `/llmchange` 切換不同 LLM
+
+### 使用範例
+
+**用戶**：「台積電股價如何？」
+
+**Bot 回應**：
+```
+正在為您查詢台積電（2330）的最新股價資訊 📊
+
+[🔹 /stock 2330] ← 點擊按鈕執行
+```
+
+用戶點擊按鈕後，Bot 自動執行 `/stock 2330` 指令並回覆股價資訊。
+
+### 啟用方式
+
+在 `wrangler.toml` 中設定：
+
+```toml
+[env.your_env.vars]
+ENABLE_COMMAND_DISCOVERY = "true"
+```
+
+### 技術架構
+
+- **指令發現** (`src/agent/command-discovery.js`) - 提取指令、檢查權限、生成系統提示詞
+- **指令調用** (`src/agent/command-invoker.js`) - 解析 LLM 回應、生成按鈕、處理點擊
+- **LLM 整合** (`src/agent/llm.js`) - 動態生成提示詞、添加按鈕到回應
+
+---
+
 # 📋 目錄
 
 - [環境變數完整說明](#-環境變數完整說明)
@@ -48,6 +90,8 @@
 | | `cwaapiKey` | 臺灣天氣查詢 |
 | | `FMPapiKey` | 國際股市查詢 |
 | **其他** | `LANGUAGE` | 語言設定 (zh-TW) |
+| | `ENABLE_COMMAND_DISCOVERY` | 啟用 LLM 指令發現 (true/false) |
+| | `ENABLE_LOCATION_SERVICE` | 啟用位置服務 (true/false) |
 | | `I_AM_A_GENEROUS_PERSON` | 略過白名單 |
 | | `ENABLE_LOCATION_SERVICE` | 啟用位置/GPS服務 |
 | | `CHAT_COMPLETE_API_TIMEOUT` | API 超時秒數 |
