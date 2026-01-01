@@ -4,6 +4,36 @@
 
 ## 🆕 最新功能
 
+### 🔧 Tool Calling 模式 - 家庭管理智能助手 (2026-01-02)
+
+**讓 LLM 自動獲取並分析家庭收支與行程資料！**
+
+#### 功能特點
+
+- ✅ **自動資料獲取** - LLM 自動調用 Google Sheets 和 Calendar API
+- ✅ **智能分析** - LLM 直接分析原始資料，提供深度洞察
+- ✅ **無需按鈕確認** - 查詢和寫入操作自動執行
+- ✅ **時間感知** - LLM 知道當前日期，正確計算相對時間
+- ✅ **全天活動支援** - 行程自動設為全天事件
+
+#### 支援的指令
+
+**查詢類（自動獲取資料）**：
+- 💰 **家庭收支查詢** - 「統計4~6月玉山與中信的支出總計」
+- 📅 **行程查詢** - 「這個月有什麼行程？」
+
+**寫入類（自動執行）**：
+- 💸 **記帳** - 「記帳：12月房租 15000」
+- 📝 **新增行程** - 「新增下週一 讀書日」
+
+#### 技術架構
+
+- **Tool Calling** (`src/agent/llm.js`) - 自動執行指令並將結果提供給 LLM
+- **資料整合** - 直接調用 `readBudgetSheet`、`listCalendarEvents` 等函數
+- **LLM 二次調用** - 獲取資料後再次調用 LLM 進行分析
+
+---
+
 ### 🎤 語音訊息支援 (2026-01-01)
 
 **完全免費的語音轉文字 + 文字轉語音功能！**
@@ -247,6 +277,73 @@ ENABLE_COMMAND_DISCOVERY = "true"
 - Groq 免費額度: ASR 無限制, TTS 每日限額
 - `canopylabs/orpheus-v1-english` 模型實測可講中文!
 - 用戶可透過 `/voicereply` 指令切換文字/語音回覆模式
+
+### ⚠️ 開發注意事項：Cloudflare Workers 環境變數引用
+
+**重要!** 在 Cloudflare Workers 專案中,環境變數的引用方式有特殊要求:
+
+#### 問題現象
+直接使用 `ENV.YOUR_VAR` 會導致變數值為 `undefined`,即使在 `wrangler.toml` 中已正確設定。
+
+#### 根本原因
+本專案使用 `UserConfig` 類來管理用戶可配置的環境變數,環境變數需要:
+1. 在 `src/config/env.js` 的 `UserConfig` 類中定義屬性
+2. 在 `ENV_TYPES` 中定義變數類型
+3. 透過 `mergeEnvironment()` 函數合併到 `ENV.USER_CONFIG`
+
+#### 正確寫法
+
+```javascript
+// ❌ 錯誤 - 直接使用 ENV
+import { ENV } from '../config/env.js';
+const apiKey = ENV.MY_API_KEY;  // undefined!
+
+// ✅ 正確 - 使用 ENV.USER_CONFIG
+import { ENV } from '../config/env.js';
+const apiKey = ENV.USER_CONFIG.MY_API_KEY;  // 正確取得值
+```
+
+#### 新增環境變數的步驟
+
+1. **在 `UserConfig` 類中定義屬性** (`src/config/env.js`)
+```javascript
+export class UserConfig {
+  // ... 其他屬性
+  MY_API_KEY = null;
+  MY_SETTING = false;
+}
+```
+
+2. **在 `ENV_TYPES` 中定義類型** (`src/config/env.js`)
+```javascript
+const ENV_TYPES = {
+  // ... 其他類型
+  MY_API_KEY: "string",
+  MY_SETTING: "boolean"
+};
+```
+
+3. **在程式碼中使用 `ENV.USER_CONFIG`**
+```javascript
+const config = {
+  apiKey: ENV.USER_CONFIG.MY_API_KEY,
+  enabled: ENV.USER_CONFIG.MY_SETTING
+};
+```
+
+4. **在 `wrangler.toml` 中設定值**
+```toml
+[env.your_env.vars]
+MY_API_KEY = "your-key"
+MY_SETTING = "true"
+```
+
+#### 參考範例
+可參考現有的實現:
+- `src/features/location.js` - 使用 `ENV.USER_CONFIG.GOOGLE_MAPS_API_KEY`
+- `src/features/voice.js` - 使用 `ENV.USER_CONFIG.ASR_API_KEY`
+- `src/features/tts.js` - 使用 `ENV.USER_CONFIG.TTS_API_KEY`
+
 
 ## Cloudflare 設定（Workers AI 用）
 

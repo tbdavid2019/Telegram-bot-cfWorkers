@@ -101,29 +101,174 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
   let answer = await llm(llmParams, context, onStream);
 
-  // 🆕 處理 LLM 回應中的指令調用
+  // 🆕 處理 LLM 回應中的指令調用（Tool Calling 模式）
   if (ENV.ENABLE_COMMAND_DISCOVERY && typeof answer === 'string') {
     console.log('🤖 [Command Discovery] Checking LLM response for command markers...');
-    console.log('🤖 [Command Discovery] Response preview:', answer.substring(0, 200));
 
-    try {
-      const { processCommandInvocations } = await import('./command-invoker.js');
+    const { parseCommandsFromLLMResponse } = await import('./command-invoker.js');
+    const commands = parseCommandsFromLLMResponse(answer);
 
-      // 處理指令調用，獲取清理後的回應和按鈕
-      const { cleanedAnswer, replyMarkup } = await processCommandInvocations(answer, context);
+    // 檢查是否有需要立即執行的工具指令（家庭管理相關）
+    const toolCommands = commands.filter(cmd =>
+      cmd.command === '/budget' ||
+      cmd.command === '/schedule' ||
+      cmd.command === '/scheduleadd' ||
+      cmd.command === '/budgetwrite'
+    );
 
-      // 如果有按鈕，添加到 context
-      if (replyMarkup) {
-        // 設定 reply_markup（Inline Keyboard）
-        context.CURRENT_CHAT_CONTEXT.reply_markup = replyMarkup;
+    if (toolCommands.length > 0) {
+      console.log(`🤖 [Tool Calling] Found ${toolCommands.length} tool commands, executing...`);
 
-        console.log('🤖 [Command Discovery] Added inline keyboard with', replyMarkup.inline_keyboard.length, 'buttons');
+      // 直接調用資料獲取函數
+      const toolResults = [];
+
+      for (const { command, args } of toolCommands) {
+        try {
+          let dataText = '';
+
+          if (command === '/budget') {
+            console.log('🤖 [Tool Calling] Fetching budget data...');
+            const { readBudgetSheet, parseBudgetData } = await import('../features/google-sheets.js');
+            const rawData = await readBudgetSheet(context.env);
+            const parsedData = parseBudgetData(rawData);
+
+            // 格式化為文字表格
+            dataText = `📊 家庭收支資料 (共 ${parsedData.length} 筆)\n\n`;
+            dataText += `月份      總共    玉山    星展    中信    國泰    富邦    工會    現金    房租\n`;
+            dataText += `${'='.repeat(80)}\n`;
+            for (const d of parsedData) {
+              dataText += `${d.month.padEnd(8)} ${String(d.total).padEnd(7)} ${String(d.yushan).padEnd(7)} ${String(d.dbs).padEnd(7)} ${String(d.ctbc).padEnd(7)} ${String(d.cathay).padEnd(7)} ${String(d.fubon).padEnd(7)} ${String(d.union).padEnd(7)} ${String(d.cash).padEnd(7)} ${String(d.rent).padEnd(7)}\n`;
+            }
+
+          } else if (command === '/schedule') {
+            console.log('🤖 [Tool Calling] Fetching schedule data...');
+            const { listCalendarEvents } = await import('../features/google-calendar.js');
+
+            // 設定時間範圍：從今天開始，查詢未來30天
+            const now = new Date();
+            const timeMin = now.toISOString();
+            const futureDate = new Date(now);
+            futureDate.setDate(futureDate.getDate() + 30);
+            const timeMax = futureDate.toISOString();
+
+            const events = await listCalendarEvents(context.env, timeMin, timeMax);
+
+            // 加入當前時間資訊
+            const currentDate = now.toLocaleDateString('zh-TW', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              weekday: 'long'
+            });
+
+            dataText = `📅 家庭行程\n`;
+            dataText += `📆 當前時間：${currentDate}\n`;
+            dataText += `🔍 查詢範圍：未來30天 (共 ${events.length} 筆)\n\n`;
+
+            for (const event of events) {
+              dataText += `${event.start} - ${event.summary}\n`;
+              if (event.location) dataText += `  📍 ${event.location}\n`;
+            }
+
+          } else if (command === '/scheduleadd') {
+            console.log('🤖 [Tool Calling] Adding calendar event...');
+            const { createCalendarEvent } = await import('../features/google-calendar.js');
+
+            // 解析 JSON 參數
+            const params = JSON.parse(args);
+            console.log('🤖 [Tool Calling] Params:', JSON.stringify(params));
+
+            // 手動解析日期
+            const [year, month, day] = params.date.split('/').map(Number);
+
+            // 構建全天活動格式（使用 date 而不是 dateTime）
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+            console.log('🤖 [Tool Calling] All-day event date:', dateStr);
+
+            // 構建 Google Calendar API 格式的全天事件資料
+            const eventData = {
+              summary: params.event,
+              start: {
+                date: dateStr,
+                timeZone: 'Asia/Taipei'
+              },
+              end: {
+                date: dateStr,
+                timeZone: 'Asia/Taipei'
+              },
+              description: `對象：${params.targetUser}`
+            };
+
+            console.log('🤖 [Tool Calling] Event data:', JSON.stringify(eventData, null, 2));
+
+            await createCalendarEvent(context.env, eventData);
+
+            dataText = `✅ 已成功新增全天行程：${params.event}\n`;
+            dataText += `📅 日期：${params.date}\n`;
+            dataText += `👤 對象：${params.targetUser}\n`;
+
+
+          } else if (command === '/budgetwrite') {
+            console.log('🤖 [Tool Calling] Writing budget data...');
+            const { writeBudgetEntry } = await import('../features/google-sheets.js');
+
+            // 解析 JSON 參數
+            const params = JSON.parse(args);
+            await writeBudgetEntry(
+              context.env,
+              params.month,
+              params.category,
+              params.amount
+            );
+
+            dataText = `✅ 已成功記帳\n`;
+            dataText += `📅 月份：${params.month}\n`;
+            dataText += `📝 項目：${params.category}\n`;
+            dataText += `💰 金額：${params.amount} 元\n`;
+          }
+
+          toolResults.push({
+            command,
+            data: dataText
+          });
+
+        } catch (error) {
+          console.error(`❌ [Tool Calling] Failed to fetch data for ${command}:`, error);
+          toolResults.push({
+            command,
+            error: error.message
+          });
+        }
       }
 
-      // 使用清理後的回應（移除了 [CALL:...] 標記）
-      answer = cleanedAnswer;
-    } catch (error) {
-      console.error('❌ [Command Discovery] Failed to process command invocations:', error);
+      // 將工具結果加入對話歷史
+      const toolResultText = toolResults.map(r =>
+        r.error ? `${r.command} 執行失敗: ${r.error}` : r.data
+      ).join('\n\n');
+
+      history.push({ role: "assistant", content: answer });
+      history.push({ role: "system", content: `[工具執行結果]\n${toolResultText}\n\n請根據上述資料回答用戶的問題。` });
+
+      // 再次調用 LLM，這次它可以看到工具結果
+      console.log('🤖 [Tool Calling] Calling LLM again with tool results...');
+      answer = await llm(llmParams, context, onStream);
+
+    } else {
+      // 沒有工具指令，使用原來的 Inline Keyboard 模式
+      try {
+        const { processCommandInvocations } = await import('./command-invoker.js');
+        const { cleanedAnswer, replyMarkup } = await processCommandInvocations(answer, context);
+
+        if (replyMarkup) {
+          context.CURRENT_CHAT_CONTEXT.reply_markup = replyMarkup;
+          console.log('🤖 [Command Discovery] Added inline keyboard with', replyMarkup.inline_keyboard.length, 'buttons');
+        }
+
+        answer = cleanedAnswer;
+      } catch (error) {
+        console.error('❌ [Command Discovery] Failed to process command invocations:', error);
+      }
     }
   }
 

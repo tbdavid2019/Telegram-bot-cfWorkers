@@ -31,3 +31,4 @@ setup-secrets.sh
 # Wrangler 配置（包含敏感 API Keys）
 wrangler.toml
 # wrangler.toml.example 是範本，可以提交
+googlekey.json

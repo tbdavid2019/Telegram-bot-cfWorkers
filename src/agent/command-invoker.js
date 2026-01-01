@@ -15,8 +15,8 @@ export function parseCommandsFromLLMResponse(answer) {
         return [];
     }
 
-    // 匹配 [CALL:/command args] 格式
-    const regex = /\[CALL:(\/\w+)(?:\s+([^\]]+))?\]/g;
+    // 匹配 [CALL:/command args] 格式，支持 JSON 參數
+    const regex = /\[CALL:(\/\w+)(?:\s+([^\]]+))?\]/gs;
     const commands = [];
     let match;
 
@@ -40,8 +40,8 @@ export function removeCommandMarkers(answer) {
         return answer;
     }
 
-    // 移除所有 [CALL:...] 標記
-    return answer.replace(/\[CALL:\/\w+(?:\s+[^\]]+)?\]/g, '').trim();
+    // 移除所有 [CALL:...] 標記，支持 JSON 參數
+    return answer.replace(/\[CALL:\/\w+(?:\s+[^\]]+)?\]/gs, '').trim();
 }
 
 /**

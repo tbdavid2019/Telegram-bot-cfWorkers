@@ -45,6 +45,15 @@ import {
 import { commandLLMChange } from '../features/llm.js';
 import { commandGPS } from '../features/location.js';
 import { commandVoiceReply } from '../features/voice-command.js';
+import {
+  commandQueryBudget,
+  commandWriteBudget
+} from '../features/google-sheets.js';
+import {
+  commandQueryCalendar,
+  commandCreateCalendar,
+  commandDeleteCalendar
+} from '../features/google-calendar.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -74,6 +83,7 @@ export const commandSortList = [
   "/password",      // 隨機密碼
   "/llmchange",     // 切換 LLM
   "/voicereply",    // 語音回覆設定
+  // "/budget" 和 "/schedule" 已改為內部工具，不再顯示在指令列表
   "/help"           // 幫助
 ];
 
@@ -219,6 +229,34 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandVoiceReply,
     description: "切換語音/文字回覆模式"
+  },
+
+  // Google Sheets (家庭管理)
+  // /budget 和 /schedule 已改為內部工具（Tool Calling），不再註冊為指令
+  // "/budget": {
+  //   scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+  //   fn: commandQueryBudget,
+  //   description: "查詢家庭收支"
+  // },
+  // "/schedule": {
+  //   scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+  //   fn: commandQueryCalendar,
+  //   description: "查詢家庭行程"
+  // },
+  "/budgetwrite": {
+    scopes: ["all_private_chats"], // 僅限私聊或特定權限 (目前機制未細分所以這裡 scopes 其實不影響隱藏性，因為不在 sortList)
+    fn: commandWriteBudget,
+    description: "寫入家庭收支 (Internal)"
+  },
+  "/scheduleadd": {
+    scopes: ["all_private_chats"],
+    fn: commandCreateCalendar,
+    description: "新增家庭行程 (Internal)"
+  },
+  "/scheduledelete": {
+    scopes: ["all_private_chats"],
+    fn: commandDeleteCalendar,
+    description: "刪除家庭行程 (Internal - Calendar)"
   },
 
   // 系統指令
@@ -430,6 +468,12 @@ export async function bindCommandForTelegram(token) {
     if (key === '/gps' && !ENV.ENABLE_LOCATION_SERVICE) {
       continue;
     }
+
+    // 如果家庭表格功能未啟用，隱藏相關指令
+    if ((key === '/budget' || key === '/schedule') && ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS !== true) {
+      continue;
+    }
+
     if (Object.prototype.hasOwnProperty.call(commandHandlers, key) && commandHandlers[key].scopes) {
       for (const scope of commandHandlers[key].scopes) {
         if (!scopeCommandMap[scope]) {

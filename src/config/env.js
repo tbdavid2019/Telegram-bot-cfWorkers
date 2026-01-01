@@ -120,6 +120,11 @@ export class UserConfig {
   TTS_VOICE = "autumn";
   TTS_SPEED = "1.0";
   TTS_FORMAT = "wav";
+  // -- Google Sheets / Calendar 整合 --
+  ENABLE_FAMILY_SHEETS = false;
+  FAMILY_SHEET_ID = null;
+  FAMILY_CALENDAR_ID = null;
+  GOOGLE_SHEETS_SERVICE_ACCOUNT = null;
 }
 
 export class Environment {
@@ -265,7 +270,12 @@ const ENV_TYPES = {
   TTS_MODEL: "string",
   TTS_VOICE: "string",
   TTS_SPEED: "string",
-  TTS_FORMAT: "string"
+  TTS_FORMAT: "string",
+  // Google Sheets / Calendar 整合
+  ENABLE_FAMILY_SHEETS: "boolean",
+  FAMILY_SHEET_ID: "string",
+  FAMILY_CALENDAR_ID: "string",
+  GOOGLE_SHEETS_SERVICE_ACCOUNT: "string"
 };
 
 const ENV_KEY_MAPPER = {

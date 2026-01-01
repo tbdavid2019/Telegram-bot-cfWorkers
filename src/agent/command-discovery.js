@@ -113,19 +113,24 @@ export async function generateCommandSystemPrompt(context) {
     prompt += '你可以使用以下指令幫助用戶：\n\n';
 
     // 按類別組織指令
-    const categories = {
+    const cachedCategories = {
         '天氣相關': ['/wt', '/weatheralert'],
-        '股票相關': ['/stocktw', '/stock'],
-        '占卜相關': ['/qi', '/oracle', '/poetry', '/boa'],
+        '股票相關': ['/stocktw', '/stock', '/stock2'],
+        '占卜相關': ['/qi', '/oracle', '/poetry', '/boa', '/bo'],
         '法律相關': ['/law'],
-        '字典相關': ['/dict', '/dictcn'],
+        '字典相關': ['/dict', '/dictcn', '/dicten'],
         '網路工具': ['/ip', '/dns', '/dns2'],
         '位置服務': ['/gps'],
-        '圖片生成': ['/img'],
+        '圖片生成': ['/img', '/img2', '/setimg'],
         '系統功能': ['/help', '/new', '/system', '/llmchange']
     };
 
-    for (const [category, categoryCommands] of Object.entries(categories)) {
+    // 根據環境變數決定是否加入家庭管理功能
+    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS === true) {
+        cachedCategories['家庭管理'] = ['/budget', '/schedule'];
+    }
+
+    for (const [category, categoryCommands] of Object.entries(cachedCategories)) {
         const categoryItems = commands.filter(c => categoryCommands.includes(c.command));
         if (categoryItems.length > 0) {
             prompt += `### ${category}\n`;
@@ -136,8 +141,9 @@ export async function generateCommandSystemPrompt(context) {
         }
     }
 
+
     // 其他未分類的指令
-    const categorizedCommands = Object.values(categories).flat();
+    const categorizedCommands = Object.values(cachedCategories).flat();
     const otherCommands = commands.filter(c => !categorizedCommands.includes(c.command));
     if (otherCommands.length > 0) {
         prompt += '### 其他功能\n';
@@ -147,20 +153,38 @@ export async function generateCommandSystemPrompt(context) {
         prompt += '\n';
     }
 
+    // 加入當前時間資訊
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Taipei'
+    });
+    prompt += `\n**當前時間**：${currentDateTime}\n\n`;
+
     // 使用說明
     prompt += '## 如何調用指令\n\n';
     prompt += '當用戶需要這些功能時，你可以使用特殊標記來調用指令：\n\n';
     prompt += '**格式**：`[CALL:指令 參數]`\n\n';
     prompt += '**範例**：\n';
-    prompt += '- 用戶問「台北天氣如何？」→ 回應中包含 `[CALL:/wt 台北]`\n';
+    prompt += '用戶問「台北天氣如何？」→ 回應中包含 `[CALL:/wt 台北]`\n';
     prompt += '- 用戶問「查詢台股 2330」→ 回應中包含 `[CALL:/stocktw 2330]`\n';
-    prompt += '- 用戶問「AI 生成內容的法律問題」→ 回應中包含 `[CALL:/law AI產生的不實訊息會構成誹謗罪嗎？]`\n\n';
+    prompt += '- 用戶問「AI 生成內容的法律問題」→ 回應中包含 `[CALL:/law AI產生的不實訊息會構成誹謗罪嗎？]`\n';
+    // /budget 和 /schedule 已改為 Tool Calling，不再顯示為 Inline Keyboard 範例
+    prompt += '- 用戶問「記帳：12月房租 15000」→ 回應中包含 `[CALL:/budgetwrite {"month": "2025/12", "category": "rent", "amount": 15000}]`\n';
+    prompt += '- 用戶問「幫我加行程：明天下午3點去好市多」 (假設今天是 2025/01/01) →\n';
+    prompt += '  回應中包含 `[CALL:/scheduleadd {"date": "2025/01/02", "time": "15:00", "targetUser": "爸爸", "event": "去好市多"}]`\n\n';
     prompt += '**重要**：\n';
     prompt += '1. 調用標記會被自動處理，用戶看不到這個標記\n';
     prompt += '2. 指令會自動執行並回覆用戶\n';
     prompt += '3. 你只需要告知用戶「正在為您查詢...」或類似的提示\n';
     prompt += '4. 一次可以調用多個指令\n';
     prompt += '5. 請謹慎判斷用戶意圖，只在確實需要時才調用指令\n';
+    prompt += '6. **關鍵**：當用戶詢問「家庭收支」或「行程」時，系統會自動獲取資料並由你分析，**絕對不可以**自己編造數據或細項！\n';
 
     return prompt;
 }
