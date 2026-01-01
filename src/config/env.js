@@ -103,6 +103,23 @@ export class UserConfig {
   GROQ_API_KEY = null;
   // 小米 API Key
   XIAOMI_API_KEY = null;
+
+  // -- 語音功能配置 --
+  // 語音轉錄 (ASR)
+  ENABLE_VOICE_TRANSCRIPTION = false;
+  SHOW_TRANSCRIPTION = false;
+  ASR_API_KEY = null;
+  ASR_API_BASE = "https://api.groq.com/openai/v1";
+  ASR_MODEL = "whisper-large-v3";
+  ASR_LANGUAGE = "zh";
+  // 語音回覆 (TTS)
+  ENABLE_VOICE_REPLY = false;
+  TTS_API_KEY = null;
+  TTS_API_BASE = "https://api.groq.com/openai/v1";
+  TTS_MODEL = "canopylabs/orpheus-v1-english";
+  TTS_VOICE = "autumn";
+  TTS_SPEED = "1.0";
+  TTS_FORMAT = "wav";
 }
 
 export class Environment {
@@ -233,7 +250,22 @@ const ENV_TYPES = {
   OPENROUTER_API_KEY: "string",
   BEDROCK_API_KEY: "string",
   XIAOMI_API_KEY: "string",
-  GROQ_API_KEY: "string"
+  GROQ_API_KEY: "string",
+  // 語音轉錄 (ASR) 相關
+  ENABLE_VOICE_TRANSCRIPTION: "boolean",
+  SHOW_TRANSCRIPTION: "boolean",
+  ASR_API_KEY: "string",
+  ASR_API_BASE: "string",
+  ASR_MODEL: "string",
+  ASR_LANGUAGE: "string",
+  // 語音回覆 (TTS) 相關
+  ENABLE_VOICE_REPLY: "boolean",
+  TTS_API_KEY: "string",
+  TTS_API_BASE: "string",
+  TTS_MODEL: "string",
+  TTS_VOICE: "string",
+  TTS_SPEED: "string",
+  TTS_FORMAT: "string"
 };
 
 const ENV_KEY_MAPPER = {

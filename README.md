@@ -2,7 +2,51 @@
 
 ---
 
-## 🆕 最新功能：LLM 指令發現系統
+## 🆕 最新功能
+
+### 🎤 語音訊息支援 (2026-01-01)
+
+**完全免費的語音轉文字 + 文字轉語音功能！**
+
+#### 功能特點
+
+- ✅ **語音轉文字 (ASR)** - 使用 Groq 免費 API,支援中英雙語
+- ✅ **文字轉語音 (TTS)** - Groq TTS 實測可講中文!
+- ✅ **智能回覆模式** - 透過 `/voicereply` 指令切換文字/語音回覆
+- ✅ **Inline Keyboard** - 直觀的按鈕介面切換模式
+- ✅ **多供應商架構** - 可輕鬆切換到 OpenAI/Google 等其他服務
+- ✅ **完全免費** - 使用 Groq 免費額度
+
+#### 使用方式
+
+1. **發送語音訊息** - Bot 自動轉錄為文字並用 LLM 處理
+2. **切換回覆模式** - 使用 `/voicereply` 選擇文字或語音回覆
+3. **語音對話** - 開啟語音回覆後,Bot 會用語音回應
+
+#### 配置
+
+在 `wrangler.toml` 中設定:
+
+```toml
+# Groq API Key (免費)
+GROQ_API_KEY = "gsk-YOUR-KEY"
+
+# 語音轉錄 (ASR)
+ENABLE_VOICE_TRANSCRIPTION = "true"
+ASR_API_BASE = "https://api.groq.com/openai/v1"
+ASR_MODEL = "whisper-large-v3"
+
+# 語音回覆 (TTS)
+ENABLE_VOICE_REPLY = "true"
+TTS_API_BASE = "https://api.groq.com/openai/v1"
+TTS_MODEL = "canopylabs/orpheus-v1-english"  # 實測可講中文!
+```
+
+詳細說明請參考 [VOICE_MESSAGE_IMPLEMENTATION_PLAN.md](./VOICE_MESSAGE_IMPLEMENTATION_PLAN.md)
+
+---
+
+### 🤖 LLM 指令發現系統
 
 **讓 LLM 自動理解並建議使用 Bot 指令！**
 
@@ -85,6 +129,20 @@ ENABLE_COMMAND_DISCOVERY = "true"
 | | `WORKERS_IMAGE_MODEL` | CF Workers AI 模型 |
 | **Cloudflare** | `CLOUDFLARE_ACCOUNT_ID` | CF 帳號 ID |
 | | `CLOUDFLARE_TOKEN` | CF API Token |
+| **語音功能** | `GROQ_API_KEY` | Groq API Key (免費) |
+| | `ENABLE_VOICE_TRANSCRIPTION` | 啟用語音轉文字 (true/false) |
+| | `SHOW_TRANSCRIPTION` | 顯示轉錄文字 (true/false) |
+| | `ASR_API_KEY` | ASR 專用 Key (選填) |
+| | `ASR_API_BASE` | ASR API URL |
+| | `ASR_MODEL` | ASR 模型 |
+| | `ASR_LANGUAGE` | ASR 語言 (zh/en) |
+| | `ENABLE_VOICE_REPLY` | 啟用語音回覆 (true/false) |
+| | `TTS_API_KEY` | TTS 專用 Key (選填) |
+| | `TTS_API_BASE` | TTS API URL |
+| | `TTS_MODEL` | TTS 模型 |
+| | `TTS_VOICE` | TTS 語音 |
+| | `TTS_SPEED` | TTS 速度 (1.0) |
+| | `TTS_FORMAT` | TTS 格式 (wav) |
 | **第三方插件** | `netlasapiKey` | Netlas DNS 查詢 |
 | | `infoapiKey` | IPInfo IP 查詢 |
 | | `cwaapiKey` | 臺灣天氣查詢 |
@@ -93,7 +151,6 @@ ENABLE_COMMAND_DISCOVERY = "true"
 | | `ENABLE_COMMAND_DISCOVERY` | 啟用 LLM 指令發現 (true/false) |
 | | `ENABLE_LOCATION_SERVICE` | 啟用位置服務 (true/false) |
 | | `I_AM_A_GENEROUS_PERSON` | 略過白名單 |
-| | `ENABLE_LOCATION_SERVICE` | 啟用位置/GPS服務 |
 | | `CHAT_COMPLETE_API_TIMEOUT` | API 超時秒數 |
 | | `DEFAULT_LLM_PROFILE` | 預設 LLM Profile |
 
@@ -153,6 +210,43 @@ ENABLE_COMMAND_DISCOVERY = "true"
 | `GEMINI_IMAGE_API_KEY` | ❌ | Gemini 圖片生成專用 Key | `AIzaSy-xxx` |
 | `GEMINI_IMAGE_MODEL` | ❌ | Gemini 圖片模型 | `gemini-2.0-flash-exp-image-generation` |
 | `WORKERS_IMAGE_MODEL` | ❌ | Cloudflare Workers AI 模型 | `@cf/stabilityai/stable-diffusion-xl-base-1.0` |
+
+## 語音功能設定
+
+### Groq API Key（語音功能專用）
+
+| 變數名稱 | 必填 | 說明 | 範例值 |
+|----------|------|------|--------|
+| `GROQ_API_KEY` | ✅ | Groq API Key（免費,用於 ASR/TTS） | `gsk_xxx` |
+
+### 語音轉文字 (ASR) 設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `ENABLE_VOICE_TRANSCRIPTION` | ❌ | 啟用語音轉文字功能 | `false` |
+| `SHOW_TRANSCRIPTION` | ❌ | 顯示轉錄文字（調試用） | `false` |
+| `ASR_API_KEY` | ❌ | ASR 專用 Key（留空則使用 GROQ_API_KEY） | `` |
+| `ASR_API_BASE` | ❌ | ASR API 基礎 URL | `https://api.groq.com/openai/v1` |
+| `ASR_MODEL` | ❌ | ASR 模型 | `whisper-large-v3` |
+| `ASR_LANGUAGE` | ❌ | ASR 語言（zh/en/auto） | `zh` |
+
+### 文字轉語音 (TTS) 設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `ENABLE_VOICE_REPLY` | ❌ | 啟用語音回覆功能 | `false` |
+| `TTS_API_KEY` | ❌ | TTS 專用 Key（留空則使用 GROQ_API_KEY） | `` |
+| `TTS_API_BASE` | ❌ | TTS API 基礎 URL | `https://api.groq.com/openai/v1` |
+| `TTS_MODEL` | ❌ | TTS 模型 | `canopylabs/orpheus-v1-english` |
+| `TTS_VOICE` | ❌ | TTS 語音（autumn/breeze/coral/sage） | `autumn` |
+| `TTS_SPEED` | ❌ | TTS 語速（0.25-4.0） | `1.0` |
+| `TTS_FORMAT` | ❌ | TTS 音訊格式（wav/mp3/opus） | `wav` |
+
+**注意事項:**
+- 使用 Groq TTS 前需在 [Groq Console](https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english) 接受模型使用條款
+- Groq 免費額度: ASR 無限制, TTS 每日限額
+- `canopylabs/orpheus-v1-english` 模型實測可講中文!
+- 用戶可透過 `/voicereply` 指令切換文字/語音回覆模式
 
 ## Cloudflare 設定（Workers AI 用）
 

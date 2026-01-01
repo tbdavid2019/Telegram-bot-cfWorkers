@@ -5,6 +5,7 @@ import { commandQimen } from '../features/divination.js';
 import { handleLLMChangeCallback } from '../features/llm.js';
 import { handleStockTWCallback, handleStock2Callback } from '../features/stock.js';
 import { handleLocationMessage, handleLocationCallback } from '../features/location.js';
+import { msgHandleVoiceMessage } from '../features/voice.js';
 import { getBot, getFileLink } from './telegram.js';
 import { uploadImageToTelegraph } from '../utils/image.js';
 import { recordUserActivity } from '../utils/stats.js';
@@ -71,6 +72,49 @@ export async function msgHandleCallbackQuery(message, context) {
   // 處理位置查詢
   if (callbackData.startsWith('/loc:')) {
     return handleLocationCallback(message, context);
+  }
+
+  // 處理語音回覆切換
+  if (callbackData.startsWith('/voicereply:')) {
+    const mode = callbackData.split(':')[1]; // 'text' 或 'voice'
+    const chatId = message.chat.id;
+
+    // 儲存設定
+    await DATABASE.put(`voice_reply:${chatId}`, mode);
+
+    // 更新按鈕
+    const keyboard = {
+      inline_keyboard: [
+        [
+          {
+            text: mode === 'text' ? '✅ 文字回覆' : '⚪ 文字回覆',
+            callback_data: '/voicereply:text'
+          },
+          {
+            text: mode === 'voice' ? '✅ 語音回覆' : '⚪ 語音回覆',
+            callback_data: '/voicereply:voice'
+          }
+        ]
+      ]
+    };
+
+    // 更新訊息
+    await fetch(
+      `https://api.telegram.org/bot${context.SHARE_CONTEXT.currentBotToken}/editMessageText`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: message.message_id,
+          text: `🔊 *語音回覆設定*\n\n目前模式: ${mode === 'voice' ? '🎤 語音回覆' : '💬 文字回覆'}\n\n請選擇回覆模式:`,
+          reply_markup: keyboard,
+          parse_mode: 'Markdown'
+        })
+      }
+    );
+
+    return null;
   }
 
   // 未知的 callback，忽略
@@ -167,6 +211,9 @@ export async function msgFilterUnsupportedMessage(message, context) {
     return null;
   }
   if (message.location) {
+    return null;
+  }
+  if (message.voice) {
     return null;
   }
   throw new Error("Not supported message type");
@@ -401,6 +448,7 @@ export const messageMiddleware = [
   msgHandleCommand,
   msgSmartWeatherDetection,
   handleLocationMessage,
+  msgHandleVoiceMessage,
   msgChatWithLLM
 ];
 
@@ -457,6 +505,8 @@ export async function handleMessage(token, body) {
     msgSmartWeatherDetection,
     // 📍 處理位置訊息
     handleLocationMessage,
+    // 🎤 處理語音訊息
+    msgHandleVoiceMessage,
     // 與LLM聊天
     msgChatWithLLM
   ];

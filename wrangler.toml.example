@@ -73,6 +73,26 @@ WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
 CLOUDFLARE_ACCOUNT_ID = "YOUR-CF-ACCOUNT-ID"
 CLOUDFLARE_TOKEN = "YOUR-CF-TOKEN"
 
+# Groq API Key (免費語音服務)
+GROQ_API_KEY = "gsk-YOUR-GROQ-KEY-HERE"
+
+# 語音轉錄設定 (ASR) - 使用 Groq 免費 API
+ENABLE_VOICE_TRANSCRIPTION = "true"
+SHOW_TRANSCRIPTION = "false"
+ASR_API_KEY = ""  # 留空使用 GROQ_API_KEY
+ASR_API_BASE = "https://api.groq.com/openai/v1"
+ASR_MODEL = "whisper-large-v3"
+ASR_LANGUAGE = "zh"
+
+# 語音回覆設定 (TTS) - 使用 Groq 免費 API (實測可講中文!)
+ENABLE_VOICE_REPLY = "true"
+TTS_API_KEY = ""  # 留空使用 GROQ_API_KEY
+TTS_API_BASE = "https://api.groq.com/openai/v1"
+TTS_MODEL = "canopylabs/orpheus-v1-english"  # 實測可講中文
+TTS_VOICE = "autumn"  # autumn, spring, summer, winter
+TTS_SPEED = "1.0"
+TTS_FORMAT = "wav"
+
 # LLM Profiles - 使用 apiKeyEnv 參照環境變數
 LLM_PROFILES = '''
 {

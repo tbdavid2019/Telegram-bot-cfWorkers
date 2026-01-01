@@ -217,7 +217,32 @@ export async function chatWithLLM(params, context, modifier) {
       await new Promise((resolve) => setTimeout(resolve, nextEnableTime - Date.now()));
     }
 
-    return sendMessageToTelegramWithContext(context)(answer);
+    // 檢查是否需要語音回覆
+    const chatId = context.CURRENT_CHAT_CONTEXT.chat_id;
+    const replyMode = await DATABASE.get(`voice_reply:${chatId}`) || 'text';
+
+    if (replyMode === 'voice' && ENV.ENABLE_VOICE_REPLY !== 'false') {
+      try {
+        console.log('[TTS] Generating voice reply...');
+        // 使用 TTS 轉換為語音
+        const { textToSpeech, sendVoiceMessage } = await import('../features/tts.js');
+        const audioBlob = await textToSpeech(answer);
+        await sendVoiceMessage(
+          chatId,
+          audioBlob,
+          context.SHARE_CONTEXT.currentBotToken
+        );
+        console.log('[TTS] Voice reply sent successfully');
+        return null;
+      } catch (error) {
+        console.error('[TTS] Error:', error);
+        // TTS 失敗時降級為文字回覆
+        return sendMessageToTelegramWithContext(context)(answer);
+      }
+    } else {
+      // 文字回覆
+      return sendMessageToTelegramWithContext(context)(answer);
+    }
   } catch (e) {
     let errMsg = `Error: ${e.message}`;
     if (errMsg.length > 2048) {

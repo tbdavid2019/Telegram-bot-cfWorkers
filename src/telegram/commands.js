@@ -44,6 +44,7 @@ import {
 } from '../features/system.js';
 import { commandLLMChange } from '../features/llm.js';
 import { commandGPS } from '../features/location.js';
+import { commandVoiceReply } from '../features/voice-command.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -72,6 +73,7 @@ export const commandSortList = [
   "/gps",           // 附近地點查詢
   "/password",      // 隨機密碼
   "/llmchange",     // 切換 LLM
+  "/voicereply",    // 語音回覆設定
   "/help"           // 幫助
 ];
 
@@ -210,6 +212,13 @@ export const commandHandlers = {
     fn: commandLLMChange,
     needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "切換 LLM 模型 - 使用: /llmchange [profile] [model]"
+  },
+
+  // 語音回覆設定
+  "/voicereply": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandVoiceReply,
+    description: "切換語音/文字回覆模式"
   },
 
   // 系統指令
