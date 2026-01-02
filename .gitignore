@@ -32,3 +32,6 @@ setup-secrets.sh
 wrangler.toml
 # wrangler.toml.example 是範本，可以提交
 googlekey.json
+googlekey_b64.txt
+googlekey2.json
+googlekey2_b64.txt

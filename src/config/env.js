@@ -125,6 +125,7 @@ export class UserConfig {
   FAMILY_SHEET_ID = null;
   FAMILY_CALENDAR_ID = null;
   GOOGLE_SHEETS_SERVICE_ACCOUNT = null;
+
 }
 
 export class Environment {
@@ -207,6 +208,7 @@ export class Environment {
   ENABLE_LOCATION_SERVICE = false;
   // 开启 LLM 指令发现功能
   ENABLE_COMMAND_DISCOVERY = false;
+
   // -- 模式开关 --
   //
   // 使用流模式

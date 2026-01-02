@@ -109,12 +109,51 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     const commands = parseCommandsFromLLMResponse(answer);
 
     // 檢查是否有需要立即執行的工具指令（家庭管理相關）
-    const toolCommands = commands.filter(cmd =>
-      cmd.command === '/budget' ||
-      cmd.command === '/schedule' ||
-      cmd.command === '/scheduleadd' ||
-      cmd.command === '/budgetwrite'
-    );
+    // 只有在 ENABLE_FAMILY_SHEETS 明確設為 true 時才執行
+    // 如果未啟用，則從 commands 列表中移除，並從 answer 中剝離，防止回退到 Inline Keyboard
+    let toolCommands = [];
+    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS === true) {
+      toolCommands = commands.filter(cmd =>
+        cmd.command === '/budget' ||
+        cmd.command === '/schedule' ||
+        cmd.command === '/scheduleadd' ||
+        cmd.command === '/budgetwrite'
+      );
+    } else {
+      // 找出被禁用的指令
+      const prohibitedCommands = commands.filter(cmd =>
+        cmd.command === '/budget' ||
+        cmd.command === '/schedule' ||
+        cmd.command === '/scheduleadd' ||
+        cmd.command === '/budgetwrite'
+      );
+
+      if (prohibitedCommands.length > 0) {
+        console.log(`🤖 [Tool Calling] Features disabled, stripping ${prohibitedCommands.length} prohibited commands`);
+
+        // 從 commands 列表中移除
+        const safeCommands = commands.filter(cmd =>
+          cmd.command !== '/budget' &&
+          cmd.command !== '/schedule' &&
+          cmd.command !== '/scheduleadd' &&
+          cmd.command !== '/budgetwrite'
+        );
+
+        // 更新 commands 引用 (需要改用 let 或修改數組內容，這裡重新賦值给 commands 變數需要 commands 變為 let)
+        commands.length = 0;
+        commands.push(...safeCommands);
+
+        // 從 answer 中移除標記，防止 processCommandInvocations 再次解析到
+        // 格式: [CALL:/command args]
+        for (const cmd of prohibitedCommands) {
+          // 簡單的字符串替換，注意轉義正則特殊字符
+          // 由於 args 可能包含換行或特殊字符，正則比較複雜，這裡嘗試直接替換已知模式
+          // 或者使用 command-invoker 的 regex 邏輯
+          const regex = new RegExp(`\\[CALL:${cmd.command}\\s*(.*?)\\]`, 'gs');
+          answer = answer.replace(regex, '');
+        }
+      }
+    }
 
     if (toolCommands.length > 0) {
       console.log(`🤖 [Tool Calling] Found ${toolCommands.length} tool commands, executing...`);

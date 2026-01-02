@@ -126,8 +126,12 @@ export async function generateCommandSystemPrompt(context) {
     };
 
     // 根據環境變數決定是否加入家庭管理功能
+    // 根據環境變數決定是否加入家庭管理功能
     if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS === true) {
         cachedCategories['家庭管理'] = ['/budget', '/schedule'];
+    } else {
+        // 明確告知 LLM 沒有相關權限，防止 Hallucination
+        prompt += '注意：你目前沒有權限訪問家庭行程表或收支表。如果用戶詢問相關資訊（如「查行程」、「記帳」等），請明確告知無法查詢，不要嘗試假裝查詢。\n\n';
     }
 
     for (const [category, categoryCommands] of Object.entries(cachedCategories)) {
