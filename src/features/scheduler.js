@@ -108,9 +108,9 @@ async function runDailySummary(env, token, todayDate) {
         for (const ev of events) {
             const timePart = ev.start.dateTime ? ev.start.dateTime.slice(11, 16) : '全天'; // 簡單取時間 HH:MM
             msg += `🕒 <code>${timePart}</code>\n`;
-            msg += `📌 <b>${ev.summary}</b>\n`;
-            if (ev.location) msg += `📍 ${ev.location}\n`;
-            if (ev.description) msg += `📝 ${ev.description}\n`;
+            msg += `📌 <b>${escapeHtml(ev.summary)}</b>\n`;
+            if (ev.location) msg += `📍 ${escapeHtml(ev.location)}\n`;
+            if (ev.description) msg += `📝 ${cleanDescription(ev.description)}\n`;
             msg += `----------------\n`;
         }
 
@@ -159,9 +159,9 @@ async function runHourlyReminder(env, token, nowUTC) {
             const timeStr = `${tpTime.getUTCHours().toString().padStart(2, '0')}:${tpTime.getUTCMinutes().toString().padStart(2, '0')}`;
 
             let msg = `⏰ <b>提醒：行程即將開始！</b>\n\n`;
-            msg += `📌 <b>${ev.summary}</b>\n`;
+            msg += `📌 <b>${escapeHtml(ev.summary)}</b>\n`;
             msg += `🕒 時間：${timeStr}\n`;
-            if (ev.location) msg += `📍 地點：${ev.location}\n`;
+            if (ev.location) msg += `📍 地點：${escapeHtml(ev.location)}\n`;
 
             // 發送到群組
             if (ENV.USER_CONFIG.FAMILY_GROUP_ID) {
@@ -222,4 +222,24 @@ async function sendTelegramMessage(token, chatId, text) {
     } catch (e) {
         console.error(`❌ [Telegram] Network error:`, e);
     }
+}
+
+function escapeHtml(text) {
+    if (!text) return "";
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function cleanDescription(desc) {
+    if (!desc) return "";
+    // 1. <br> -> \n
+    let d = desc.replace(/<br\s*\/?>/gi, "\n");
+    // 2. Strip all other tags
+    d = d.replace(/<[^>]+>/g, "");
+    // 3. Escape for Telegram
+    return escapeHtml(d);
 }
