@@ -2,6 +2,7 @@
 import { initEnv, ENV } from '../config/env.js';
 import { listCalendarEvents } from './google-calendar.js';
 import { getUserMapping, resolveUserMention } from './google-sheets.js';
+import { loadChatLLM } from '../agent/agents.js';
 
 /**
  * Handle Scheduled Event (Cron Trigger)
@@ -100,7 +101,34 @@ async function runDailySummary(env, token, todayDate) {
 
         console.log(`📅 [Summary] Found ${events.length} events.`);
 
-        // 整理通知內容
+        // 嘗試使用 AI 生成個人化摘要
+        try {
+            console.log(`🤖 [Summary] Generating AI summary...`);
+
+            // 1. 獲取天氣 (預設高雄市)
+            const weatherCity = "高雄市";
+            const weatherData = await getWeather(weatherCity);
+
+            // 2. 構建 Context
+            const context = {
+                USER_CONFIG: ENV.USER_CONFIG,
+                env: env
+            };
+
+            // 3. 呼叫 AI
+            const aiMsg = await generateDailySummaryAI(events, weatherData, todayDate, context);
+
+            // 發送給群組
+            if (ENV.USER_CONFIG.FAMILY_GROUP_ID) {
+                await sendTelegramMessage(token, ENV.USER_CONFIG.FAMILY_GROUP_ID, aiMsg);
+            }
+            return; // AI 成功則結束
+
+        } catch (aiError) {
+            console.error(`❌ [Summary] AI Generation failed, falling back to manual format:`, aiError);
+        }
+
+        // 整理通知內容 (Fallback)
         const todayStr = `${todayDate.getUTCFullYear()}/${todayDate.getUTCMonth() + 1}/${todayDate.getUTCDate()}`;
         let msg = `☀️ <b>早安！今天是 ${todayStr}</b>\n`;
         msg += `共有 ${events.length} 個行程事項：\n\n`;
@@ -242,4 +270,101 @@ function cleanDescription(desc) {
     d = d.replace(/<[^>]+>/g, "");
     // 3. Escape for Telegram
     return escapeHtml(d);
+}
+
+// ========== AI & Weather Helpers ==========
+
+async function getWeather(locationName) {
+    try {
+        const url = `https://wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data && data.current_condition && data.current_condition.length > 0) {
+            const current = data.current_condition[0];
+            // wttr.in weather array index 0 corresponds to today
+            const daily = data.weather && data.weather[0];
+            const maxTemp = daily ? daily.maxtempC : current.temp_C;
+            const minTemp = daily ? daily.mintempC : current.temp_C;
+            // noon rain chance
+            const rainChance = daily && daily.hourly && daily.hourly[4] ? daily.hourly[4].chanceofrain : '0';
+
+            return {
+                desc: current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value,
+                temp: current.temp_C,
+                feelsLike: current.FeelsLikeC,
+                humidity: current.humidity,
+                rainChance,
+                maxTemp,
+                minTemp
+            };
+        }
+    } catch (e) {
+        console.error(`❌ [Weather] Fetch failed:`, e);
+    }
+    return null;
+}
+
+async function generateDailySummaryAI(events, weather, dateObj, context) {
+    const todayStr = `${dateObj.getUTCFullYear()}/${dateObj.getUTCMonth() + 1}/${dateObj.getUTCDate()}`;
+
+    // 簡化 Event Data
+    const simplifiedEvents = events.map(e => ({
+        time: e.start.dateTime ? e.start.dateTime.slice(11, 16) : 'All Day',
+        summary: e.summary,
+        location: e.location || '',
+        description: cleanDescription(e.description || '')
+    }));
+
+    const weatherPrompt = weather
+        ? `天氣狀況：${weather.desc}\n氣溫範疇：${weather.minTemp}-${weather.maxTemp}°C (目前 ${weather.temp}°C)\n降雨機率：${weather.rainChance}%`
+        : "天氣資料目前無法取得(服務無回應)。";
+
+    const systemPrompt = `你是一個溫暖貼心的家庭管家 "Oli" (小江管家)。
+请用繁體中文為家庭生成一份 "早安日報"。語氣要充滿活力、溫馨，並適當使用 Emoji。
+
+規範：
+1. 開頭問候 (早安！今天是 ${todayStr})。
+2. 天氣播報：根據提供的天氣資訊，給予穿衣或帶傘建議。
+3. 今日行程：列出行程，並使用 <b>粗體</b> 強調時間與標題。
+   - 若行程有備註 (Description)，請務必**擷取並顯示重要資訊** (如：電話號碼、地址、代辦事項細節)，不要過度簡化。
+4. **貼心提醒 (重要)**：分析行程內容，給予具體建議。
+   - 例如：取貨 -> 帶購物袋
+   - 例如：上課 -> 帶課本/琴譜
+   - 例如：看診 -> 帶健保卡
+   - 例如：運動 -> 帶水壺毛巾
+5. 格式確保：只需回傳訊息內容。使用 Telegram HTML 標籤 (<b>, <i>, <code>, <a href="...">)。
+   - 不可使用 Markdown (**bold**)，Telegram 不支援混合模式。
+   - 不可使用 <br>，請用換行。
+
+結構參考：
+☀️ [問候]
+
+🌡️ [天氣建議]
+
+📅 [今日行程]
+(條列式，時間用 code 或 bold)
+
+💡 [貼心提醒]
+
+💪 [結尾祝福]`;
+
+    const userMessage = `Info:
+[Weather]
+${weatherPrompt}
+
+[Events]
+${JSON.stringify(simplifiedEvents)}
+
+Please generate the daily summary.`;
+
+    const agent = loadChatLLM(context);
+    if (!agent) throw new Error("No LLM Agent available in context");
+
+    const answer = await agent.request({
+        message: userMessage,
+        history: [{ role: 'system', content: systemPrompt }]
+    }, context, null);
+
+    return answer;
 }
