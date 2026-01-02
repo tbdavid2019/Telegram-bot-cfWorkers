@@ -61,17 +61,17 @@ function chatModelKey(agentName) {
 function currentChatModel(agentName, context) {
   // 優先使用 LLM Profile 的 model（無論是 openai 還是 gemini provider）
   const profile = getActiveLLMProfile(context);
-  
+
   // 如果有臨時覆蓋的 model，最優先
   if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
     return context.USER_CONFIG.CURRENT_LLM_MODEL;
   }
-  
+
   // 如果有 active profile，使用 profile 的 model
   if (profile && profile.model) {
     return profile.model;
   }
-  
+
   // 否則使用環境變數的預設值
   switch (agentName) {
     case "openai":
@@ -103,8 +103,8 @@ function imageModelKey(agentName) {
 function currentImageModel(agentName, context) {
   switch (agentName) {
     case "openai":
-      if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
-          context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
+      if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" ||
+        context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
         return "gpt-image-1";
       }
       return context.USER_CONFIG.DALL_E_MODEL || "dall-e-3";
@@ -122,20 +122,20 @@ function currentImageModel(agentName, context) {
 export async function commandGetHelp(message, command, subcommand, context) {
   // 動態導入 commandSortList 避免循環依賴
   const { commandSortList } = await import('../telegram/commands.js');
-  
+
   let helpMsg = ENV.I18N.command.help.summary + "\n";
-  
+
   // 只顯示 commandSortList 中的指令
   helpMsg += commandSortList
     .map((key) => `${key}：${ENV.I18N.command.help[key.substring(1)] || ''}`)
     .join("\n");
-  
+
   // 加上自訂指令
   helpMsg += Object.keys(CUSTOM_COMMAND || {})
     .filter((key) => !!CUSTOM_COMMAND_DESCRIPTION[key])
     .map((key) => `${key}：${CUSTOM_COMMAND_DESCRIPTION[key]}`)
     .join("\n");
-  
+
   return sendMessageToTelegramWithContext(context)(helpMsg);
 }
 
@@ -293,26 +293,26 @@ Current version: ${current.sha}(${timeFormat(current.ts)})`);
 export async function commandSystem(message, command, subcommand, context) {
   let chatAgent = loadChatLLM(context)?.name;
   let imageAgent = loadImageGen(context)?.name;
-  
+
   // 取得 LLM Profile 資訊
   const currentProfileName = getCurrentProfileName(context);
   const currentProfile = getActiveLLMProfile(context);
-  
+
   // 取得使用統計
   const botId = context.SHARE_CONTEXT.currentBotId;
   const stats = await getStats(botId);
-  
+
   const agent = {
     AI_PROVIDER: chatAgent,
     AI_IMAGE_PROVIDER: imageAgent
   };
-  
+
   // 如果使用 LLM Profile，顯示 profile 資訊（這是主要的模型來源）
   if (currentProfileName && currentProfile) {
     agent.LLM_PROFILE = currentProfileName;
     agent.LLM_PROFILE_NAME = currentProfile.name || currentProfileName;
     agent.LLM_MODEL = currentProfile.model || "未設定";
-    
+
     // 如果有臨時覆蓋的 model
     if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
       agent.LLM_MODEL = context.USER_CONFIG.CURRENT_LLM_MODEL + " (覆蓋)";
@@ -323,26 +323,26 @@ export async function commandSystem(message, command, subcommand, context) {
       agent[chatModelKey(chatAgent)] = currentChatModel(chatAgent, context);
     }
   }
-  
+
   if (imageModelKey(imageAgent)) {
     agent[imageModelKey(imageAgent)] = currentImageModel(imageAgent, context);
   }
-  
+
   // 組合訊息
   let msg = `📊 <b>系統狀態</b>\n`;
   msg += `━━━━━━━━━━━━━━━\n\n`;
-  
+
   // 使用統計
   msg += `👥 <b>使用統計</b>\n`;
   msg += `  • 總使用者數: ${stats.totalUsers}\n`;
   msg += `  • 總群組數: ${stats.totalGroups}\n`;
   msg += `  • 總訊息數: ${stats.totalMessages}\n`;
   msg += `  • 今日訊息數: ${stats.todayMessages}\n\n`;
-  
+
   // AI 設定
   msg += `🤖 <b>AI 設定</b>\n`;
   msg += `<pre>${JSON.stringify(agent, null, 2)}</pre>\n`;
-  
+
   if (ENV.DEV_MODE) {
     const shareCtx = { ...context.SHARE_CONTEXT };
     shareCtx.currentBotToken = "******";
@@ -366,7 +366,7 @@ export async function commandSystem(message, command, subcommand, context) {
     msg += `<b>CHAT_CONTEXT:</b>\n<pre>${JSON.stringify(context.CURRENT_CHAT_CONTEXT, null, 2)}</pre>\n`;
     msg += `<b>SHARE_CONTEXT:</b>\n<pre>${JSON.stringify(shareCtx, null, 2)}</pre>\n`;
   }
-  
+
   context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
   return sendMessageToTelegramWithContext(context)(msg);
 }
@@ -403,10 +403,46 @@ export async function commandRegenerate(message, command, subcommand, context) {
 /**
  * /echo - 回顯訊息（除錯用）
  */
-export async function commandEcho(message, command, subcommand, context) {
-  let msg = "<pre>";
-  msg += JSON.stringify({ message }, null, 2);
-  msg += "</pre>";
+
+/**
+ * /getid - 取得使用者 ID
+ */
+export async function commandGetID(message, command, subcommand, context) {
+  const userId = message.from.id;
+  const username = message.from.first_name + (message.from.last_name ? ` ${message.from.last_name}` : '');
+  let msg = `👤 <b>${username}</b>\n`;
+  msg += `/getid\n`;
+  msg += `Your own ID is: <code>${userId}</code>`;
   context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
   return sendMessageToTelegramWithContext(context)(msg);
 }
+
+/**
+ * /getgroupid - 取得群組 ID
+ */
+export async function commandGetGroupID(message, command, subcommand, context) {
+  const chatType = message.chat.type;
+  if (chatType === 'private') {
+    // 私聊時顯示說明
+    const username = message.from.first_name + (message.from.last_name ? ` ${message.from.last_name}` : '');
+    let msg = `👤 <b>${username}</b>\n`;
+    msg += `/getgroupid\n`;
+    msg += `In order to get the ID of a group or channel, you need to do one of the following:\n`;
+    msg += `• Add me to a group or channel you want to get the ID of, and send /getgroupid in the group\n`;
+    msg += `• Another option is to forward a message from the group (if the bot is allowed to see it).`;
+    context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+    return sendMessageToTelegramWithContext(context)(msg);
+  } else {
+    // 群組中顯示 ID
+    const username = message.from.first_name + (message.from.last_name ? ` ${message.from.last_name}` : '');
+    const chatId = message.chat.id;
+    const chatTitle = message.chat.title;
+    let msg = `👥 <b>${username}</b>\n`;
+    msg += `/getgroupid\n`;
+    msg += `Group Title: <b>${chatTitle}</b>\n`;
+    msg += `Group ID is: <code>${chatId}</code>`;
+    context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+    return sendMessageToTelegramWithContext(context)(msg);
+  }
+}
+

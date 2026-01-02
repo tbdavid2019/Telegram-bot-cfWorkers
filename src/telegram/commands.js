@@ -41,7 +41,9 @@ import {
   commandClearUserConfig,
   commandFetchUpdate,
   commandSystem,
-  commandRegenerate
+  commandRegenerate,
+  commandGetID,
+  commandGetGroupID
 } from '../features/system.js';
 import { commandLLMChange } from '../features/llm.js';
 import { commandGPS } from '../features/location.js';
@@ -85,6 +87,8 @@ export const commandSortList = [
   "/llmchange",     // 切換 LLM
   "/voicereply",    // 語音回覆設定
   // "/budget" 和 "/schedule" 已改為內部工具，不再顯示在指令列表
+  "/getid",         // 取得 ID
+  "/getgroupid",    // 取得群組 ID
   "/help"           // 幫助
 ];
 
@@ -315,6 +319,16 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandRegenerate,
     description: "重新生成上一則回覆"
+  },
+  "/getid": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandGetID,
+    description: "取得使用者 ID (私聊) 或群組 ID"
+  },
+  "/getgroupid": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandGetGroupID,
+    description: "取得目前群組 ID"
   }
 };
 
