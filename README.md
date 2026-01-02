@@ -32,6 +32,27 @@
 - **資料整合** - 直接調用 `readBudgetSheet`、`listCalendarEvents` 等函數
 - **LLM 二次調用** - 獲取資料後再次調用 LLM 進行分析
 
+#### 📅 行事曆自動通知系統 (New)
+
+**不會錯過任何家庭活動！**
+
+- ✅ **每日早安彙總** - 預設每天早上 6:00 (台北時間) 發送當日行程
+- ✅ **每小時提醒** - (可選) 每小時檢查未來 1 小時內即將開始的活動
+- ✅ **雙重通知** - 同時發送給設定的家庭群組及相關此活動的參與者
+- ✅ **時區自動校正** - 程式自動將 Cloudflare UTC 時間轉換為台北時間 (+8)
+
+**新增指令：**
+- `/getid` - 查詢個人 Telegram ID
+- `/getgroupid` - 查詢群組 ID (需將 Bot 加入群組)
+
+**環境變數設定 (wrangler.toml)：**
+```toml
+ENABLE_SCHEDULED_NOTIFICATIONS = "true"  # 總開關
+DAILY_SUMMARY_TIME = "6"               # 每日彙總時間 (台北時間 0-23)
+ENABLE_HOURLY_REMINDER = "false"       # 每小時提醒開關 (預設關閉)
+FAMILY_GROUP_ID = "-100xxxx"           # 通知群組 ID
+```
+
 ---
 
 ### 🎤 語音訊息支援 (2026-01-01)

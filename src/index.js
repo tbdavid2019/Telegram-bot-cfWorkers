@@ -330,8 +330,21 @@ export default {
       // 處理請求
       return await handleRequest(request);
     } catch (e) {
-      console.error('Worker error:', e);
       return new Response(errorToString(e), { status: 500 });
+    }
+  },
+
+  /**
+   * @param {ScheduledEvent} event 
+   * @param {object} env 
+   * @param {object} ctx 
+   */
+  async scheduled(event, env, ctx) {
+    try {
+      const { handleScheduled } = await import('./features/scheduler.js');
+      await handleScheduled(event, env, ctx);
+    } catch (e) {
+      console.error('Scheduled Task Error:', e);
     }
   }
 };

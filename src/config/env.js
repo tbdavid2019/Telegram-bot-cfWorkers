@@ -125,6 +125,11 @@ export class UserConfig {
   FAMILY_SHEET_ID = null;
   FAMILY_CALENDAR_ID = null;
   GOOGLE_SHEETS_SERVICE_ACCOUNT = null;
+  // -- 排程與通知 --
+  ENABLE_SCHEDULED_NOTIFICATIONS = false;
+  DAILY_SUMMARY_TIME = 6; // 每日彙總時間 (小時 0-23)
+  ENABLE_HOURLY_REMINDER = false;
+  FAMILY_GROUP_ID = null;
 
 }
 
@@ -277,7 +282,12 @@ const ENV_TYPES = {
   ENABLE_FAMILY_SHEETS: "boolean",
   FAMILY_SHEET_ID: "string",
   FAMILY_CALENDAR_ID: "string",
-  GOOGLE_SHEETS_SERVICE_ACCOUNT: "string"
+  GOOGLE_SHEETS_SERVICE_ACCOUNT: "string",
+  // 排程與通知
+  ENABLE_SCHEDULED_NOTIFICATIONS: "boolean",
+  DAILY_SUMMARY_TIME: "number",
+  ENABLE_HOURLY_REMINDER: "boolean",
+  FAMILY_GROUP_ID: "string"
 };
 
 const ENV_KEY_MAPPER = {
