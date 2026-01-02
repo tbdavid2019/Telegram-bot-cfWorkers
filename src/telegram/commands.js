@@ -1,4 +1,5 @@
 // 指令路由系統
+import { ENV } from '../config/env.js';
 import {
   commandWeather,
   commandWeatherAlert
@@ -525,7 +526,16 @@ export async function bindCommandForTelegram(token) {
  */
 export function commandsDocument() {
   // 使用同步方式，從已載入的 commandHandlers 取得指令列表
-  return Object.keys(commandHandlers).map((key) => {
+  return Object.keys(commandHandlers).filter(key => {
+    // 過濾掉家庭管理相關指令，如果未啟用的話
+    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS !== true) {
+      if (key === '/budget' || key === '/schedule' ||
+        key === '/budgetwrite' || key === '/scheduleadd' || key === '/scheduledelete') {
+        return false;
+      }
+    }
+    return true;
+  }).map((key) => {
     return {
       command: key,
       description: commandHandlers[key].description || key.substring(1)
