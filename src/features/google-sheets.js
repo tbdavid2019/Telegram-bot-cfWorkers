@@ -129,6 +129,7 @@ export async function authenticateGoogleSheets(env) {
 async function readSheet(env, range) {
     const token = await authenticateGoogleSheets(env);
     const sheetId = ENV.USER_CONFIG.FAMILY_SHEET_ID;
+    console.log(`[Google Sheets] Querying Sheet: ${sheetId}, Range: ${range}`);
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
 
     const response = await fetch(url, {
@@ -140,6 +141,7 @@ async function readSheet(env, range) {
     }
 
     const data = await response.json();
+    console.log(`[Google Sheets] Rows returned: ${data.values ? data.values.length : 0}`);
     return data.values || [];
 }
 

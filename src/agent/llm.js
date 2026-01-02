@@ -112,7 +112,10 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     // 只有在 ENABLE_FAMILY_SHEETS 明確設為 true 時才執行
     // 如果未啟用，則從 commands 列表中移除，並從 answer 中剝離，防止回退到 Inline Keyboard
     let toolCommands = [];
-    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS === true) {
+    console.log(`🤖 [Debug] Family Sheets Enabled: ${ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS} (Type: ${typeof ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS})`);
+
+    // 使用 Truthiness 檢查，避免 "true" !== true 的問題
+    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS) {
       toolCommands = commands.filter(cmd =>
         cmd.command === '/budget' ||
         cmd.command === '/schedule' ||

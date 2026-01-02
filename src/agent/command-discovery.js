@@ -126,8 +126,7 @@ export async function generateCommandSystemPrompt(context) {
     };
 
     // 根據環境變數決定是否加入家庭管理功能
-    // 根據環境變數決定是否加入家庭管理功能
-    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS === true) {
+    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS) {
         cachedCategories['家庭管理'] = ['/budget', '/schedule'];
     } else {
         // 明確告知 LLM 沒有相關權限，防止 Hallucination
@@ -188,7 +187,8 @@ export async function generateCommandSystemPrompt(context) {
     prompt += '3. 你只需要告知用戶「正在為您查詢...」或類似的提示\n';
     prompt += '4. 一次可以調用多個指令\n';
     prompt += '5. 請謹慎判斷用戶意圖，只在確實需要時才調用指令\n';
-    prompt += '6. **關鍵**：當用戶詢問「家庭收支」或「行程」時，系統會自動獲取資料並由你分析，**絕對不可以**自己編造數據或細項！\n';
+    prompt += '6. **關鍵**：當用戶詢問「家庭收支」或「行程」時，你**必須主動**使用 `[CALL:/budget ...]` 或 `[CALL:/schedule ...]` 指令來獲取資料。資料**不會**自動出現，你必須調用指令！**絕對不可以**自己編造數據或日期！\n';
+    prompt += '7. 如果你沒有調用指令，你就無法回答用戶的問題。請務必生成 `[CALL:...]` 標記。\n';
 
     return prompt;
 }

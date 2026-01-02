@@ -39,6 +39,7 @@ async function authenticateGoogleCalendar(env) {
 export async function listCalendarEvents(env, timeMin, timeMax) {
     const token = await authenticateGoogleCalendar(env);
     const calendarId = ENV.USER_CONFIG.FAMILY_CALENDAR_ID;
+    console.log(`[Google Calendar] Querying Calendar: ${calendarId}, Min: ${timeMin}, Max: ${timeMax}`);
 
     let url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?`;
     const params = new URLSearchParams({
@@ -61,6 +62,7 @@ export async function listCalendarEvents(env, timeMin, timeMax) {
     }
 
     const data = await response.json();
+    console.log(`[Google Calendar] Response items: ${data.items ? data.items.length : 0}`);
     return data.items || [];
 }
 
