@@ -130,14 +130,11 @@ export async function msgHandleVoiceMessage(message, context) {
 
         // 設為訊息文字,讓 LLM 處理
         message.text = transcribedText;
+        // 保存轉錄結果到 context 供後續使用
+        context.voiceTranscription = transcribedText;
 
-        // 可選: 顯示轉錄結果
-        if (ENV.USER_CONFIG.SHOW_TRANSCRIPTION === true) {
-            const { sendMessageToTelegramWithContext } = await import('../telegram/telegram.js');
-            await sendMessageToTelegramWithContext(context)(
-                `🎤 ${transcribedText}`
-            );
-        }
+        // 可選: 顯示轉錄結果 (已改為整合到 LLM 回覆中)
+        // if (ENV.USER_CONFIG.SHOW_TRANSCRIPTION === true) { ... }
 
         return null; // 繼續執行 LLM 處理
 

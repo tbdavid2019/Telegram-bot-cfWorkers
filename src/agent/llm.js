@@ -250,6 +250,38 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             dataText += `📅 日期：${params.date}\n`;
             dataText += `👤 對象：${params.targetUser}\n`;
 
+            if (params.time) {
+              const [hour, minute] = params.time.split(':').map(Number);
+              const dateTimeStr = `${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+              eventData.start = {
+                dateTime: dateTimeStr,
+                timeZone: 'Asia/Taipei'
+              };
+              // 默認一小時時長
+              const endDateTime = new Date(new Date(dateTimeStr).getTime() + 60 * 60 * 1000);
+              const endDateTimeStr = endDateTime.toISOString().replace(/\.\d{3}Z$/, ''); // 簡單處理，最好用 toLocaleString 轉回 ISO 格式的部分
+              // 由於 Google Calendar API 對於 dateTime 接受 ISO String (帶時區 offset) 或者這種格式
+              // 為了保險，我們重新構建一個帶時區的 ISO string
+              // 這裡簡單加上 +08:00
+              eventData.start.dateTime = `${dateTimeStr}+08:00`;
+
+              const endYear = endDateTime.getFullYear();
+              const endMonth = String(endDateTime.getMonth() + 1).padStart(2, '0');
+              const endDay = String(endDateTime.getDate()).padStart(2, '0');
+              const endHour = String(endDateTime.getHours()).padStart(2, '0');
+              const endMinute = String(endDateTime.getMinutes()).padStart(2, '0');
+              const endSecond = String(endDateTime.getSeconds()).padStart(2, '0');
+              eventData.end = {
+                dateTime: `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}+08:00`,
+                timeZone: 'Asia/Taipei'
+              };
+
+              dataText = `✅ 已成功新增行程：${params.event}\n`;
+              dataText += `📅 日期：${params.date}\n`;
+              dataText += `⏰ 時間：${params.time}\n`;
+              dataText += `👤 對象：${params.targetUser}\n`;
+            }
+
 
           } else if (command === '/budgetwrite') {
             console.log('🤖 [Tool Calling] Writing budget data...');
@@ -385,24 +417,14 @@ export async function chatWithLLM(params, context, modifier) {
     const answer = await requestCompletionsFromLLM(params, context, llm, modifier, onStream);
     context.CURRENT_CHAT_CONTEXT.parse_mode = parseMode;
 
-    if (ENV.SHOW_REPLY_BUTTON && context.CURRENT_CHAT_CONTEXT.message_id) {
-      try {
-        await deleteMessageFromTelegramWithContext(context)(context.CURRENT_CHAT_CONTEXT.message_id);
-        context.CURRENT_CHAT_CONTEXT.message_id = null;
-        context.CURRENT_CHAT_CONTEXT.reply_markup = {
-          keyboard: [[{ text: "/new" }, { text: "/redo" }]],
-          selective: true,
-          resize_keyboard: true,
-          one_time_keyboard: true
-        };
-      } catch (e) {
-        console.error(e);
-      }
+    // ASR UX優化: 如果有語音轉錄且設定為顯示，整合到 LLM 回覆中
+    let finalAnswer = answer;
+    if (context.voiceTranscription && ENV.USER_CONFIG.SHOW_TRANSCRIPTION) {
+      finalAnswer = `🎤 ${context.voiceTranscription}\n\n${answer}`;
     }
 
-    if (nextEnableTime && nextEnableTime > Date.now()) {
-      await new Promise((resolve) => setTimeout(resolve, nextEnableTime - Date.now()));
-    }
+    // 發送最終文字回覆 (包含 Stream 模式的最後一次更新)
+    await sendMessageToTelegramWithContext(context)(finalAnswer);
 
     // 檢查是否需要語音回覆
     const chatId = context.CURRENT_CHAT_CONTEXT.chat_id;
@@ -411,7 +433,7 @@ export async function chatWithLLM(params, context, modifier) {
     if (replyMode === 'voice' && ENV.ENABLE_VOICE_REPLY !== 'false') {
       try {
         console.log('[TTS] Generating voice reply...');
-        // 使用 TTS 轉換為語音
+        // 使用 TTS 轉換為語音 (只讀 LLM 的回覆部分，不讀轉錄稿)
         const { textToSpeech, sendVoiceMessage } = await import('../features/tts.js');
         const audioBlob = await textToSpeech(answer);
         await sendVoiceMessage(
@@ -423,13 +445,58 @@ export async function chatWithLLM(params, context, modifier) {
         return null;
       } catch (error) {
         console.error('[TTS] Error:', error);
-        // TTS 失敗時降級為文字回覆
-        return sendMessageToTelegramWithContext(context)(answer);
+        // TTS 失敗時降級為文字回覆 (這裡可能已經發送過文字了，不再重複發送，或者只發送錯誤提示?)
+        // 由於上面已經 await sendMessageToTelegramWithContext(context)(finalAnswer); 發送了文字
+        // 這裡如果 TTS 失敗，其實用戶已經看到文字了，不需要再做什麼，或者可以發個 log。
+        // 原本的邏輯是: 如果 TTS 成功 -> return null (不發文字? 不，原本是 "亦或是" 的關係嗎?)
+        // 原本: msgChatWithLLM -> chatWithLLM -> return (如果 TTS 成功 return null，否則 return message)
+        // 但現在我強制先發送了文字。
+
+        // 如果現在是 Voice Mode:
+        // 1. Send Text (Transcript + Answer) [DONE above]
+        // 2. Send Voice (Answer only)
+
+        // 用戶可能會收到兩條訊息? 
+        // 舊邏輯: 如果 Voice Mode 成功 -> 只發語音? 讓我們回頭確認一下舊代碼。
+        // 舊代碼: if (voice) { sendVoice; return null; } else { return sendText; }
+        // 這意味著在 Voice Mode 下，舊代碼 *不會* 發送文字訊息!
+
+        // 可是現在我們希望顯示 Transcript。
+        // 如果 Voice Mode 下只發語音，那 Transcript 就不會顯示了!
+        // 所以在 Voice Mode 下，我們應該 *也要* 發送文字 (包含 Transcript) ?
+        // 或者語音訊息的 Caption 包含 Transcript? 語音訊息可以帶 Caption 嗎? 可以 (sendVoice 支援 caption)。
+
+        // 讓我們調整策略:
+        // 如果是 Voice Mode:
+        //   發送語音訊息，並把 finalAnswer (含 Transcript) 設為 Caption?
+        //   Telegram Voice caption 長度限制 1024 字元。 LLM 回覆可能很長。
+        //   如果太長，可能要分開。
+
+        // 簡單做法:
+        // 總是發送文字訊息 (finalAnswer)。
+        // 如果是 Voice Mode，額外發送語音訊息。
+
+        // 這樣用戶會收到:
+        // 1. 文字: "🎤 Transcript \n\n Answer"
+        // 2. 語音: "Answer (audio)"
+
+        // 這似乎是合理的 UX。
+
+        // 所以:
+        // 1. await sendMessageToTelegramWithContext(context)(finalAnswer); (已執行)
+        // 2. if (voice) { sendVoice(answer); }
+
+        // 不需要 return null 來阻止發送文字，因為文字已經發送了。
+        // 我們只需要確保函式最後回傳正確的東西。
+        // chatWithLLM 原本回傳 Response object。
+        // sendMessageToTelegramWithContext 回傳 Response object。
+
+        return null;
       }
-    } else {
-      // 文字回覆
-      return sendMessageToTelegramWithContext(context)(answer);
     }
+
+    return null;
+
   } catch (e) {
     let errMsg = `Error: ${e.message}`;
     if (errMsg.length > 2048) {

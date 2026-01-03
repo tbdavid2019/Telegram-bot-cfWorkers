@@ -107,7 +107,7 @@ export class UserConfig {
   // -- 語音功能配置 --
   // 語音轉錄 (ASR)
   ENABLE_VOICE_TRANSCRIPTION = false;
-  SHOW_TRANSCRIPTION = false;
+  SHOW_TRANSCRIPTION = true;
   ASR_API_KEY = null;
   ASR_API_BASE = "https://api.groq.com/openai/v1";
   ASR_MODEL = "whisper-large-v3";
