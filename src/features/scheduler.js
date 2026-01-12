@@ -78,15 +78,16 @@ export async function handleScheduled(event, env, ctx) {
  * 執行每日匯總
  */
 async function runDailySummary(env, token, todayDate) {
-    // 查詢範圍: 今天的 00:00 到 23:59 (Taipei Time)
+    // 查詢範圍: 今天的 06:00 到 明天的 06:00 (Taipei Time)
     const startOfDay = new Date(todayDate);
-    startOfDay.setUTCHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(6, 0, 0, 0);
 
     const endOfDay = new Date(todayDate);
-    endOfDay.setUTCHours(23, 59, 59, 999);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+    endOfDay.setUTCHours(6, 0, 0, 0);
 
     // 轉回 UTC 給 API 使用
-    // startOfDay 是 Taipei 的 00:00，所以是 UTC 的前一天 16:00
+    // startOfDay 是 Taipei 的 06:00，所以 UTC 要減 8 小時
     const timeMin = new Date(startOfDay.getTime() - 8 * 60 * 60 * 1000).toISOString();
     const timeMax = new Date(endOfDay.getTime() - 8 * 60 * 60 * 1000).toISOString();
 
