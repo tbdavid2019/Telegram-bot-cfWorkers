@@ -1,9 +1,63 @@
 /**
  * Divination Features
- * 占卜功能（解答之書、奇門遁甲、淺草籤詩、唐詩）
+ * 占卜功能（解答之書、奇門遁甲、淺草籤詩、唐詩、梅花易數）
  */
 
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+
+/**
+ * 梅花易數占卜指令
+ * @param {Object} message - Telegram 訊息對象
+ * @param {string} command - 指令名稱
+ * @param {string} subcommand - 要詢問的問題
+ * @param {Object} context - 上下文對象
+ */
+export async function commandMeiHua(message, command, subcommand, context) {
+  const question = (subcommand || '').trim();
+  if (!question) {
+    return sendMessageToTelegramWithContext(context)('錯誤: 請在指令後面輸入要詢問的問題。');
+  }
+
+  const url = 'https://qi.david888.com/api/meihua-question';
+  const payload = {
+    question,
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const text = await response.text();
+
+    if (!(text.startsWith('{') && text.endsWith('}'))) {
+      return sendMessageToTelegramWithContext(context)(`錯誤: API回應非JSON，內容: ${text}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。內容: ${text}`);
+    }
+
+    if (!data.success) {
+      const msg = data.message || '未知錯誤';
+      return sendMessageToTelegramWithContext(context)(`梅花易數服務回應失敗：${msg}`);
+    }
+
+    const ans = (data.answer || '').trim();
+
+    let reply = `【梅花易數】\n問題：${question}\n\n`;
+    reply += ans ? ans : '（無回覆內容）';
+
+    return sendMessageToTelegramWithContext(context)(reply);
+  } catch (e) {
+    return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
+  }
+}
 
 /**
  * 奇門遁甲查詢指令

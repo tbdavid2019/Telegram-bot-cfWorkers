@@ -14,6 +14,7 @@ import {
 } from '../features/dictionary.js';
 import {
   commandQimen,
+  commandMeiHua,
   commandTempleOracleJP,
   commandTangPoetry,
   commandAnswerBook,
@@ -66,6 +67,7 @@ export const commandSortList = [
   "/new",           // 新對話 
   "/bo",            // 解答之書原版
   "/qi",            // 奇門遁甲
+  "/mei",           // 梅花易數
   "/oracle",        // 淺草籤詩
   "/poetry",        // 唐詩
   "/law",           // 法律問答
@@ -141,6 +143,11 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandQimen,
     description: "奇門遁甲問事 - 使用: /qi [問題]"
+  },
+  "/mei": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandMeiHua,
+    description: "梅花易數占卜 - 使用: /mei [問題]"
   },
   "/oracle": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
