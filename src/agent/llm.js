@@ -74,7 +74,6 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     params.message = modifierData.message;
   }
 
-  // 🆕 動態生成指令系統提示詞
   let commandPrompt = '';
   if (ENV.ENABLE_COMMAND_DISCOVERY) {
     try {
@@ -91,12 +90,24 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     console.log('⚠️ [Command Discovery] Feature is disabled (ENABLE_COMMAND_DISCOVERY = false)');
   }
 
+  let memoryPrompt = '';
+  if (ENV.USER_CONFIG.ENABLE_LONG_TERM_MEMORY) {
+    try {
+      const { getCombinedMemory } = await import('../features/memory.js');
+      const userId = context.SHARE_CONTEXT.chatHistoryKey.split(':').pop();
+      memoryPrompt = await getCombinedMemory(userId);
+      console.log('🧠 [Memory] Long-term memory loaded, length:', memoryPrompt.length);
+    } catch (error) {
+      console.error('❌ [Memory] Failed to load long-term memory:', error);
+    }
+  }
+
   const llmParams = {
     ...params,
     history,
-    // 將指令提示詞附加到系統訊息
     prompt: context.USER_CONFIG.SYSTEM_INIT_MESSAGE +
-      (commandPrompt ? '\n\n' + commandPrompt : '')
+      (commandPrompt ? '\n\n' + commandPrompt : '') +
+      (memoryPrompt ? '\n\n' + memoryPrompt : '')
   };
 
   let answer = await llm(llmParams, context, onStream);

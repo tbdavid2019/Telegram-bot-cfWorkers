@@ -93,6 +93,11 @@ TTS_VOICE = "autumn"  # autumn, spring, summer, winter
 TTS_SPEED = "1.0"
 TTS_FORMAT = "wav"
 
+# 長期記憶功能設定
+ENABLE_LONG_TERM_MEMORY = "false"
+MEMORY_STORAGE_MODE = "kv"
+MEMORY_AUTO_SAVE = "true"
+
 # LLM Profiles - 使用 apiKeyEnv 參照環境變數
 LLM_PROFILES = '''
 {
@@ -127,6 +132,17 @@ LLM_PROFILES = '''
 [[env.aws.kv_namespaces]]
 binding = "DATABASE"
 id = "YOUR-KV-NAMESPACE-ID"
+
+# ============================================================
+# R2 Bucket 綁定（選用 - 僅當使用 R2 儲存模式時需要）
+# 使用方式：
+# 1. 在 Cloudflare Dashboard 建立 R2 bucket
+# 2. 取消下方註解並填入 bucket 名稱
+# 3. 設定 MEMORY_STORAGE_MODE = "r2"
+# ============================================================
+# [[env.aws.r2_buckets]]
+# binding = "MEMORY_BUCKET"
+# bucket_name = "telegram-bot-memories"
 
 # ============================================================
 # Bot 2: tgbotchatgpt (oli_cerebrum_bot)
@@ -187,6 +203,11 @@ WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
 DEFAULT_LLM_PROFILE = "openai"
 AI_PROVIDER = "openai"
 
+# 長期記憶功能設定
+ENABLE_LONG_TERM_MEMORY = "false"
+MEMORY_STORAGE_MODE = "kv"
+MEMORY_AUTO_SAVE = "true"
+
 # LLM Profiles - 使用 apiKeyEnv 參照環境變數，不直接存放 API Key
 LLM_PROFILES = '''
 {
@@ -221,3 +242,14 @@ LLM_PROFILES = '''
 [[env.chatgpt.kv_namespaces]]
 binding = "DATABASE"
 id = "YOUR-KV-NAMESPACE-ID"
+
+# ============================================================
+# R2 Bucket 綁定（選用 - 僅當使用 R2 儲存模式時需要）
+# 使用方式：
+# 1. 在 Cloudflare Dashboard 建立 R2 bucket
+# 2. 取消下方註解並填入 bucket 名稱
+# 3. 設定 MEMORY_STORAGE_MODE = "r2"
+# ============================================================
+# [[env.chatgpt.r2_buckets]]
+# binding = "MEMORY_BUCKET"
+# bucket_name = "telegram-bot-memories"

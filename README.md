@@ -4,6 +4,58 @@
 
 ## 🆕 最新功能
 
+### 🧠 長期記憶功能 (2026-01-29)
+
+**讓 Bot 記住你的身份、偏好與對話內容！**
+
+#### 功能特點
+
+- ✅ **雙層記憶系統** - 全域知識庫 + 個人記憶
+- ✅ **自動記憶** - 對話後自動保存重要資訊
+- ✅ **隱私控制** - 使用者可隨時查看/清除自己的記憶
+- ✅ **雙儲存模式** - KV（預設，免費）+ R2（可選，需綁卡）
+- ✅ **完全免費** - KV 模式完全免費使用
+
+#### 支援的指令
+
+- 📚 `/memory` - 查看你的長期記憶（全域知識庫 + 個人記憶）
+- 🗑️ `/memoryclear` - 清除個人記憶（全域知識庫保留）
+- 🌍 `/memoryglobal` - 查看全域知識庫（所有用戶共享的知識）
+
+#### 快速啟用
+
+在 `wrangler.toml` 中設定：
+
+```toml
+[env.aws.vars]
+# 開啟長期記憶功能
+ENABLE_LONG_TERM_MEMORY = "true"
+
+# 儲存模式: kv 或 r2（預設 kv，免費）
+MEMORY_STORAGE_MODE = "kv"
+
+# 自動保存記憶
+MEMORY_AUTO_SAVE = "true"
+```
+
+#### 記憶內容範例
+
+**全域知識庫**（所有用戶共享）：
+- 家庭資訊、公開設定、共享知識
+
+**個人記憶**（每人專屬）：
+- 身份與角色、偏好設定、興趣與習慣、重要對話記錄
+
+#### 技術架構
+
+- **記憶模組** (`src/features/memory.js`) - KV/R2 讀寫核心
+- **自動注入** (`src/agent/llm.js`) - 記憶自動注入到 LLM 系統提示詞
+- **指令系統** (`src/features/memory-commands.js`) - 查看/清除記憶
+
+詳細說明請參考 [MEMORY_README.md](./MEMORY_README.md) | 格式設計請參考 [MEMORY_FORMAT.md](./MEMORY_FORMAT.md)
+
+---
+
 ### 🔧 Tool Calling 模式 - 家庭管理智能助手 (2026-01-02)
 
 **讓 LLM 自動獲取並分析家庭收支與行程資料！**
@@ -144,6 +196,7 @@ ENABLE_COMMAND_DISCOVERY = "true"
 - [環境變數完整說明](#-環境變數完整說明)
 - [快速開始](#-快速開始)
 - [多 Bot 部署指南](#-多-bot-部署指南)
+- [長期記憶功能](#-長期記憶功能設定)
 - [LLM Profile 多模型切換](#-llm-profile-多模型切換功能)
 - [圖片生成設定](#多供應商圖片生成設定指南)
 - [功能指令說明](#-功能指令說明)
@@ -198,6 +251,9 @@ ENABLE_COMMAND_DISCOVERY = "true"
 | | `infoapiKey` | IPInfo IP 查詢 |
 | | `cwaapiKey` | 臺灣天氣查詢 |
 | | `FMPapiKey` | 國際股市查詢 |
+| **長期記憶** | `ENABLE_LONG_TERM_MEMORY` | 啟用長期記憶功能 (true/false) |
+| | `MEMORY_STORAGE_MODE` | 儲存模式 (kv/r2，預設 kv) |
+| | `MEMORY_AUTO_SAVE` | 自動保存記憶 (true/false) |
 | **其他** | `LANGUAGE` | 語言設定 (zh-TW) |
 | | `ENABLE_COMMAND_DISCOVERY` | 啟用 LLM 指令發現 (true/false) |
 | | `ENABLE_LOCATION_SERVICE` | 啟用位置服務 (true/false) |
@@ -397,7 +453,18 @@ MY_SETTING = "true"
 | `CHAT_COMPLETE_API_TIMEOUT` | ❌ | API 請求超時秒數 | `60` |
 | `DEFAULT_LLM_PROFILE` | ❌ | 預設使用的 LLM Profile | `openai` |
 
-| `DEFAULT_LLM_PROFILE` | ❌ | 預設使用的 LLM Profile | `openai` |
+## 長期記憶功能設定
+
+| 變數名稱 | 必填 | 說明 | 預設值 |
+|----------|------|------|--------|
+| `ENABLE_LONG_TERM_MEMORY` | ❌ | 啟用長期記憶功能 | `false` |
+| `MEMORY_STORAGE_MODE` | ❌ | 儲存模式：`kv`（免費）或 `r2`（需綁卡） | `kv` |
+| `MEMORY_AUTO_SAVE` | ❌ | 對話後自動保存記憶 | `true` |
+
+**詳細說明**：
+- **KV 模式**：使用現有的 KV namespace，完全免費
+- **R2 模式**：需在 Cloudflare 綁定信用卡，並建立 R2 bucket
+- 完整使用說明請參考 [MEMORY_README.md](./MEMORY_README.md)
 
 ---
 
@@ -477,6 +544,7 @@ npx wrangler deploy --env chatgpt
 ---
 
 ## 本次更新重點
+- 🧠 **長期記憶功能**：Bot 現在可以記住用戶身份、偏好與對話內容，支援 KV/R2 雙儲存模式
 - 🆕 **Google Maps 附近地點查詢**：支援傳送位置或使用 `/gps` 查詢附近的加油站、餐廳、便利商店等
 - 🆕 **`/llmchange` 指令**：支援在多個 OpenAI API 相容服務之間快速切換（Groq、DeepSeek、OpenAI 等）
 - `/img` 指令可直接引用訊息內或回覆的 Telegram 照片，缺少圖片生成器時會友善回報
@@ -1346,6 +1414,8 @@ pnpm run build:full
 - `src/features/search.js` (60行) - 網路搜尋 (DuckDuckGo)
 - `src/features/image-gen.js` (293行) - AI 圖片生成 (OpenAI/Gemini)
 - `src/features/system.js` (388行) - 系統指令 (help, new, setenv, version, system, redo)
+- `src/features/memory.js` (180行) - 長期記憶 (KV/R2 雙儲存模式)
+- `src/features/memory-commands.js` (55行) - 記憶指令 (/memory, /memoryclear, /memoryglobal)
 
 **AI Agent 模組 (100%)**
 - `src/agent/stream.js` - SSE 串流處理

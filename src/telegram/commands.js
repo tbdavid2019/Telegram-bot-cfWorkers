@@ -58,6 +58,11 @@ import {
   commandCreateCalendar,
   commandDeleteCalendar
 } from '../features/google-calendar.js';
+import {
+  commandViewMemory,
+  commandClearMemory,
+  commandViewGlobalMemory
+} from '../features/memory-commands.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -78,6 +83,8 @@ export const commandSortList = [
   "/setimg",        // 設定圖片生成模型
   "/dictcn",        // 中文字典 (要加參數)
   "/dicten",        // 英文字典 (要加參數)
+  "/memory",        // 查看長期記憶
+  "/memoryclear",   // 清除個人記憶
   "/system",        // 查看系統狀態
   "/stock2",        // 美國國際股市 (要加參數)
   "/stock",         // 台灣股市 (要加參數)
@@ -88,7 +95,6 @@ export const commandSortList = [
   "/password",      // 隨機密碼
   "/llmchange",     // 切換 LLM
   "/voicereply",    // 語音回覆設定
-  // "/budget" 和 "/schedule" 已改為內部工具，不再顯示在指令列表
   "/getid",         // 取得 ID
   "/getgroupid",    // 取得群組 ID
   "/help"           // 幫助
@@ -269,6 +275,22 @@ export const commandHandlers = {
     scopes: ["all_private_chats"],
     fn: commandDeleteCalendar,
     description: "刪除家庭行程 (Internal - Calendar)"
+  },
+
+  "/memory": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandViewMemory,
+    description: "查看長期記憶"
+  },
+  "/memoryclear": {
+    scopes: ["all_private_chats"],
+    fn: commandClearMemory,
+    description: "清除個人記憶"
+  },
+  "/memoryglobal": {
+    scopes: ["all_private_chats", "all_chat_administrators"],
+    fn: commandViewGlobalMemory,
+    description: "查看全域知識庫"
   },
 
   // 系統指令

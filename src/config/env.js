@@ -131,6 +131,11 @@ export class UserConfig {
   ENABLE_HOURLY_REMINDER = false;
   FAMILY_GROUP_ID = null;
 
+  // -- 長期記憶功能 --
+  ENABLE_LONG_TERM_MEMORY = false; // 開啟長期記憶功能
+  MEMORY_STORAGE_MODE = "kv"; // 儲存模式: kv 或 r2（預設 kv）
+  MEMORY_AUTO_SAVE = true; // 自動保存記憶（對話結束後自動更新）
+
 }
 
 export class Environment {
@@ -230,6 +235,7 @@ export class Environment {
 export const ENV = new Environment();
 export let DATABASE = null;
 export let API_GUARD = null;
+export let WORKER_ENV = null;
 export const CUSTOM_COMMAND = {};
 export const CUSTOM_COMMAND_DESCRIPTION = {};
 export const CONST = {
@@ -352,6 +358,7 @@ export function mergeEnvironment(target, source) {
 export function initEnv(env, i18n) {
   DATABASE = env.DATABASE;
   API_GUARD = env.API_GUARD;
+  WORKER_ENV = env;
   const customCommandPrefix = "CUSTOM_COMMAND_";
   const customCommandDescriptionPrefix = "COMMAND_DESCRIPTION_";
   for (const key of Object.keys(env)) {
