@@ -56,6 +56,16 @@ async function setToKV(key, value) {
   }
 }
 
+async function deleteFromKV(key) {
+  try {
+    await DATABASE.delete(key);
+    return true;
+  } catch (error) {
+    console.error(`[Memory] KV delete error for key ${key}:`, error);
+    return false;
+  }
+}
+
 async function getFromR2(path, env) {
   try {
     const resolvedEnv = env ?? WORKER_ENV;
@@ -83,6 +93,21 @@ async function setToR2(path, value, env) {
     return true;
   } catch (error) {
     console.error(`[Memory] R2 write error for path ${path}:`, error);
+    return false;
+  }
+}
+
+async function deleteFromR2(path, env) {
+  try {
+    const resolvedEnv = env ?? WORKER_ENV;
+    if (!resolvedEnv || !resolvedEnv.MEMORY_BUCKET) {
+      console.error('[Memory] R2 bucket not bound');
+      return false;
+    }
+    await resolvedEnv.MEMORY_BUCKET.delete(path);
+    return true;
+  } catch (error) {
+    console.error(`[Memory] R2 delete error for path ${path}:`, error);
     return false;
   }
 }
@@ -154,8 +179,13 @@ export async function clearUserMemory(userId, env = null) {
     return false;
   }
 
-  const defaultContent = DEFAULT_USER_MEMORY_TEMPLATE(userId);
-  return await saveUserMemory(userId, defaultContent, env);
+  const mode = ENV.USER_CONFIG.MEMORY_STORAGE_MODE || 'kv';
+
+  if (mode === 'r2') {
+    return await deleteFromR2(`memory/user_${userId}.md`, env);
+  } else {
+    return await deleteFromKV(MEMORY_USER_PREFIX + userId);
+  }
 }
 
 export async function getCombinedMemory(userId, env = null) {
@@ -185,7 +215,6 @@ export async function updateMemoryFromConversation(userId, userMessage, assistan
     return false;
   }
 
-  const currentMemory = await getUserMemory(userId, env);
   const timestamp = new Date().toISOString().split('T')[0];
   
   const updateSection = `
@@ -195,7 +224,18 @@ export async function updateMemoryFromConversation(userId, userMessage, assistan
 **助手**: ${assistantResponse.substring(0, 200)}${assistantResponse.length > 200 ? '...' : ''}
 `;
 
-  const updatedMemory = currentMemory + updateSection;
-  
-  return await saveUserMemory(userId, updatedMemory, env);
+  const [currentUserMemory, currentGlobalMemory] = await Promise.all([
+    getUserMemory(userId, env),
+    getGlobalMemory(env)
+  ]);
+
+  const updatedUserMemory = currentUserMemory + updateSection;
+  const updatedGlobalMemory = currentGlobalMemory + updateSection;
+
+  const [userSaved, globalSaved] = await Promise.all([
+    saveUserMemory(userId, updatedUserMemory, env),
+    saveGlobalMemory(updatedGlobalMemory, env)
+  ]);
+
+  return userSaved && globalSaved;
 }

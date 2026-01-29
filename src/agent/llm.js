@@ -14,6 +14,52 @@ function tokensCounter() {
   };
 }
 
+function buildMemoryUpdatePrompt(userId, userMessage, assistantResponse, currentUserMemory, currentGlobalMemory) {
+  const today = new Date().toISOString().split('T')[0];
+  return `You are a memory editor for a Telegram bot.
+Update both user memory and global memory based on the latest conversation.
+
+Rules:
+- Return JSON only. No markdown, no code fences.
+- Keep the existing section structure and headings.
+- Update the "最後更新" date to ${today}.
+- Only store stable facts, preferences, and long-term context.
+- Do NOT store transient requests or full chat logs.
+- User memory is personal to user ${userId}.
+- Global memory is shared knowledge (family info, shared settings, public facts).
+- Keep each memory concise.
+
+Current user memory:
+<<<USER_MEMORY
+${currentUserMemory}
+USER_MEMORY
+
+Current global memory:
+<<<GLOBAL_MEMORY
+${currentGlobalMemory}
+GLOBAL_MEMORY
+
+Latest conversation:
+User: ${userMessage}
+Assistant: ${assistantResponse}
+
+Return JSON with this shape:
+{"userMemory":"...","globalMemory":"..."}`;
+}
+
+function extractJsonObject(text) {
+  if (!text || typeof text !== 'string') return null;
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  const candidate = text.slice(start, end + 1);
+  try {
+    return JSON.parse(candidate);
+  } catch (e) {
+    return null;
+  }
+}
+
 /**
  * 載入歷史對話記錄
  */
@@ -354,6 +400,50 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       } catch (error) {
         console.error('❌ [Command Discovery] Failed to process command invocations:', error);
       }
+    }
+  }
+
+  if (ENV.USER_CONFIG.ENABLE_LONG_TERM_MEMORY && ENV.USER_CONFIG.MEMORY_AUTO_SAVE) {
+    try {
+      if (typeof message === 'string' && typeof answer === 'string' && message.trim()) {
+        const {
+          getUserMemory,
+          getGlobalMemory,
+          saveUserMemory,
+          saveGlobalMemory,
+          updateMemoryFromConversation
+        } = await import('../features/memory.js');
+        const userId = context.SHARE_CONTEXT.chatHistoryKey.split(':').pop();
+        const [currentUserMemory, currentGlobalMemory] = await Promise.all([
+          getUserMemory(userId),
+          getGlobalMemory()
+        ]);
+        const memoryPrompt = buildMemoryUpdatePrompt(
+          userId,
+          message,
+          answer,
+          currentUserMemory,
+          currentGlobalMemory
+        );
+        const memoryResponse = await llm({
+          message: memoryPrompt,
+          history: [],
+          prompt: 'You are a strict memory editor. Output JSON only.'
+        }, context, null);
+        const parsed = extractJsonObject(memoryResponse);
+        const nextUserMemory = parsed?.userMemory;
+        const nextGlobalMemory = parsed?.globalMemory;
+        if (typeof nextUserMemory === 'string' && typeof nextGlobalMemory === 'string') {
+          await Promise.all([
+            saveUserMemory(userId, nextUserMemory),
+            saveGlobalMemory(nextGlobalMemory)
+          ]);
+        } else {
+          await updateMemoryFromConversation(userId, message, answer);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [Memory] Auto-save failed:', error);
     }
   }
 
