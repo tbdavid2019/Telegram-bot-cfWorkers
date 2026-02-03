@@ -4,6 +4,7 @@ import { loadChatLLM } from './agents.js';
 
 // 從環境變數引入
 import { ENV, DATABASE } from '../config/env.js';
+import { resolveUserTimeZone, zonedTimeToUtc } from '../utils/timezone.js';
 
 /**
  * Token 計數器（簡單版本，以字元數計算）
@@ -272,6 +273,7 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
           } else if (command === '/scheduleadd') {
             console.log('🤖 [Tool Calling] Adding calendar event...');
             const { createCalendarEvent } = await import('../features/google-calendar.js');
+            const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
 
             // 解析 JSON 參數
             const params = JSON.parse(args);
@@ -282,6 +284,9 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
             // 構建全天活動格式（使用 date 而不是 dateTime）
             const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const endDate = new Date(Date.UTC(year, month - 1, day));
+            endDate.setUTCDate(endDate.getUTCDate() + 1);
+            const endDateStr = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`;
 
             console.log('🤖 [Tool Calling] All-day event date:', dateStr);
 
@@ -290,11 +295,11 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
               summary: params.event,
               start: {
                 date: dateStr,
-                timeZone: 'Asia/Taipei'
+                timeZone
               },
               end: {
-                date: dateStr,
-                timeZone: 'Asia/Taipei'
+                date: endDateStr,
+                timeZone
               },
               description: `對象：${params.targetUser}`
             };
@@ -309,28 +314,15 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
             if (params.time) {
               const [hour, minute] = params.time.split(':').map(Number);
-              const dateTimeStr = `${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+              const startUtc = zonedTimeToUtc(year, month, day, hour, minute, 0, timeZone);
+              const endUtc = new Date(startUtc.getTime() + 60 * 60 * 1000);
               eventData.start = {
-                dateTime: dateTimeStr,
-                timeZone: 'Asia/Taipei'
+                dateTime: startUtc.toISOString(),
+                timeZone
               };
-              // 默認一小時時長
-              const endDateTime = new Date(new Date(dateTimeStr).getTime() + 60 * 60 * 1000);
-              const endDateTimeStr = endDateTime.toISOString().replace(/\.\d{3}Z$/, ''); // 簡單處理，最好用 toLocaleString 轉回 ISO 格式的部分
-              // 由於 Google Calendar API 對於 dateTime 接受 ISO String (帶時區 offset) 或者這種格式
-              // 為了保險，我們重新構建一個帶時區的 ISO string
-              // 這裡簡單加上 +08:00
-              eventData.start.dateTime = `${dateTimeStr}+08:00`;
-
-              const endYear = endDateTime.getFullYear();
-              const endMonth = String(endDateTime.getMonth() + 1).padStart(2, '0');
-              const endDay = String(endDateTime.getDate()).padStart(2, '0');
-              const endHour = String(endDateTime.getHours()).padStart(2, '0');
-              const endMinute = String(endDateTime.getMinutes()).padStart(2, '0');
-              const endSecond = String(endDateTime.getSeconds()).padStart(2, '0');
               eventData.end = {
-                dateTime: `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}+08:00`,
-                timeZone: 'Asia/Taipei'
+                dateTime: endUtc.toISOString(),
+                timeZone
               };
 
               dataText = `✅ 已成功新增行程：${params.event}\n`;

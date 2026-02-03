@@ -125,6 +125,8 @@ export class UserConfig {
   FAMILY_SHEET_ID = null;
   FAMILY_CALENDAR_ID = null;
   GOOGLE_SHEETS_SERVICE_ACCOUNT = null;
+  // 使用者時區 (IANA 時區字串，例如 Asia/Taipei)
+  USER_TIMEZONE = "Asia/Taipei";
   // -- 排程與通知 --
   ENABLE_SCHEDULED_NOTIFICATIONS = false;
   DAILY_SUMMARY_TIME = 6; // 每日彙總時間 (小時 0-23)
@@ -289,6 +291,7 @@ const ENV_TYPES = {
   FAMILY_SHEET_ID: "string",
   FAMILY_CALENDAR_ID: "string",
   GOOGLE_SHEETS_SERVICE_ACCOUNT: "string",
+  USER_TIMEZONE: "string",
   // 排程與通知
   ENABLE_SCHEDULED_NOTIFICATIONS: "boolean",
   DAILY_SUMMARY_TIME: "number",

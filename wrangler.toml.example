@@ -35,6 +35,7 @@ TELEGRAM_AVAILABLE_TOKENS = "YOUR-TELEGRAM-BOT-TOKEN"
 LANGUAGE = "zh-TW"
 I_AM_A_GENEROUS_PERSON = "true"
 CHAT_COMPLETE_API_TIMEOUT = "60000"
+USER_TIMEZONE = "Asia/Taipei" # 使用者時區 (IANA 格式，如 "America/Los_Angeles")
 
 # 群組聊天設定
 GROUP_CHAT_BOT_ENABLE = "true"
@@ -161,6 +162,7 @@ TELEGRAM_BOT_NAME = "oli_cerebrum_bot"
 LANGUAGE = "zh-TW"
 I_AM_A_GENEROUS_PERSON = "false"
 CHAT_COMPLETE_API_TIMEOUT = "60000"
+USER_TIMEZONE = "Asia/Taipei" # 使用者時區 (IANA 格式，如 "America/Los_Angeles")
 
 # 群組聊天設定
 GROUP_CHAT_BOT_ENABLE = "true"

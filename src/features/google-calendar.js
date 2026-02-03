@@ -1,6 +1,13 @@
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 import { getUserMapping, resolveUserMention } from './google-sheets.js';
 import { ENV } from '../config/env.js';
+import {
+    resolveUserTimeZone,
+    getZonedDayRangeUtc,
+    getZonedDayRangeUtcByOffset,
+    getZonedWeekRangeUtc,
+    zonedTimeToUtc
+} from '../utils/timezone.js';
 
 // 全域快取
 let GOOGLE_CALENDAR_ACCESS_TOKEN = null;
@@ -39,13 +46,14 @@ async function authenticateGoogleCalendar(env) {
 export async function listCalendarEvents(env, timeMin, timeMax) {
     const token = await authenticateGoogleCalendar(env);
     const calendarId = ENV.USER_CONFIG.FAMILY_CALENDAR_ID;
+    const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
     console.log(`[Google Calendar] Querying Calendar: ${calendarId}, Min: ${timeMin}, Max: ${timeMax}`);
 
     let url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?`;
     const params = new URLSearchParams({
         orderBy: 'startTime',
         singleEvents: 'true',
-        timeZone: 'Asia/Taipei'
+        timeZone
     });
 
     if (timeMin) params.append('timeMin', timeMin);
@@ -117,39 +125,36 @@ async function deleteCalendarEvent(env, eventId) {
  * 解析自然語言時間 (簡單版)
  */
 function parseNaturalTime(text) {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const nowUtc = new Date();
+    const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
+    const todayRange = getZonedDayRangeUtc(nowUtc, timeZone);
 
     // 「今天」
     if (text.includes('今天') || text.includes('今日')) {
         return {
-            start: new Date(today),
-            end: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+            start: todayRange.startUtc,
+            end: todayRange.endUtc
         };
     }
 
     // 「明天」
     if (text.includes('明天') || text.includes('明日')) {
-        const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+        const tomorrowRange = getZonedDayRangeUtcByOffset(nowUtc, timeZone, 1);
         return {
-            start: tomorrow,
-            end: new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000)
+            start: tomorrowRange.startUtc,
+            end: tomorrowRange.endUtc
         };
     }
 
     // 「本週」
     if (text.includes('本週') || text.includes('這週')) {
-        const dayOfWeek = now.getDay();
-        const startOfWeek = new Date(today.getTime() - dayOfWeek * 24 * 60 * 60 * 1000);
-        const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000);
-        return { start: startOfWeek, end: endOfWeek };
+        const weekRange = getZonedWeekRangeUtc(nowUtc, timeZone);
+        return { start: weekRange.startUtc, end: weekRange.endUtc };
     }
 
     // 預設：今天到未來 7 天
-    return {
-        start: today,
-        end: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-    };
+    const futureRange = getZonedDayRangeUtcByOffset(nowUtc, timeZone, 7);
+    return { start: todayRange.startUtc, end: futureRange.startUtc };
 }
 
 /**
@@ -165,6 +170,7 @@ export async function commandQueryCalendar(message, command, subcommand, context
     if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS !== true) return;
 
     try {
+        const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
         // 解析時間範圍
         const timeRange = parseNaturalTime(subcommand || '今天');
         const events = await listCalendarEvents(
@@ -182,8 +188,8 @@ export async function commandQueryCalendar(message, command, subcommand, context
             const start = event.start.dateTime || event.start.date;
             const startDate = new Date(start);
             const timeStr = event.start.dateTime
-                ? startDate.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : startDate.toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric' });
+                ? startDate.toLocaleString('zh-TW', { timeZone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : startDate.toLocaleDateString('zh-TW', { timeZone, month: 'numeric', day: 'numeric' });
 
             response += `**${timeStr}**\n`;
             response += `📌 ${event.summary || '(無標題)'}\n`;
@@ -204,23 +210,36 @@ export async function commandCreateCalendar(message, command, subcommand, contex
     if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS !== true) return;
 
     try {
+        const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
         // 參數格式：JSON {"date": "2026-01-02", "time": "15:00", "targetUser": "小茹", "event": "去好市多", "location": ""}
         const params = JSON.parse(subcommand);
 
-        // 建立事件資料
-        const startDateTime = `${params.date}T${params.time}:00+08:00`;
-        const endDateTime = new Date(new Date(startDateTime).getTime() + 60 * 60 * 1000).toISOString().replace('Z', '+08:00');
+        // 建立事件資料 (依使用者時區轉為 UTC)
+        const [yearRaw, monthRaw, dayRaw] = params.date.includes('/')
+            ? params.date.split('/')
+            : params.date.split('-');
+        const [hourRaw, minuteRaw] = params.time.split(':');
+        const year = parseInt(yearRaw, 10);
+        const month = parseInt(monthRaw, 10);
+        const day = parseInt(dayRaw, 10);
+        const hour = parseInt(hourRaw, 10);
+        const minute = parseInt(minuteRaw, 10);
+
+        const startUtc = zonedTimeToUtc(year, month, day, hour, minute, 0, timeZone);
+        const endUtc = new Date(startUtc.getTime() + 60 * 60 * 1000);
+        const startDateTime = startUtc.toISOString();
+        const endDateTime = endUtc.toISOString();
 
         const eventData = {
             summary: params.event,
             description: params.content || `對象：${params.targetUser}`,
             start: {
                 dateTime: startDateTime,
-                timeZone: 'Asia/Taipei'
+                timeZone
             },
             end: {
                 dateTime: endDateTime,
-                timeZone: 'Asia/Taipei'
+                timeZone
             },
             reminders: {
                 useDefault: false,

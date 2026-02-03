@@ -3,6 +3,11 @@ import { initEnv, ENV } from '../config/env.js';
 import { listCalendarEvents } from './google-calendar.js';
 import { getUserMapping, resolveUserMention } from './google-sheets.js';
 import { loadChatLLM } from '../agent/agents.js';
+import {
+    resolveUserTimeZone,
+    getZonedDayRangeUtc,
+    getZonedDateParts
+} from '../utils/timezone.js';
 
 /**
  * Handle Scheduled Event (Cron Trigger)
@@ -31,14 +36,14 @@ export async function handleScheduled(event, env, ctx) {
         return;
     }
 
-    // 2. 獲取當前時間 (UTC+8)
+    // 2. 獲取當前時間 (依使用者時區)
     const now = new Date();
-    // Cloudflare Workers run on UTC. We need to shift to Taipei Time (+8)
-    const taipeiTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    const currentHour = taipeiTime.getUTCHours();
-    const currentMinute = taipeiTime.getUTCMinutes(); // 雖然 cron 只有整點，但可以做 double check
+    const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
+    const zonedNow = getZonedDateParts(now, timeZone);
+    const currentHour = zonedNow.hour;
+    const currentMinute = zonedNow.minute; // 雖然 cron 只有整點，但可以做 double check
 
-    console.log(`⏱️ [Scheduler] Taipei Time: ${taipeiTime.toISOString()}, Hour: ${currentHour}`);
+    console.log(`⏱️ [Scheduler] TimeZone: ${timeZone}, Local: ${now.toLocaleString('zh-TW', { timeZone })}, Hour: ${currentHour}`);
 
     // 定義 Bot Token (取第一個可用的)
     // 注意: TELEGRAM_AVAILABLE_TOKENS 可能是字串 array 或 comma-separated string
@@ -62,13 +67,13 @@ export async function handleScheduled(event, env, ctx) {
     const summaryTime = ENV.USER_CONFIG.DAILY_SUMMARY_TIME || 6;
     if (currentHour === summaryTime) {
         console.log(`📅 [Scheduler] Running Daily Summary for hour ${summaryTime}...`);
-        tasks.push(runDailySummary(env, botToken, taipeiTime));
+        tasks.push(runDailySummary(env, botToken, now, timeZone));
     }
 
     // Check 2: 每小時提醒 (Hourly Reminder)
     if (ENV.USER_CONFIG.ENABLE_HOURLY_REMINDER === true) {
         console.log(`⏰ [Scheduler] Running Hourly Reminder...`);
-        tasks.push(runHourlyReminder(env, botToken, now));
+        tasks.push(runHourlyReminder(env, botToken, now, timeZone));
     }
 
     await Promise.all(tasks);
@@ -77,19 +82,11 @@ export async function handleScheduled(event, env, ctx) {
 /**
  * 執行每日匯總
  */
-async function runDailySummary(env, token, todayDate) {
-    // 查詢範圍: 今天的 06:00 到 明天的 06:00 (Taipei Time)
-    const startOfDay = new Date(todayDate);
-    startOfDay.setUTCHours(6, 0, 0, 0);
-
-    const endOfDay = new Date(todayDate);
-    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
-    endOfDay.setUTCHours(6, 0, 0, 0);
-
-    // 轉回 UTC 給 API 使用
-    // startOfDay 是 Taipei 的 06:00，所以 UTC 要減 8 小時
-    const timeMin = new Date(startOfDay.getTime() - 8 * 60 * 60 * 1000).toISOString();
-    const timeMax = new Date(endOfDay.getTime() - 8 * 60 * 60 * 1000).toISOString();
+async function runDailySummary(env, token, nowUtc, timeZone) {
+    // 查詢範圍: 使用者時區當天 00:00 ~ 24:00
+    const range = getZonedDayRangeUtc(nowUtc, timeZone);
+    const timeMin = range.startUtc.toISOString();
+    const timeMax = range.endUtc.toISOString();
 
     console.log(`📅 [Summary] Query range: ${timeMin} ~ ${timeMax}`);
 
@@ -117,7 +114,7 @@ async function runDailySummary(env, token, todayDate) {
             };
 
             // 3. 呼叫 AI
-            const aiMsg = await generateDailySummaryAI(events, weatherData, todayDate, context);
+            const aiMsg = await generateDailySummaryAI(events, weatherData, nowUtc, timeZone, context);
 
             // 發送給群組
             if (ENV.USER_CONFIG.FAMILY_GROUP_ID) {
@@ -130,12 +127,15 @@ async function runDailySummary(env, token, todayDate) {
         }
 
         // 整理通知內容 (Fallback)
-        const todayStr = `${todayDate.getUTCFullYear()}/${todayDate.getUTCMonth() + 1}/${todayDate.getUTCDate()}`;
+        const { year, month, day } = getZonedDateParts(nowUtc, timeZone);
+        const todayStr = `${year}/${month}/${day}`;
         let msg = `☀️ <b>早安！今天是 ${todayStr}</b>\n`;
         msg += `共有 ${events.length} 個行程事項：\n\n`;
 
         for (const ev of events) {
-            const timePart = ev.start.dateTime ? ev.start.dateTime.slice(11, 16) : '全天'; // 簡單取時間 HH:MM
+            const timePart = ev.start.dateTime
+                ? new Date(ev.start.dateTime).toLocaleTimeString('zh-TW', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false })
+                : '全天';
             msg += `🕒 <code>${timePart}</code>\n`;
             msg += `📌 <b>${escapeHtml(ev.summary)}</b>\n`;
             if (ev.location) msg += `📍 ${escapeHtml(ev.location)}\n`;
@@ -166,7 +166,7 @@ async function runDailySummary(env, token, todayDate) {
 /**
  * 執行每小時提醒
  */
-async function runHourlyReminder(env, token, nowUTC) {
+async function runHourlyReminder(env, token, nowUTC, timeZone) {
     // 查詢範圍: 現在 ~ 現在+1小時
     const timeMin = nowUTC.toISOString();
     const timeMax = new Date(nowUTC.getTime() + 60 * 60 * 1000).toISOString();
@@ -183,9 +183,12 @@ async function runHourlyReminder(env, token, nowUTC) {
 
         for (const ev of upcomingEvents) {
             const startTime = new Date(ev.start.dateTime);
-            // 轉成台北時間顯示
-            const tpTime = new Date(startTime.getTime() + 8 * 60 * 60 * 1000);
-            const timeStr = `${tpTime.getUTCHours().toString().padStart(2, '0')}:${tpTime.getUTCMinutes().toString().padStart(2, '0')}`;
+            const timeStr = startTime.toLocaleTimeString('zh-TW', {
+                timeZone,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
 
             let msg = `⏰ <b>提醒：行程即將開始！</b>\n\n`;
             msg += `📌 <b>${escapeHtml(ev.summary)}</b>\n`;
@@ -306,16 +309,22 @@ async function getWeather(locationName) {
     return null;
 }
 
-async function generateDailySummaryAI(events, weather, dateObj, context) {
-    const todayStr = `${dateObj.getUTCFullYear()}/${dateObj.getUTCMonth() + 1}/${dateObj.getUTCDate()}`;
+async function generateDailySummaryAI(events, weather, dateObj, timeZone, context) {
+    const { year, month, day } = getZonedDateParts(dateObj, timeZone);
+    const todayStr = `${year}/${month}/${day}`;
 
     // 簡化 Event Data
-    const simplifiedEvents = events.map(e => ({
-        time: e.start.dateTime ? e.start.dateTime.slice(11, 16) : 'All Day',
-        summary: e.summary,
-        location: e.location || '',
-        description: cleanDescription(e.description || '')
-    }));
+    const simplifiedEvents = events.map(e => {
+        const timeStr = e.start.dateTime
+            ? new Date(e.start.dateTime).toLocaleTimeString('zh-TW', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false })
+            : 'All Day';
+        return {
+            time: timeStr,
+            summary: e.summary,
+            location: e.location || '',
+            description: cleanDescription(e.description || '')
+        };
+    });
 
     const weatherPrompt = weather
         ? `天氣狀況：${weather.desc}\n氣溫範疇：${weather.minTemp}-${weather.maxTemp}°C (目前 ${weather.temp}°C)\n降雨機率：${weather.rainChance}%`
