@@ -133,8 +133,9 @@ async function runDailySummary(env, token, nowUtc, timeZone) {
         msg += `共有 ${events.length} 個行程事項：\n\n`;
 
         for (const ev of events) {
+            // 使用 toLocaleString 而非 toLocaleTimeString，確保包含月/日資訊
             const timePart = ev.start.dateTime
-                ? new Date(ev.start.dateTime).toLocaleTimeString('zh-TW', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false })
+                ? new Date(ev.start.dateTime).toLocaleString('zh-TW', { timeZone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
                 : '全天';
             msg += `🕒 <code>${timePart}</code>\n`;
             msg += `📌 <b>${escapeHtml(ev.summary)}</b>\n`;
@@ -183,8 +184,11 @@ async function runHourlyReminder(env, token, nowUTC, timeZone) {
 
         for (const ev of upcomingEvents) {
             const startTime = new Date(ev.start.dateTime);
-            const timeStr = startTime.toLocaleTimeString('zh-TW', {
+            // 使用 toLocaleString 而非 toLocaleTimeString，確保包含月/日資訊
+            const timeStr = startTime.toLocaleString('zh-TW', {
                 timeZone,
+                month: 'numeric',
+                day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
@@ -280,7 +284,7 @@ function cleanDescription(desc) {
 
 async function getWeather(locationName) {
     try {
-        const url = `https://wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
+        const url = `https://v2.wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
         const response = await fetch(url);
         const data = await response.json();
 
@@ -313,11 +317,12 @@ async function generateDailySummaryAI(events, weather, dateObj, timeZone, contex
     const { year, month, day } = getZonedDateParts(dateObj, timeZone);
     const todayStr = `${year}/${month}/${day}`;
 
-    // 簡化 Event Data
+    // 簡化 Event Data (包含完整日期時間，避免 AI 誤判為當天)
     const simplifiedEvents = events.map(e => {
+        // 使用 toLocaleString 而非 toLocaleTimeString，確保包含月/日資訊
         const timeStr = e.start.dateTime
-            ? new Date(e.start.dateTime).toLocaleTimeString('zh-TW', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false })
-            : 'All Day';
+            ? new Date(e.start.dateTime).toLocaleString('zh-TW', { timeZone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+            : '全天';
         return {
             time: timeStr,
             summary: e.summary,

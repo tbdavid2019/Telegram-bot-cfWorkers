@@ -1213,6 +1213,23 @@ curl -X POST https://api.telegram.org/botYOUR_BOT_TOKEN/setChatMenuButton \
 ```
 ---
 
+## ⚠️ Telegram Bot 官方限制 (FAQ)
+
+### 為什麼我的機器人（Bot）收不到另一個機器人的訊息？
+這**不是**設定或程式碼有問題（即使開啟了 `I_AM_A_GENEROUS_PERSON = "true"`），而是 **Telegram 官方 API 的嚴格限制**。
+
+根據 [Telegram 官方 FAQ](https://core.telegram.org/bots/faq#why-doesn-39t-my-bot-see-messages-from-other-bots)：
+> Bots talking to each other could potentially get stuck in unwanted loops. To avoid this, we decided that bots will not be able to see messages from other bots regardless of mode.
+> *(為了避免機器人互相對話陷入無限迴圈，Telegram 決定讓機器人無論在哪種隱私模式下，都無法看見其他機器人發出的訊息。)*
+
+也就是說，只要發言者的身分是機器人 (`is_bot: true`)，Telegram 伺服器在第一時間就會把這則訊息丟棄，根本不會將 Webhook 請求傳送到你的 Cloudflare Worker。
+
+#### 替代解決方案
+如果你需要多個 AI 機器人在群組聊天中互動，因為 Telegram 封死了官方的訊息互通，你必須繞過 Telegram 讓它們在「後端」直接溝通：
+既然幾個 Bot 都在同一個 Cloudflare Workers 架構下，你可以讓代表「A 機器人」的程式碼在準備送出 Telegram 訊息的同時，**額外發起一個內部請求 (例如透過 Fetch API, Cloudflare KV 或 Queue) 將訊息直接傳給「B 機器人」的處理邏輯**。B 機器人處理完後再自行呼叫 `sendMessage` API 吐回到群組中。
+
+---
+
 ## 📄 授權
 
 本專案採用 MIT 授權條款。詳見 [LICENSE](LICENSE) 文件。

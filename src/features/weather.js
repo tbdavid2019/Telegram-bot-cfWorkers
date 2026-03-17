@@ -23,7 +23,7 @@ export async function handleWeatherCallback(message, context) {
   if (!callbackData || !callbackData.startsWith('/wt:')) {
     return null;
   }
-  
+
   const cityName = callbackData.replace('/wt:', '');
   return fetchAndSendWeather(cityName, context);
 }
@@ -57,30 +57,30 @@ async function showWeatherCityButtons(context) {
   msg += `/wt <城市名稱>\n`;
   msg += `例: \`/wt 花蓮市\`\n`;
   msg += `例: \`/wt Tokyo\`\n`;
-  
+
   // 建立 inline keyboard 按鈕（每行 2 個按鈕）
   const buttons = [];
   let row = [];
-  
+
   for (let i = 0; i < QUICK_CITIES.length; i++) {
     const city = QUICK_CITIES[i];
     row.push({
       text: city.name,
       callback_data: city.callback
     });
-    
+
     // 每 2 個按鈕換一行
     if (row.length === 2 || i === QUICK_CITIES.length - 1) {
       buttons.push(row);
       row = [];
     }
   }
-  
+
   // 設定 inline keyboard
   context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({
     inline_keyboard: buttons
   });
-  
+
   context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
   return sendMessageToTelegramWithContext(context)(msg);
 }
@@ -89,7 +89,7 @@ async function showWeatherCityButtons(context) {
  * 查詢並發送天氣資訊
  */
 async function fetchAndSendWeather(locationName, context) {
-  const url = `https://wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
+  const url = `https://v2.wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
 
   try {
     const response = await fetch(url);

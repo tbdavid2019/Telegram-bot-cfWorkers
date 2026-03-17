@@ -3015,7 +3015,7 @@ async function commandWeather(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)("請提供地區名稱。用法：/wt <地區名稱>");
   }
 
-  const url = `https://wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
+  const url = `https://v2.wttr.in/${encodeURIComponent(locationName)}?format=j1&lang=zh`;
 
   try {
     const response = await fetch(url);
