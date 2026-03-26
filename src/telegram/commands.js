@@ -276,6 +276,11 @@ export const commandHandlers = {
     fn: commandDeleteCalendar,
     description: "刪除家庭行程 (Internal - Calendar)"
   },
+  "/delegate": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: async () => {}, // 內部 Tool Calling，實際在 llm.js 攔截處理
+    description: "傳遞任務或訊息給其他協作代理人 (Internal - Agent to Agent) - 格式: /delegate [Agent名稱] [任務內容]"
+  },
 
   "/memory": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],

@@ -138,6 +138,10 @@ export class UserConfig {
   MEMORY_STORAGE_MODE = "kv"; // 儲存模式: kv 或 r2（預設 kv）
   MEMORY_AUTO_SAVE = true; // 自動保存記憶（對話結束後自動更新）
 
+  // -- A2A 協作協議 --
+  A2A_PEERS = {}; // A2A 鄰近節點設定
+  A2A_AGENT_NAME = ""; // A2A 代理人名稱 (若未設定則使用 TELEGRAM_BOT_NAME)
+
 }
 
 export class Environment {
@@ -296,7 +300,9 @@ const ENV_TYPES = {
   ENABLE_SCHEDULED_NOTIFICATIONS: "boolean",
   DAILY_SUMMARY_TIME: "number",
   ENABLE_HOURLY_REMINDER: "boolean",
-  FAMILY_GROUP_ID: "string"
+  FAMILY_GROUP_ID: "string",
+  A2A_PEERS: "object",
+  A2A_AGENT_NAME: "string"
 };
 
 const ENV_KEY_MAPPER = {

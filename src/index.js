@@ -29,6 +29,7 @@ import {
 import { msgChatWithLLM } from './agent/llm.js';
 import { executeCommand, bindCommandForTelegram, commandsDocument } from './telegram/commands.js';
 import { createTelegramContext, Context } from './telegram/context.js';
+import { handleA2ARequest, handleAgentDiscovery } from './features/a2a.js';
 
 // ===== 工具模組 =====
 import { Router } from './utils/router.js';
@@ -305,6 +306,10 @@ async function handleRequest(request) {
   router.get('/init', bindWebHookAction);
   router.post('/telegram/:token/webhook', telegramWebhook);
   router.post('/telegram/:token/safehook', telegramSafeHook);
+
+  // A2A 協議路由
+  router.post('/a2a', handleA2ARequest);
+  router.get('/.well-known/agent.json', handleAgentDiscovery);
 
   // 開發/除錯模式下的路由
   if (ENV.DEV_MODE || ENV.DEBUG_MODE) {

@@ -178,9 +178,12 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
         cmd.command === '/budget' ||
         cmd.command === '/schedule' ||
         cmd.command === '/scheduleadd' ||
-        cmd.command === '/budgetwrite'
+        cmd.command === '/budgetwrite' ||
+        cmd.command === '/delegate'
       );
     } else {
+      toolCommands = commands.filter(cmd => cmd.command === '/delegate');
+
       // 找出被禁用的指令
       const prohibitedCommands = commands.filter(cmd =>
         cmd.command === '/budget' ||
@@ -200,16 +203,12 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
           cmd.command !== '/budgetwrite'
         );
 
-        // 更新 commands 引用 (需要改用 let 或修改數組內容，這裡重新賦值给 commands 變數需要 commands 變為 let)
+        // 更新 commands 引用
         commands.length = 0;
         commands.push(...safeCommands);
 
-        // 從 answer 中移除標記，防止 processCommandInvocations 再次解析到
-        // 格式: [CALL:/command args]
+        // 從 answer 中移除標記
         for (const cmd of prohibitedCommands) {
-          // 簡單的字符串替換，注意轉義正則特殊字符
-          // 由於 args 可能包含換行或特殊字符，正則比較複雜，這裡嘗試直接替換已知模式
-          // 或者使用 command-invoker 的 regex 邏輯
           const regex = new RegExp(`\\[CALL:${cmd.command}\\s*(.*?)\\]`, 'gs');
           answer = answer.replace(regex, '');
         }
@@ -332,6 +331,30 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             }
 
 
+          } else if (command === '/delegate') {
+            console.log('🤖 [Tool Calling] Delegating to agent...');
+            const { delegateToAgent } = await import('./a2a-client.js');
+            
+            // args format: "agentAlias taskDescription"
+            let agentAlias = args;
+            let taskDescription = '';
+            
+            // 處理可能有引號的情況，比如 [CALL:/delegate "no.2" 他是什麼模型？] 或 [CALL:/delegate no.2 他是什麼模型？]
+            const trimmedArgs = args.trim();
+            const firstSpace = trimmedArgs.indexOf(' ');
+            
+            if (firstSpace !== -1) {
+              agentAlias = trimmedArgs.substring(0, firstSpace).trim();
+              taskDescription = trimmedArgs.substring(firstSpace + 1).trim();
+            } else {
+              agentAlias = trimmedArgs;
+            }
+            
+            // 去除名稱前後可能的雙引號或單引號
+            agentAlias = agentAlias.replace(/^["'](.*)["']$/, '$1');
+
+            const result = await delegateToAgent(agentAlias, taskDescription);
+            dataText = `🤖 [代理人 ${agentAlias} 的回覆]\n${result}`;
           } else if (command === '/budgetwrite') {
             console.log('🤖 [Tool Calling] Writing budget data...');
             const { writeBudgetEntry } = await import('../features/google-sheets.js');

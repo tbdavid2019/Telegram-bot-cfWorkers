@@ -16,6 +16,7 @@ import { getChatRoleWithContext } from '../telegram/telegram.js';
 export async function checkCommandPermission(command, context) {
     const handler = commandHandlers[command];
     if (!handler) {
+        if (command === '/delegate') return true;
         return false;
     }
 
@@ -122,7 +123,8 @@ export async function generateCommandSystemPrompt(context) {
         '網路工具': ['/ip', '/dns', '/dns2'],
         '位置服務': ['/gps'],
         '圖片生成': ['/img', '/img2', '/setimg'],
-        '系統功能': ['/help', '/new', '/system', '/llmchange']
+        '系統功能': ['/help', '/new', '/system', '/llmchange'],
+        '代理協作': ['/delegate']
     };
 
     // 根據環境變數決定是否加入家庭管理功能
@@ -156,6 +158,18 @@ export async function generateCommandSystemPrompt(context) {
         prompt += '\n';
     }
 
+    // 加入可用的協作代理人 (A2A_PEERS)
+    const peers = ENV.USER_CONFIG.A2A_PEERS;
+    if (peers && typeof peers === 'object' && Object.keys(peers).length > 0) {
+        prompt += '## 可聯絡的協作代理人 (A2A Peers)\n';
+        prompt += '你可以使用 /delegate 指令將任務指派給以下代理人（請直接使用名稱或別名作為參數）：\n';
+        for (const [key, peer] of Object.entries(peers)) {
+            const names = peer.names ? peer.names.join(', ') : key;
+            prompt += `- **${key}** (別名: ${names})\n`;
+        }
+        prompt += '\n';
+    }
+
     // 加入當前時間資訊
     const now = new Date();
     const currentDateTime = now.toLocaleString('zh-TW', {
@@ -180,7 +194,8 @@ export async function generateCommandSystemPrompt(context) {
     // /budget 和 /schedule 已改為 Tool Calling，不再顯示為 Inline Keyboard 範例
     prompt += '- 用戶問「記帳：12月房租 15000」→ 回應中包含 `[CALL:/budgetwrite {"month": "2025/12", "category": "rent", "amount": 15000}]`\n';
     prompt += '- 用戶問「幫我加行程：明天下午3點去好市多」 (假設今天是 2025/01/01) →\n';
-    prompt += '  回應中包含 `[CALL:/scheduleadd {"date": "2025/01/02", "time": "15:00", "targetUser": "爸爸", "event": "去好市多"}]`\n\n';
+    prompt += '  回應中包含 `[CALL:/scheduleadd {"date": "2025/01/02", "time": "15:00", "targetUser": "爸爸", "event": "去好市多"}]`\n';
+    prompt += '- 用戶問「請 no.2 跟我打個招呼」 → 回應中包含 `[CALL:/delegate no.2 跟我打個招呼]`\n\n';
     prompt += '**重要**：\n';
     prompt += '1. 調用標記會被自動處理，用戶看不到這個標記\n';
     prompt += '2. 指令會自動執行並回覆用戶\n';

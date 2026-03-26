@@ -4,6 +4,45 @@
 
 ## 🆕 最新功能
 
+### 🤝 A2A (Agent-to-Agent) 協作協議 (2026-03-26)
+
+**讓你的 Bot 與其他 AI Agent 進行跨服務協作！**
+
+#### 功能特點
+
+- ✅ **自動發現 (Discovery)** - 透過 `/.well-known/agent.json` 公開 Bot 的身分與能力（Agent Card）
+- ✅ **跨機器人通訊** - 支援 A2A 1.0 標準協議 (JSON-RPC 2.0)
+- ✅ **自然語言委派 (Delegation)** - LLM 可自動分析任務，並決定是否委派給其他 Bot 處理
+- ✅ **多代理網格 (Mesh Network)** - 透過 `A2A_PEERS` 設定，構建去中心化的代理人網絡
+
+#### 為何需要 `/.well-known/agent.json`?
+這是 A2A 協議的 **「Agent 名片」**。當其他機器人想要跟你合作時，它們會讀取這個檔案來了解：
+1. 你是誰 (Name/Description)
+2. 你能做什麼 (Capabilities/Commands)
+3. 你的版本與通訊機制
+
+#### 使用方式
+1. **委派任務**：直接對 Bot 說「請 no.2 幫我查一下...」，Bot 會自動呼叫 `no.2` 代理人。
+2. **被呼叫**：其他 A2A 代理人可以對你的 `/a2a` 端點發送請求，你的 Bot 會用 LLM 處理並回覆。
+
+#### 配置方式 (wrangler.toml)
+```toml
+TELEGRAM_BOT_NAME = ["你的機器人名稱"]
+
+# A2A 鄰近節點設定 (JSON 格式)
+# 格式: {"別名": {"url": "端點地址", "names": ["名稱1", "名稱2"]}}
+A2A_PEERS = '''
+{
+  "no.2": {
+    "url": "https://bot2.workers.dev/a2a",
+    "names": ["助手2號", "no.2"]
+  }
+}
+'''
+```
+
+---
+
 ### 🧠 長期記憶功能 (2026-01-29)
 
 **讓 Bot 記住你的身份、偏好與對話內容！**
