@@ -186,7 +186,7 @@ function i18n(lang) {
  */
 async function defaultIndexAction() {
   const HTML = renderHTML(`
-    <h1>ChatGPT-Telegram-Workers</h1>
+    <h1>Telegram-Bot-Workers</h1>
     <br/>
     <p>Deployed Successfully!</p>
     <p>Version (ts:${ENV.BUILD_TIMESTAMP},sha:${ENV.BUILD_VERSION})</p>
@@ -221,7 +221,7 @@ async function bindWebHookAction(request) {
   }
 
   const HTML = renderHTML(`
-    <h1>ChatGPT-Telegram-Workers</h1>
+    <h1>Telegram-Bot-Workers</h1>
     <h2>${domain}</h2>
     ${ENV.TELEGRAM_AVAILABLE_TOKENS.length === 0 ? buildKeyNotFoundHTML("TELEGRAM_AVAILABLE_TOKENS") : ""}
     ${Object.keys(result).map((id) => `
@@ -246,7 +246,7 @@ async function loadBotInfo() {
   }
 
   const HTML = renderHTML(`
-    <h1>ChatGPT-Telegram-Workers</h1>
+    <h1>Telegram-Bot-Workers</h1>
     <br/>
     <h4>Environment About Bot</h4>
     <p><strong>GROUP_CHAT_BOT_ENABLE:</strong> ${ENV.GROUP_CHAT_BOT_ENABLE}</p>

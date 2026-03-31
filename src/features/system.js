@@ -271,7 +271,7 @@ export async function commandFetchUpdate(message, command, subcommand, context) 
     sha: ENV.BUILD_VERSION
   };
   try {
-    const info = `https://raw.githubusercontent.com/TBXark/ChatGPT-Telegram-Workers/${ENV.UPDATE_BRANCH}/dist/buildinfo.json`;
+    const info = `https://raw.githubusercontent.com/tbdavid2019/Telegram-bot-cfWorkers/${ENV.UPDATE_BRANCH}/dist/buildinfo.json`;
     const online = await fetch(info).then((r) => r.json());
     const timeFormat = (ts) => {
       return new Date(ts * 1e3).toLocaleString("en-US", {});

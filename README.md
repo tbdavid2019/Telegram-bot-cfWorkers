@@ -4,7 +4,52 @@
 
 ## 🆕 最新功能
 
-### 🤝 A2A (Agent-to-Agent) 協作協議 (2026-03-26)
+### � Soul 人格切換系統 (2026-03-31)
+
+![alt text](image.png)
+**動態切換 Bot 人格，無需重新部署！**
+
+直接在 Telegram 貼上 SOUL.md 的 URL，Bot 立刻化身為指定角色，用完隨時 reset。
+
+#### 功能特點
+
+- ✅ **動態載入** - 貼上任意 SOUL.md URL，Bot 立即切換人格
+- ✅ **GitHub 相容** - 自動將 GitHub blob URL 轉換為 raw 下載連結
+- ✅ **KV 持久化** - 人格存入 DATABASE（每個 chat 各自獨立）
+- ✅ **即時生效** - 載入後自動清除聊天歷史，下一句話即採用新人格
+- ✅ **隨時 Reset** - `/soul reset` 恢復預設人格，同樣自動清除歷史
+- ✅ **支援模板庫** - 相容 [awesome-openclaw-agents](https://github.com/mergisi/awesome-openclaw-agents) 所有角色
+
+#### 指令列表
+
+| 指令 | 說明 |
+|------|------|
+| `/soul <URL>` | 從 URL 載入 SOUL.md 人格（支援 GitHub 頁面 URL）|
+| `/soul info` | 查看目前使用的人格名稱、來源與載入時間 |
+| `/soul reset` | 重置為預設人格 |
+| `/soul` | 顯示使用說明 |
+
+#### 使用範例
+
+```
+/soul https://github.com/mergisi/awesome-openclaw-agents/blob/main/agents/creative/ad-copywriter/SOUL.md
+```
+
+Bot 回應：
+```
+✅ Soul 已載入: Ad Copywriter
+來源: https://github.com/mergisi/...
+```
+
+#### 技術特點
+
+- Soul 以 `soul:{chatId}:{botId}` 存入 DATABASE（KV），**無需任何額外設定**
+- 每個 bot × 每個 chat 的人格完全獨立
+- 超過 10KB 的 URL 會拒絕載入；內容超過 5000 字元自動截斷
+
+---
+
+### �🤝 A2A (Agent-to-Agent) 協作協議 (2026-03-26)
 
 **讓你的 Bot 與其他 AI Agent 進行跨服務協作！**
 

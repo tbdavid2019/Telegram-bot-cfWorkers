@@ -63,6 +63,7 @@ import {
   commandClearMemory,
   commandViewGlobalMemory
 } from '../features/memory-commands.js';
+import { commandSoul } from '../features/soul.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -93,6 +94,7 @@ export const commandSortList = [
   "/dns",           // DNS 查詢 (要加參數)
   "/gps",           // 附近地點查詢
   "/password",      // 隨機密碼
+  "/soul",          // 切換人格 Soul
   "/llmchange",     // 切換 LLM
   "/voicereply",    // 語音回覆設定
   "/getid",         // 取得 ID
@@ -280,6 +282,12 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: async () => {}, // 內部 Tool Calling，實際在 llm.js 攔截處理
     description: "傳遞任務或訊息給其他協作代理人 (Internal - Agent to Agent) - 格式: /delegate [Agent名稱] [任務內容]"
+  },
+
+  "/soul": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandSoul,
+    description: "切換 Soul 人格 - 使用: /soul [URL|info|reset]"
   },
 
   "/memory": {

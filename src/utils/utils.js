@@ -12,11 +12,11 @@ export function renderHTML(body) {
   return `
 <html>  
   <head>
-    <title>ChatGPT-Telegram-Workers</title>
+    <title>Telegram-Bot-Workers</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="ChatGPT-Telegram-Workers">
-    <meta name="author" content="TBXark">
+    <meta name="description" content="Telegram-Bot-Workers">
+    <meta name="author" content="tbdavid2019">
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
@@ -100,8 +100,8 @@ export function buildKeyNotFoundHTML(key) {
 }
 
 // 頁面連結常數
-export const helpLink = "https://github.com/TBXark/ChatGPT-Telegram-Workers/blob/master/doc/en/DEPLOY.md";
-export const issueLink = "https://github.com/TBXark/ChatGPT-Telegram-Workers/issues";
+export const helpLink = "https://github.com/tbdavid2019/Telegram-bot-cfWorkers";
+export const issueLink = "https://github.com/tbdavid2019/Telegram-bot-cfWorkers/issues";
 export const initLink = "./init";
 
 /**

@@ -149,10 +149,23 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     }
   }
 
+  // 檢查是否有自訂 Soul 人格
+  let basePrompt = context.USER_CONFIG.SYSTEM_INIT_MESSAGE;
+  try {
+    const { getSoul } = await import('../features/soul.js');
+    const soul = await getSoul(context);
+    if (soul && soul.content) {
+      basePrompt = soul.content;
+      console.log('🎭 [Soul] Using custom soul:', soul.name);
+    }
+  } catch (error) {
+    console.error('❌ [Soul] Failed to load soul:', error);
+  }
+
   const llmParams = {
     ...params,
     history,
-    prompt: context.USER_CONFIG.SYSTEM_INIT_MESSAGE +
+    prompt: basePrompt +
       (commandPrompt ? '\n\n' + commandPrompt : '') +
       (memoryPrompt ? '\n\n' + memoryPrompt : '')
   };
