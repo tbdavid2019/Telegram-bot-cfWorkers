@@ -777,7 +777,7 @@ GOOGLE_API_KEY = "AIza-xxx"
 BEDROCK_API_KEY = "xxx"
 
 # 其他設定...
-DEFAULT_LLM_PROFILE = "bedrock"
+DEFAULT_LLM_PROFILE = "nemotron"
 LLM_PROFILES = '''
 { ... }
 '''
@@ -847,7 +847,7 @@ TELEGRAM_BOT_NAME = "newBotName"
 OPENAI_API_KEY = "sk-xxx"
 # ... 其他所有變數
 
-DEFAULT_LLM_PROFILE = "openai"
+DEFAULT_LLM_PROFILE = "nemotron"
 LLM_PROFILES = '''
 { ... }
 '''
@@ -869,8 +869,8 @@ npx wrangler deploy --env newbot
 
 | 環境名稱 | Worker 名稱 | Bot 名稱 | 預設 LLM | 部署指令 |
 |---------|------------|----------|----------|----------|
-| `aws` | tgbotaws | bedrockGPT | bedrock | `npx wrangler deploy --env aws` |
-| `chatgpt` | tgbotchatgpt | chatGPT | openai | `npx wrangler deploy --env chatgpt` |
+| `aws` | tgbotaws | bedrockGPT | nemotron | `npx wrangler deploy --env aws` |
+| `chatgpt` | tgbotchatgpt | chatGPT | nemotron | `npx wrangler deploy --env chatgpt` |
 | `newbot` | tgbot-newbot | (你的Bot) | (自訂) | `npx wrangler deploy --env newbot` |
 
 ---

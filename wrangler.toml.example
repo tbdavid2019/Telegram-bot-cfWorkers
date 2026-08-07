@@ -28,7 +28,7 @@ binding = "AI"
 
 [env.aws.vars]
 TELEGRAM_BOT_NAME = "bedrockGPT"
-DEFAULT_LLM_PROFILE = "bedrock"
+DEFAULT_LLM_PROFILE = "nemotron"
 WORKERS_CHAT_MODEL = "@cf/openai/gpt-oss-120b"
 WORKERS_AI_EXTRA_PARAMS = '''{"max_tokens":4096}'''
 
@@ -221,7 +221,7 @@ CLOUDFLARE_ACCOUNT_ID = "YOUR-CF-ACCOUNT-ID"
 CLOUDFLARE_TOKEN = "YOUR-CF-TOKEN"
 WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
 
-DEFAULT_LLM_PROFILE = "openai"
+DEFAULT_LLM_PROFILE = "nemotron"
 WORKERS_CHAT_MODEL = "@cf/openai/gpt-oss-120b"
 WORKERS_AI_EXTRA_PARAMS = '''{"max_tokens":4096}'''
 
