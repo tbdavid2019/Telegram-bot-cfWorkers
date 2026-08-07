@@ -405,6 +405,12 @@ LLM_PROFILES = '''
     "provider": "workers",
     "model": "@cf/openai/gpt-oss-120b",
     "options": {"max_tokens": 4096}
+  },
+  "nemotron": {
+    "name": "Cloudflare NVIDIA Nemotron 3 120B",
+    "provider": "workers",
+    "model": "@cf/nvidia/nemotron-3-120b-a12b",
+    "options": {"max_tokens": 4096}
   }
 }
 '''
@@ -412,6 +418,7 @@ LLM_PROFILES = '''
 
 已部署的 Bot 使用 `/model` 查看或切換 profile。`AI_PROVIDER`、
 `CURRENT_LLM_MODEL` 僅保留作為舊 KV 設定的相容欄位。
+`provider` 是內部 adapter 設定，使用者只會在 `/model` 看見 Profile 名稱與模型名稱。
 
 ## LLM Profiles 用的 API Keys
 
@@ -716,6 +723,12 @@ npx wrangler deploy --env chatgpt
     "name": "Cloudflare GPT-OSS 120B",
     "provider": "workers",
     "model": "@cf/openai/gpt-oss-120b",
+    "options": { "max_tokens": 4096 }
+  },
+  "nemotron": {
+    "name": "Cloudflare NVIDIA Nemotron 3 120B",
+    "provider": "workers",
+    "model": "@cf/nvidia/nemotron-3-120b-a12b",
     "options": { "max_tokens": 4096 }
   }
 }
