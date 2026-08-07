@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Workers Free model profile**: Added `nemotron` (`@cf/nvidia/nemotron-3-120b-a12b`) as an additional selectable Workers AI model for every deployment.
+
 ### Fixed
 - **Workers Free compatibility**: Removed the unavailable `@cf/moonshotai/kimi-k2.6` profile. The `gemini` deployment now defaults to its existing Gemini Flash profile instead of an unavailable model.
 
