@@ -23,10 +23,14 @@ CHAT_COMPLETE_API_TIMEOUT = "60"
 [env.aws]
 name = "tgbotaws"
 
+[env.aws.ai]
+binding = "AI"
+
 [env.aws.vars]
 TELEGRAM_BOT_NAME = "bedrockGPT"
 DEFAULT_LLM_PROFILE = "bedrock"
-AI_PROVIDER = "openai"
+WORKERS_CHAT_MODEL = "@cf/openai/gpt-oss-120b"
+WORKERS_AI_EXTRA_PARAMS = '''{"max_tokens":4096}'''
 
 # Telegram Token
 TELEGRAM_AVAILABLE_TOKENS = "YOUR-TELEGRAM-BOT-TOKEN"
@@ -125,6 +129,12 @@ LLM_PROFILES = '''
     "apiBase": "https://bedrock.glsoft.ai/api/v1",
     "apiKeyEnv": "BEDROCK_API_KEY",
     "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "workers": {
+    "name": "Cloudflare GPT-OSS 120B",
+    "provider": "workers",
+    "model": "@cf/openai/gpt-oss-120b",
+    "options": {"max_tokens": 4096}
   }
 }
 '''
@@ -152,6 +162,9 @@ id = "YOUR-KV-NAMESPACE-ID"
 # ============================================================
 [env.chatgpt]
 name = "tgbotchatgpt"
+
+[env.chatgpt.ai]
+binding = "AI"
 
 [env.chatgpt.vars]
 # Telegram 設定
@@ -203,7 +216,8 @@ CLOUDFLARE_TOKEN = "YOUR-CF-TOKEN"
 WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
 
 DEFAULT_LLM_PROFILE = "openai"
-AI_PROVIDER = "openai"
+WORKERS_CHAT_MODEL = "@cf/openai/gpt-oss-120b"
+WORKERS_AI_EXTRA_PARAMS = '''{"max_tokens":4096}'''
 
 # 長期記憶功能設定
 ENABLE_LONG_TERM_MEMORY = "false"
@@ -236,6 +250,12 @@ LLM_PROFILES = '''
     "apiBase": "https://bedrock.glsoft.ai/api/v1",
     "apiKeyEnv": "BEDROCK_API_KEY",
     "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "workers": {
+    "name": "Cloudflare GPT-OSS 120B",
+    "provider": "workers",
+    "model": "@cf/openai/gpt-oss-120b",
+    "options": {"max_tokens": 4096}
   }
 }
 '''

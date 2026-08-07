@@ -249,7 +249,7 @@ TTS_MODEL = "canopylabs/orpheus-v1-english"  # 實測可講中文!
 - ✅ **智能權限檢查** - 只顯示用戶有權限使用的指令
 - ✅ **一鍵執行** - 透過 Inline Keyboard 按鈕快速執行指令
 - ✅ **無超時問題** - 完美適配 Cloudflare Workers 環境
-- ✅ **動態 LLM 切換** - 支援 `/llmchange` 切換不同 LLM
+- ✅ **動態模型切換** - 支援 `/model` 切換統一的模型 Profile
 
 ### 使用範例
 
@@ -380,9 +380,38 @@ ENABLE_COMMAND_DISCOVERY = "true"
 
 | 變數名稱 | 必填 | 說明 | 範例值 |
 |----------|------|------|--------|
+| `DEFAULT_LLM_PROFILE` | ✅ | 此 Worker 的預設聊天模型 Profile | `workers` |
+| `LLM_PROFILES` | ✅ | 所有聊天模型的 provider、model、endpoint 與 options | 見下方範例 |
 | `OPENAI_API_BASE` | ❌ | OpenAI 相容 API 的基礎 URL | `https://api.openai.com/v1` |
 | `OPENAI_API_KEY` | ✅ | OpenAI API Key | `sk-proj-xxx` |
 | `OPENAI_CHAT_MODEL` | ❌ | 預設聊天模型 | `gpt-4o` |
+| `WORKERS_CHAT_MODEL` | ❌ | 舊設定 fallback；新設定請放在 workers profile | `@cf/openai/gpt-oss-120b` |
+| `WORKERS_AI_EXTRA_PARAMS` | ❌ | 舊設定 fallback；新設定請使用 profile options | `{"max_tokens":4096}` |
+
+`LLM_PROFILES` 是聊天模型的唯一主要設定來源。每個 profile 都包含 `provider`
+與 `model`；OpenAI-compatible profile 另外包含 `apiBase`、`apiKeyEnv`，Workers
+AI profile 則使用原生 `env.AI` binding。每個 Wrangler named environment 都必須各自宣告 binding：
+
+```toml
+[env.your_env.ai]
+binding = "AI"
+
+[env.your_env.vars]
+DEFAULT_LLM_PROFILE = "workers"
+LLM_PROFILES = '''
+{
+  "workers": {
+    "name": "Cloudflare GPT-OSS 120B",
+    "provider": "workers",
+    "model": "@cf/openai/gpt-oss-120b",
+    "options": {"max_tokens": 4096}
+  }
+}
+'''
+```
+
+已部署的 Bot 使用 `/model` 查看或切換 profile。`AI_PROVIDER`、
+`CURRENT_LLM_MODEL` 僅保留作為舊 KV 設定的相容欄位。
 
 ## LLM Profiles 用的 API Keys
 
@@ -626,7 +655,8 @@ npx wrangler deploy --env chatgpt
 部署完成後，請務必執行以下步驟以生效指令：
 1. 點擊 Worker 提供的首頁連結 (例如 `https://your-bot.workers.dev`)
 2. 在網頁上找到並點擊 **`>>>>> click here <<<<<`** 連結
-3. 看到 `Webhook: {"ok":true,...}` 代表綁定成功！
+3. 在確認頁由人工按下 **Submit**
+4. 看到 `Webhook: {"ok":true,...}` 代表 webhook 與 Telegram 指令選單更新成功
 > ⚠️ **注意**：每次修改 `wrangler.toml` 中的指令或環境變數後，都建議重新執行此步驟。
 
 > ⚠️ **注意**：`wrangler.toml` 包含敏感的 API Keys，已加入 `.gitignore`，不會提交到 Git。
@@ -636,7 +666,7 @@ npx wrangler deploy --env chatgpt
 ## 本次更新重點
 - 🧠 **長期記憶功能**：Bot 現在可以記住用戶身份、偏好與對話內容，支援 KV/R2 雙儲存模式
 - 🆕 **Google Maps 附近地點查詢**：支援傳送位置或使用 `/gps` 查詢附近的加油站、餐廳、便利商店等
-- 🆕 **`/llmchange` 指令**：支援在多個 OpenAI API 相容服務之間快速切換（Groq、DeepSeek、OpenAI 等）
+- 🆕 **`/model` 指令**：統一切換 OpenAI-compatible、Gemini 與 Workers AI profile
 - `/img` 指令可直接引用訊息內或回覆的 Telegram 照片，缺少圖片生成器時會友善回報
 - 影像提取更穩定：優先度選擇合適尺寸的 file_id，並支援從回覆訊息抓圖
 - 文字/圖片並送時的內容組裝更安全，若僅有圖片也會自動加入基本提示
@@ -644,15 +674,15 @@ npx wrangler deploy --env chatgpt
 
 ---
 
-# 🔄 LLM Profile 多模型切換功能
+# 🔄 Model Profile 多模型切換功能
 
-支援在多個 OpenAI API 相容服務之間快速切換，無需每次都修改環境變數！
+所有聊天模型都由同一套 Profile 設定管理，無需另外切換 native provider。
 
 ## ✨ 功能特點
 
-- **多 Profile 管理**：同時設定多個 LLM 服務（OpenAI、Groq、DeepSeek、Ollama 等）
-- **一鍵切換**：使用 `/llmchange` 指令快速切換不同服務
-- **臨時覆蓋模型**：可在切換時指定特定模型，無需修改配置
+- **多 Profile 管理**：同時設定 OpenAI-compatible API 與 Cloudflare Workers AI
+- **單一選擇來源**：profile 同時決定 provider、model、endpoint 與 options
+- **一鍵切換**：使用 `/model` 指令快速切換不同服務
 - **使用者隔離**：每個使用者/群組有獨立的 LLM 設定
 - **權限控制**：群組中只有管理員可以切換
 
@@ -670,15 +700,23 @@ npx wrangler deploy --env chatgpt
 {
   "openai": {
     "name": "OpenAI GPT-4o",
+    "provider": "openai",
     "apiBase": "https://api.openai.com/v1",
     "apiKeyEnv": "OPENAI_API_KEY",
     "model": "gpt-4o"
   },
   "groq": {
     "name": "Groq Llama",
+    "provider": "openai",
     "apiBase": "https://api.groq.com/openai/v1",
     "apiKeyEnv": "GROQ_API_KEY",
     "model": "llama-3.3-70b-versatile"
+  },
+  "workers": {
+    "name": "Cloudflare GPT-OSS 120B",
+    "provider": "workers",
+    "model": "@cf/openai/gpt-oss-120b",
+    "options": { "max_tokens": 4096 }
   }
 }
 ```
@@ -829,7 +867,7 @@ npx wrangler deploy --env newbot
 ### 查看目前設定和可用選項
 
 ```
-/llmchange
+/model
 ```
 
 輸出範例：
@@ -845,15 +883,16 @@ npx wrangler deploy --env newbot
 • deepseek - DeepSeek (deepseek-chat)
 
 使用方式:
-/llmchange <profile> [model]
-例: /llmchange groq
-例: /llmchange openai gpt-4-turbo
+/model <profile>
+/model list
+/model reset
+例: /model workers
 ```
 
 ### 切換到其他 Profile
 
 ```
-/llmchange groq
+/model groq
 ```
 
 輸出：
@@ -862,22 +901,10 @@ npx wrangler deploy --env newbot
 📦 模型: llama-3.3-70b-versatile
 ```
 
-### 切換並指定特定模型
-
-```
-/llmchange groq mixtral-8x7b-32768
-```
-
-輸出：
-```
-✅ 已切換到 groq
-📦 模型: mixtral-8x7b-32768 (覆蓋預設: llama-3.3-70b-versatile)
-```
-
 ### 切換回預設模型
 
 ```
-/llmchange openai
+/model reset
 ```
 
 ## 🔐 權限控制
@@ -899,9 +926,9 @@ npx wrangler deploy --env newbot
 
 | 現有設定 | 影響 |
 |---------|------|
-| `AI_PROVIDER = gemini` | ✅ 繼續使用 Gemini 獨立模式，直到使用 `/llmchange` 切換 |
-| `OPENAI_API_KEY` | ✅ 保留作為 fallback |
-| `GOOGLE_API_KEY` | ✅ Gemini 獨立模式繼續有效 |
+| 舊 KV 的 `CURRENT_LLM_PROFILE` | ✅ 自動讀取，profile 名稱不區分大小寫 |
+| `AI_PROVIDER` / `CURRENT_LLM_MODEL` | ✅ 可讀取；下次 `/model` 切換時自動移除舊覆蓋 |
+| `/llmchange` | ✅ 保留相容入口，但不再顯示於 Telegram 指令選單 |
 
 ## 💡 常見服務的 API Base
 
@@ -1474,21 +1501,21 @@ pnpm run build:full
 # 輸出: dist/telegram.work.js (151 KB)
 ```
 
-**額外支援的 AI 提供商：**
+**額外支援的 AI 提供商（僅完整舊版）：**
 - Azure OpenAI
 - Mistral AI
 - Cohere AI
 - Anthropic (Claude)
-- Workers AI
 
-> ⚠️ **注意**: 如果你需要使用 Azure、Mistral、Cohere、Anthropic 或 Workers AI，請使用 `build:full` 版本。
+> ⚠️ **注意**: Workers AI 已由模組化版本原生支援。Azure、Mistral、Cohere、Anthropic 仍需使用 `build:full` 版本。
 
 ### 如何選擇？
 
 | 使用情況 | 建議版本 |
 |---------|---------|
 | 只使用 OpenAI + Gemini | `pnpm run build` ✅ |
-| 需要 Azure/Mistral/Cohere/Anthropic/Workers AI | `pnpm run build:full` |
+| 需要 Workers AI | `pnpm run build` ✅ |
+| 需要 Azure/Mistral/Cohere/Anthropic | `pnpm run build:full` |
 | 開發和除錯 | `pnpm run build` ✅ |
 | 緊急部署 | `pnpm run build:full` |
 
@@ -1545,7 +1572,7 @@ pnpm run build:full
 #### 🎯 核心功能指令 (17個)
 
 **LLM 切換**
-- `/llmchange` - 切換 LLM 模型 (支援多個 OpenAI 相容服務)
+- `/model` - 查看、切換或重設聊天模型 Profile
 
 **天氣相關**
 - `/wt` - 查詢天氣

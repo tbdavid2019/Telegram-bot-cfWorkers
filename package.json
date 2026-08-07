@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node build.js",
     "build:full": "node build.js --original",
-    "dev": "node build.js --watch"
+    "dev": "node build.js --watch",
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "telegram",
@@ -19,6 +20,6 @@
   "devDependencies": {
     "@a2a-js/sdk": "^0.3.13",
     "esbuild": "^0.19.0",
-    "wrangler": "^4.61.1"
+    "wrangler": "^4.119.0"
   }
 }

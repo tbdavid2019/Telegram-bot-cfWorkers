@@ -50,7 +50,7 @@ export async function msgHandleCallbackQuery(message, context) {
   await answerCallbackQuery(context.SHARE_CONTEXT.currentBotToken, message.callback_query.id);
 
   // 處理 LLM 切換
-  if (callbackData.startsWith('/llmchange:')) {
+  if (callbackData.startsWith('/model:') || callbackData.startsWith('/llmchange:')) {
     return handleLLMChangeCallback(message, context);
   }
 

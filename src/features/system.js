@@ -50,6 +50,8 @@ function chatModelKey(agentName) {
       return "OPENAI_CHAT_MODEL";
     case "gemini":
       return "GOOGLE_COMPLETIONS_MODEL";
+    case "workers":
+      return "WORKERS_CHAT_MODEL";
     default:
       return null;
   }
@@ -59,17 +61,15 @@ function chatModelKey(agentName) {
  * 取得當前聊天模型
  */
 function currentChatModel(agentName, context) {
-  // 優先使用 LLM Profile 的 model（無論是 openai 還是 gemini provider）
-  const profile = getActiveLLMProfile(context);
-
-  // 如果有臨時覆蓋的 model，最優先
-  if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
-    return context.USER_CONFIG.CURRENT_LLM_MODEL;
-  }
-
-  // 如果有 active profile，使用 profile 的 model
-  if (profile && profile.model) {
-    return profile.model;
+  // LLM Profiles 目前只代表 OpenAI-compatible endpoints。
+  if (agentName === "openai") {
+    const profile = getActiveLLMProfile(context);
+    if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
+      return context.USER_CONFIG.CURRENT_LLM_MODEL;
+    }
+    if (profile && profile.model) {
+      return profile.model;
+    }
   }
 
   // 否則使用環境變數的預設值
@@ -78,6 +78,8 @@ function currentChatModel(agentName, context) {
       return context.USER_CONFIG.OPENAI_CHAT_MODEL;
     case "gemini":
       return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL;
+    case "workers":
+      return context.USER_CONFIG.WORKERS_CHAT_MODEL;
     default:
       return null;
   }
@@ -303,7 +305,7 @@ export async function commandSystem(message, command, subcommand, context) {
   const stats = await getStats(botId);
 
   const agent = {
-    AI_PROVIDER: chatAgent,
+    MODEL_PROVIDER: chatAgent,
     AI_IMAGE_PROVIDER: imageAgent
   };
 
@@ -313,10 +315,6 @@ export async function commandSystem(message, command, subcommand, context) {
     agent.LLM_PROFILE_NAME = currentProfile.name || currentProfileName;
     agent.LLM_MODEL = currentProfile.model || "未設定";
 
-    // 如果有臨時覆蓋的 model
-    if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
-      agent.LLM_MODEL = context.USER_CONFIG.CURRENT_LLM_MODEL + " (覆蓋)";
-    }
   } else {
     // 沒有使用 LLM Profile，顯示傳統的環境變數設定
     if (chatModelKey(chatAgent)) {
@@ -445,4 +443,3 @@ export async function commandGetGroupID(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)(msg);
   }
 }
-

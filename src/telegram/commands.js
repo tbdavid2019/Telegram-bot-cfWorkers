@@ -46,7 +46,7 @@ import {
   commandGetID,
   commandGetGroupID
 } from '../features/system.js';
-import { commandLLMChange } from '../features/llm.js';
+import { commandLLMChange, commandModel } from '../features/llm.js';
 import { commandGPS } from '../features/location.js';
 import { commandVoiceReply } from '../features/voice-command.js';
 import {
@@ -95,7 +95,7 @@ export const commandSortList = [
   "/gps",           // 附近地點查詢
   "/password",      // 隨機密碼
   "/soul",          // 切換人格 Soul
-  "/llmchange",     // 切換 LLM
+  "/model",         // 切換聊天模型
   "/voicereply",    // 語音回覆設定
   "/getid",         // 取得 ID
   "/getgroupid",    // 取得群組 ID
@@ -237,11 +237,17 @@ export const commandHandlers = {
   },
 
   // LLM 切換
-  "/llmchange": {
+  "/model": {
     scopes: ["all_private_chats", "all_chat_administrators"],
+    fn: commandModel,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
+    description: "查看或切換聊天模型 - 使用: /model [profile|list|reset]"
+  },
+  "/llmchange": {
+    scopes: [],
     fn: commandLLMChange,
     needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
-    description: "切換 LLM 模型 - 使用: /llmchange [profile] [model]"
+    description: "舊版模型切換指令（請改用 /model）"
   },
 
   // 語音回覆設定

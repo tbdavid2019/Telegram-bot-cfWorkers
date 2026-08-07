@@ -123,7 +123,7 @@ export async function generateCommandSystemPrompt(context) {
         '網路工具': ['/ip', '/dns', '/dns2'],
         '位置服務': ['/gps'],
         '圖片生成': ['/img', '/img2', '/setimg'],
-        '系統功能': ['/help', '/new', '/system', '/llmchange'],
+        '系統功能': ['/help', '/new', '/system', '/model'],
         '代理協作': ['/delegate']
     };
 

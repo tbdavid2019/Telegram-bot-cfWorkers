@@ -7,7 +7,8 @@
 import { ENV } from '../config/env.js';
 import { requestChatCompletions } from './request.js';
 import { imageToBase64String, renderBase64DataURI } from '../utils/image.js';
-import { getActiveLLMProfile, getProfileApiKey } from './agents.js';
+import { getProfileApiKey } from './agents.js';
+import { getActiveLLMProfile } from './profiles.js';
 
 // ========== API Key 管理 ==========
 
@@ -158,9 +159,10 @@ export async function requestCompletionsFromOpenAI(params, context, onStream) {
     messages.unshift({ role: context.USER_CONFIG.SYSTEM_INIT_MESSAGE_ROLE, content: prompt });
   }
   
+  const profile = getActiveLLMProfile(context);
   const body = {
     model: getOpenAIChatModel(context),
-    ...context.USER_CONFIG.OPENAI_API_EXTRA_PARAMS,
+    ...(profile?.options || context.USER_CONFIG.OPENAI_API_EXTRA_PARAMS),
     messages: await Promise.all(messages.map(renderOpenAIMessage)),
     stream: onStream != null
   };

@@ -10,7 +10,7 @@ export class UserConfig {
 
   // -- 通用配置 --
   //
-  // AI提供商: auto, openai, azure, workers, gemini, mistral
+  // 舊版 provider 選擇；有有效 LLM Profile 時不使用此欄位
   AI_PROVIDER = "auto";
   // AI圖片提供商: auto, openai, azure, workers
   AI_IMAGE_PROVIDER = "auto";
@@ -70,7 +70,8 @@ export class UserConfig {
   // Cloudflare Token
   CLOUDFLARE_TOKEN = null;
   // Text Generation Model
-  WORKERS_CHAT_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1 ";
+  WORKERS_CHAT_MODEL = "@cf/openai/gpt-oss-120b";
+  WORKERS_AI_EXTRA_PARAMS = { max_tokens: 4096 };
   // Text-to-Image Model
   WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
   // -- Gemini 配置 --
@@ -84,14 +85,14 @@ export class UserConfig {
   // Google Maps API Key
   GOOGLE_MAPS_API_KEY = null;
   // -- LLM Profiles 配置 --
-  // 支援多個 OpenAI API 相容服務的配置
-  // JSON 格式: {"openai":{"name":"OpenAI","apiBase":"...","apiKeyEnv":"OPENAI_API_KEY","model":"..."}}
+  // Profile 是聊天模型的唯一選擇來源，並包含 provider、model 與連線設定
+  // JSON 格式: {"workers":{"provider":"workers","model":"@cf/openai/gpt-oss-120b","options":{"max_tokens":4096}}}
   LLM_PROFILES = {};
   // 預設使用的 LLM Profile
   DEFAULT_LLM_PROFILE = "";
-  // 目前使用的 LLM Profile (使用者可透過 /llmchange 切換)
+  // 目前使用的 LLM Profile (使用者可透過 /model 切換)
   CURRENT_LLM_PROFILE = "";
-  // 臨時覆蓋的 LLM Model (使用者可透過 /llmchange profile model 指定)
+  // 舊版 model 覆蓋欄位，僅保留以讀取既有 KV 設定
   CURRENT_LLM_MODEL = "";
 
   // -- LLM API Keys (從環境變數讀取) --
@@ -275,6 +276,7 @@ const ENV_TYPES = {
   BEDROCK_API_KEY: "string",
   XIAOMI_API_KEY: "string",
   GROQ_API_KEY: "string",
+  WORKERS_AI_EXTRA_PARAMS: "object",
   // 語音轉錄 (ASR) 相關
   ENABLE_VOICE_TRANSCRIPTION: "boolean",
   SHOW_TRANSCRIPTION: "boolean",

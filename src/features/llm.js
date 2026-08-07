@@ -1,223 +1,174 @@
 /**
- * LLM 切換指令模組
- * 支援在多個 OpenAI API 相容服務之間切換
+ * Unified model profile command.
+ * `/model` is canonical; `/llmchange` remains a compatibility alias.
  */
 
-import { sendMessageToTelegramWithContext, sendChatActionToTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { trimUserConfig as trimPersistedUserConfig } from '../telegram/context.js';
 import { DATABASE } from '../config/env.js';
-import { getAllLLMProfiles, getCurrentProfileName, getActiveLLMProfile } from '../agent/agents.js';
+import {
+  getAllLLMProfiles,
+  getCurrentProfileName,
+  getActiveLLMProfile,
+  resolveLLMProfileName
+} from '../agent/agents.js';
 
-/**
- * 清理使用者配置（移除空值）
- */
-function trimUserConfig(userConfig) {
-  const config = { ...userConfig };
-  for (const key in config) {
-    if (config[key] === null || config[key] === undefined || config[key] === "") {
-      delete config[key];
-    }
-  }
-  return config;
+const PROFILE_KEY = 'CURRENT_LLM_PROFILE';
+const LEGACY_KEYS = ['AI_PROVIDER', 'CURRENT_LLM_MODEL'];
+
+function addDefineKey(userConfig, key) {
+  userConfig.DEFINE_KEYS = userConfig.DEFINE_KEYS || [];
+  if (!userConfig.DEFINE_KEYS.includes(key)) userConfig.DEFINE_KEYS.push(key);
 }
 
-/**
- * 處理 LLM 切換的 callback query（按鈕點擊）
- */
-export async function handleLLMChangeCallback(message, context) {
-  const callbackData = message.callback_query?.data;
-  if (!callbackData || !callbackData.startsWith('/llmchange:')) {
-    return null;
-  }
-  
-  const targetProfile = callbackData.replace('/llmchange:', '');
-  const profiles = getAllLLMProfiles(context);
-  
-  if (!profiles[targetProfile]) {
-    return sendMessageToTelegramWithContext(context)(`❌ 找不到 Profile: ${targetProfile}`);
-  }
-  
-  try {
-    // 更新使用者配置
-    context.USER_CONFIG.CURRENT_LLM_PROFILE = targetProfile;
-    context.USER_CONFIG.DEFINE_KEYS = context.USER_CONFIG.DEFINE_KEYS || [];
-    
-    if (!context.USER_CONFIG.DEFINE_KEYS.includes("CURRENT_LLM_PROFILE")) {
-      context.USER_CONFIG.DEFINE_KEYS.push("CURRENT_LLM_PROFILE");
-    }
-    
-    // 清除之前的 model 覆蓋
-    context.USER_CONFIG.CURRENT_LLM_MODEL = null;
-    context.USER_CONFIG.DEFINE_KEYS = context.USER_CONFIG.DEFINE_KEYS.filter(k => k !== "CURRENT_LLM_MODEL");
-    
-    // 設定 AI_PROVIDER 為 openai（使用 OpenAI 相容模式）
-    context.USER_CONFIG.AI_PROVIDER = "openai";
-    if (!context.USER_CONFIG.DEFINE_KEYS.includes("AI_PROVIDER")) {
-      context.USER_CONFIG.DEFINE_KEYS.push("AI_PROVIDER");
-    }
-    
-    // 儲存到 DATABASE
-    await DATABASE.put(
-      context.SHARE_CONTEXT.configStoreKey,
-      JSON.stringify(trimUserConfig(context.USER_CONFIG))
-    );
-    
-    const profile = profiles[targetProfile];
-    const currentModel = profile.model || "未設定";
-    
-    let msg = `✅ 已切換到 \`${targetProfile}\`\n`;
-    msg += `📦 模型: \`${currentModel}\``;
-    
-    context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
-    return sendMessageToTelegramWithContext(context)(msg);
-    
-  } catch (e) {
-    return sendMessageToTelegramWithContext(context)(`❌ 錯誤: ${e.message}`);
-  }
+function removeDefineKeys(userConfig, keys) {
+  const blocked = new Set(keys);
+  userConfig.DEFINE_KEYS = (userConfig.DEFINE_KEYS || []).filter((key) => !blocked.has(key));
 }
 
-/**
- * /llmchange [profile]
- * 
- * 使用範例：
- *   /llmchange              → 顯示按鈕選單讓使用者選擇
- *   /llmchange gemini       → 直接切換到 Gemini
- */
-export async function commandLLMChange(message, command, subcommand, context) {
-  const profiles = getAllLLMProfiles(context);
-  const profileNames = Object.keys(profiles);
-  
-  // 如果沒有參數，顯示按鈕選單
-  if (!subcommand || subcommand.trim() === "") {
-    return showLLMStatusWithButtons(context, profiles, profileNames);
-  }
-  
-  // 解析參數
-  const args = subcommand.trim().split(/\s+/);
-  const targetProfile = args[0].toLowerCase();
-  
-  // 檢查 profile 是否存在
-  if (!profileNames.includes(targetProfile)) {
-    let msg = `❌ 找不到 Profile: \`${targetProfile}\`\n\n`;
-    msg += `可用的 Profiles:\n`;
-    for (const name of profileNames) {
-      const profile = profiles[name];
-      msg += `• \`${name}\` - ${profile.name || name}\n`;
-    }
-    return sendMessageToTelegramWithContext(context)(msg);
-  }
-  
-  try {
-    // 更新使用者配置
-    context.USER_CONFIG.CURRENT_LLM_PROFILE = targetProfile;
-    context.USER_CONFIG.DEFINE_KEYS = context.USER_CONFIG.DEFINE_KEYS || [];
-    
-    if (!context.USER_CONFIG.DEFINE_KEYS.includes("CURRENT_LLM_PROFILE")) {
-      context.USER_CONFIG.DEFINE_KEYS.push("CURRENT_LLM_PROFILE");
-    }
-    
-    // 清除之前的 model 覆蓋
-    context.USER_CONFIG.CURRENT_LLM_MODEL = null;
-    context.USER_CONFIG.DEFINE_KEYS = context.USER_CONFIG.DEFINE_KEYS.filter(k => k !== "CURRENT_LLM_MODEL");
-    
-    // 設定 AI_PROVIDER 為 openai（使用 OpenAI 相容模式）
-    context.USER_CONFIG.AI_PROVIDER = "openai";
-    if (!context.USER_CONFIG.DEFINE_KEYS.includes("AI_PROVIDER")) {
-      context.USER_CONFIG.DEFINE_KEYS.push("AI_PROVIDER");
-    }
-    
-    // 儲存到 DATABASE
-    await DATABASE.put(
-      context.SHARE_CONTEXT.configStoreKey,
-      JSON.stringify(trimUserConfig(context.USER_CONFIG))
-    );
-    
-    // 取得目前使用的 model
-    const profile = profiles[targetProfile];
-    const currentModel = profile.model || "未設定";
-    
-    let msg = `✅ 已切換到 \`${targetProfile}\`\n`;
-    msg += `📦 模型: \`${currentModel}\``;
-    
-    context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
-    return sendMessageToTelegramWithContext(context)(msg);
-    
-  } catch (e) {
-    return sendMessageToTelegramWithContext(context)(`❌ 錯誤: ${e.message}`);
-  }
+/** Apply a profile selection and remove the old independent provider/model overrides. */
+export function applyModelProfile(userConfig, requestedName) {
+  const names = Object.keys(userConfig.LLM_PROFILES || {});
+  const name = names.find((candidate) => candidate.toLowerCase() === String(requestedName).toLowerCase());
+  if (!name) return null;
+
+  userConfig.CURRENT_LLM_PROFILE = name;
+  addDefineKey(userConfig, PROFILE_KEY);
+
+  userConfig.AI_PROVIDER = 'auto';
+  userConfig.CURRENT_LLM_MODEL = '';
+  removeDefineKeys(userConfig, LEGACY_KEYS);
+  return { name, profile: userConfig.LLM_PROFILES[name] };
 }
 
-/**
- * 顯示目前 LLM 狀態和按鈕選單
- */
-async function showLLMStatusWithButtons(context, profiles, profileNames) {
-  const currentProfileName = getCurrentProfileName(context);
-  const currentProfile = getActiveLLMProfile(context);
-  const currentModel = context.USER_CONFIG.CURRENT_LLM_MODEL 
-                    || (currentProfile ? currentProfile.model : null)
-                    || context.USER_CONFIG.OPENAI_CHAT_MODEL
-                    || "未設定";
-  
-  // 組合訊息
-  let msg = `🤖 *目前 LLM 設定*\n`;
-  msg += `━━━━━━━━━━━━━━━\n`;
-  
-  if (currentProfileName && currentProfile) {
-    msg += `📍 目前使用: \`${currentProfileName}\`\n`;
-    msg += `📦 模型: \`${currentModel}\`\n`;
+/** Return to the deployment's DEFAULT_LLM_PROFILE. */
+export function resetModelProfile(userConfig) {
+  userConfig.CURRENT_LLM_PROFILE = '';
+  userConfig.AI_PROVIDER = 'auto';
+  userConfig.CURRENT_LLM_MODEL = '';
+  removeDefineKeys(userConfig, [PROFILE_KEY, ...LEGACY_KEYS]);
+}
+
+async function persistModelSelection(context) {
+  await DATABASE.put(
+    context.SHARE_CONTEXT.configStoreKey,
+    JSON.stringify(trimPersistedUserConfig(context.USER_CONFIG))
+  );
+}
+
+export function describeProfile(name, profile) {
+  return `\`${name}\` - ${profile.name || name}\n   \`${profile.model || '未設定'}\``;
+}
+
+export function formatModelStatus(name, profile, prefix = '') {
+  let message = prefix;
+  if (name && profile) {
+    message += `📍 目前 Profile: \`${name}\`\n`;
+    message += `📦 Model: \`${profile.model || '未設定'}\``;
   } else {
-    msg += `📍 目前使用: *預設*\n`;
+    message += '⚠️ 尚未設定有效的模型 Profile';
   }
-  
-  // 顯示所有可用的 Profiles 詳細資訊
-  msg += `\n*可用的 Profiles:*\n`;
-  for (const name of profileNames) {
-    const profile = profiles[name];
-    const isActive = name === currentProfileName;
-    const prefix = isActive ? "✓" : "•";
-    msg += `${prefix} \`${name}\` - ${profile.name || name}`;
-    if (profile.model) {
-      msg += ` (${profile.model})`;
+  return message;
+}
+
+async function sendCurrentModel(context, prefix = '') {
+  const name = getCurrentProfileName(context);
+  const profile = getActiveLLMProfile(context);
+  const message = formatModelStatus(name, profile, prefix);
+  context.CURRENT_CHAT_CONTEXT.parse_mode = 'Markdown';
+  return sendMessageToTelegramWithContext(context)(message);
+}
+
+async function selectProfile(context, requestedName) {
+  const selected = applyModelProfile(context.USER_CONFIG, requestedName);
+  if (!selected) return null;
+  await persistModelSelection(context);
+  return selected;
+}
+
+/** Handle both new and legacy inline keyboard callback data. */
+export async function handleLLMChangeCallback(message, context) {
+  const callbackData = message.callback_query?.data || '';
+  const prefix = callbackData.startsWith('/model:')
+    ? '/model:'
+    : callbackData.startsWith('/llmchange:') ? '/llmchange:' : '';
+  if (!prefix) return null;
+
+  const requestedName = callbackData.slice(prefix.length);
+  try {
+    const selected = await selectProfile(context, requestedName);
+    if (!selected) {
+      return sendMessageToTelegramWithContext(context)(`❌ 找不到 Profile: ${requestedName}`);
     }
-    msg += `\n`;
+    return sendCurrentModel(context, '✅ 已切換模型\n\n');
+  } catch (error) {
+    return sendMessageToTelegramWithContext(context)(`❌ 錯誤: ${error.message}`);
   }
-  
-  // 手動切換說明
-  msg += `\n*手動切換方式:*\n`;
-  msg += `/llmchange <profile>\n`;
-  msg += `/llmchange <profile> <model>\n`;
-  msg += `例: \`/llmchange gemini\`\n`;
-  msg += `例: \`/llmchange openai gpt-4o\`\n`;
-  
-  msg += `\n請選擇要切換的 LLM：`;
-  
-  // 建立 inline keyboard 按鈕（每行 2 個按鈕）
+}
+
+export async function commandModel(message, command, subcommand, context) {
+  const input = (subcommand || '').trim();
+  const [action, requestedName] = input.split(/\s+/, 2);
+
+  if (!input || action.toLowerCase() === 'list') {
+    return showModelMenu(context);
+  }
+
+  if (action.toLowerCase() === 'reset') {
+    resetModelProfile(context.USER_CONFIG);
+    await persistModelSelection(context);
+    return sendCurrentModel(context, '✅ 已回復部署預設模型\n\n');
+  }
+
+  if (action.toLowerCase() === 'info') {
+    const name = resolveLLMProfileName(context, requestedName);
+    const profile = getAllLLMProfiles(context)[name];
+    if (!profile) {
+      return sendMessageToTelegramWithContext(context)(`❌ 找不到 Profile: ${requestedName || ''}`);
+    }
+    context.CURRENT_CHAT_CONTEXT.parse_mode = 'Markdown';
+    return sendMessageToTelegramWithContext(context)(describeProfile(name, profile));
+  }
+
+  try {
+    const selected = await selectProfile(context, action);
+    if (!selected) {
+      return sendMessageToTelegramWithContext(context)(
+        `❌ 找不到 Profile: \`${action}\`\n\n使用 /model list 查看可用模型。`
+      );
+    }
+    return sendCurrentModel(context, '✅ 已切換模型\n\n');
+  } catch (error) {
+    return sendMessageToTelegramWithContext(context)(`❌ 錯誤: ${error.message}`);
+  }
+}
+
+/** Backward-compatible command alias. */
+export async function commandLLMChange(message, command, subcommand, context) {
+  return commandModel(message, command, subcommand, context);
+}
+
+async function showModelMenu(context) {
+  const profiles = getAllLLMProfiles(context);
+  const currentName = getCurrentProfileName(context);
+  const names = Object.keys(profiles);
+
+  let text = '🤖 *模型設定*\n━━━━━━━━━━━━━━━\n';
+  if (currentName) text += `📍 目前使用: \`${currentName}\`\n`;
+  text += '\n*可用 Profiles:*\n';
+  for (const name of names) {
+    text += `${name === currentName ? '✓' : '•'} ${describeProfile(name, profiles[name])}\n`;
+  }
+  text += '\n使用 `/model <profile>` 切換，`/model reset` 回復部署預設。';
+
   const buttons = [];
-  let row = [];
-  
-  for (let i = 0; i < profileNames.length; i++) {
-    const name = profileNames[i];
-    const profile = profiles[name];
-    const isActive = name === currentProfileName;
-    const displayName = profile.name || name;
-    const label = isActive ? `✓ ${displayName}` : displayName;
-    
-    row.push({
-      text: label,
-      callback_data: `/llmchange:${name}`
-    });
-    
-    // 每 2 個按鈕換一行
-    if (row.length === 2 || i === profileNames.length - 1) {
-      buttons.push(row);
-      row = [];
-    }
+  for (let index = 0; index < names.length; index += 2) {
+    buttons.push(names.slice(index, index + 2).map((name) => ({
+      text: `${name === currentName ? '✓ ' : ''}${profiles[name].name || name}`,
+      callback_data: `/model:${name}`
+    })));
   }
-  
-  // 設定 inline keyboard
-  context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({
-    inline_keyboard: buttons
-  });
-  
-  context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
-  return sendMessageToTelegramWithContext(context)(msg);
+  context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({ inline_keyboard: buttons });
+  context.CURRENT_CHAT_CONTEXT.parse_mode = 'Markdown';
+  return sendMessageToTelegramWithContext(context)(text);
 }

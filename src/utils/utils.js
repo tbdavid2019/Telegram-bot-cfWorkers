@@ -56,6 +56,16 @@ export function renderHTML(body) {
   `;
 }
 
+/** Encode untrusted text before embedding it in an HTML response. */
+export function escapeHTML(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * 將錯誤轉換為字串
  * @param {Error} e - 錯誤對象

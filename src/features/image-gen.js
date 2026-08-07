@@ -4,7 +4,7 @@ import { extractTelegramPhotoUrl } from '../telegram/message.js';
 import { isGeminiImageEnable, requestImageFromGemini } from '../agent/gemini.js';
 import { isOpenAIImageEnable, requestImageFromOpenAI } from '../agent/openai.js';
 import { isAzureImageEnable, requestImageFromAzureOpenAI } from '../agent/openai.js';
-import { isWorkersAIEnable, requestImageFromWorkersAI } from '../agent/agents.js';
+import { isWorkersAIImageEnable, requestImageFromWorkersAI } from '../agent/agents.js';
 
 // 從環境變數引入
 import { ENV, DATABASE } from '../config/env.js';
@@ -30,7 +30,7 @@ const imageGenAgents = [
   },
   {
     name: "workers",
-    enable: isWorkersAIEnable,
+    enable: isWorkersAIImageEnable,
     request: requestImageFromWorkersAI
   }
 ];

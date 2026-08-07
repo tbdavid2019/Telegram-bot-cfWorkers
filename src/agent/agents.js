@@ -5,7 +5,21 @@
 
 import { isOpenAIEnable, isOpenAIImageEnable, requestCompletionsFromOpenAI, requestImageFromOpenAI } from './openai.js';
 import { isGeminiAIEnable, isGeminiImageEnable, requestCompletionsFromGeminiAI, requestImageFromGemini } from './gemini.js';
+import { isWorkersAIEnable, requestCompletionsFromWorkersAI } from './workersai.js';
 import { ENV } from '../config/env.js';
+import {
+  getActiveLLMProfile,
+  getAllLLMProfiles,
+  getCurrentProfileName,
+  getProfileProvider
+} from './profiles.js';
+
+export {
+  getActiveLLMProfile,
+  getAllLLMProfiles,
+  getCurrentProfileName,
+  resolveLLMProfileName
+} from './profiles.js';
 
 // ========== LLM Profile 工具函數 ==========
 
@@ -65,39 +79,8 @@ export function getProfileApiKey(profile, context) {
  * @param {Object} context - 上下文物件
  * @returns {Object|null} Profile 物件或 null
  */
-export function getActiveLLMProfile(context) {
-  const profileName = context.USER_CONFIG.CURRENT_LLM_PROFILE 
-                   || context.USER_CONFIG.DEFAULT_LLM_PROFILE;
-  
-  if (!profileName) return null;
-  
-  const profiles = context.USER_CONFIG.LLM_PROFILES || {};
-  return profiles[profileName] || null;
-}
-
-/**
- * 取得目前使用的 Profile 名稱
- * @param {Object} context - 上下文物件
- * @returns {string} Profile 名稱
- */
-export function getCurrentProfileName(context) {
-  return context.USER_CONFIG.CURRENT_LLM_PROFILE 
-      || context.USER_CONFIG.DEFAULT_LLM_PROFILE 
-      || "";
-}
-
-/**
- * 取得所有可用的 LLM Profiles
- * @param {Object} context - 上下文物件
- * @returns {Object} Profiles 物件
- */
-export function getAllLLMProfiles(context) {
-  return context.USER_CONFIG.LLM_PROFILES || {};
-}
-
 // TODO: 導入其他 AI 服務
 // import { isAzureEnable, requestCompletionsFromAzureOpenAI } from './azure.js';
-// import { isWorkersAIEnable, requestCompletionsFromWorkersAI } from './workersai.js';
 // import { isMistralAIEnable, requestCompletionsFromMistralAI } from './mistralai.js';
 // import { isCohereAIEnable, requestCompletionsFromCohereAI } from './cohere.js';
 // import { isAnthropicAIEnable, requestCompletionsFromAnthropicAI } from './anthropic.js';
@@ -116,15 +99,15 @@ export const chatLlmAgents = [
     enable: isOpenAIEnable,
     request: requestCompletionsFromOpenAI
   },
-  // {
-  //   name: "workers",
-  //   enable: isWorkersAIEnable,
-  //   request: requestCompletionsFromWorkersAI
-  // },
   {
     name: "gemini",
     enable: isGeminiAIEnable,
     request: requestCompletionsFromGeminiAI
+  },
+  {
+    name: "workers",
+    enable: isWorkersAIEnable,
+    request: requestCompletionsFromWorkersAI
   },
   // {
   //   name: "mistral",
@@ -171,22 +154,20 @@ export const imageGenAgents = [
 // ========== 工具函數 ==========
 
 export function currentChatModel(agentName, context) {
-  // 如果使用 LLM Profile
+  const profile = getActiveLLMProfile(context);
+  if (profile?.model) {
+    return profile.model;
+  }
+
   if (agentName === "openai") {
-    const profile = getActiveLLMProfile(context);
-    if (profile) {
-      // 如果有臨時覆蓋的 model
-      if (context.USER_CONFIG.CURRENT_LLM_MODEL) {
-        return context.USER_CONFIG.CURRENT_LLM_MODEL;
-      }
-      return profile.model || context.USER_CONFIG.OPENAI_CHAT_MODEL;
-    }
     return context.USER_CONFIG.OPENAI_CHAT_MODEL;
   }
   
   switch (agentName) {
     case "gemini":
       return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL;
+    case "workers":
+      return context.USER_CONFIG.WORKERS_CHAT_MODEL;
     default:
       return null;
   }
@@ -198,13 +179,22 @@ export function chatModelKey(agentName) {
       return "OPENAI_CHAT_MODEL";
     case "gemini":
       return "GOOGLE_COMPLETIONS_MODEL";
+    case "workers":
+      return "WORKERS_CHAT_MODEL";
     default:
       return null;
   }
 }
 
 export function loadChatLLM(context) {
-  // 優先使用指定的 AI_PROVIDER
+  // Profile 是唯一的主要選擇來源；provider 只是 profile 的實作細節。
+  const profile = getActiveLLMProfile(context);
+  if (profile) {
+    const provider = getProfileProvider(profile);
+    return chatLlmAgents.find((llm) => llm.name === provider) || null;
+  }
+
+  // 舊設定相容：只有尚未設定 profile 時才讀 AI_PROVIDER。
   for (const llm of chatLlmAgents) {
     if (llm.name === context.USER_CONFIG.AI_PROVIDER) {
       return llm;
@@ -224,7 +214,7 @@ export function loadChatLLM(context) {
 /**
  * 檢查 Workers AI 是否啟用
  */
-export function isWorkersAIEnable(context) {
+export function isWorkersAIImageEnable(context) {
   return context.USER_CONFIG.AI_IMAGE_PROVIDER === 'workers';
 }
 

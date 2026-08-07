@@ -38,6 +38,7 @@ import {
   renderHTML,
   makeResponse200,
   buildKeyNotFoundHTML,
+  escapeHTML,
   footer,
   initLink
 } from './utils/utils.js';
@@ -71,7 +72,8 @@ const i18nData = {
         img2: '生成图片(多模型) - 使用: /img2 [描述]',
         setimg: '设置图片生成模型',
         gps: '查询附近设施 - 使用: /gps',
-        llmchange: '切换 LLM 模型',
+        model: '查看或切换聊天模型',
+        llmchange: '切换 LLM 模型（旧指令）',
         help: '显示此帮助信息',
         new: '开始新对话',
         start: '开始使用机器人',
@@ -113,7 +115,8 @@ const i18nData = {
         img2: '產生圖片(多模型) - 使用: /img2 [描述]',
         setimg: '設定圖片生成模型',
         gps: '查詢附近設施 - 使用: /gps',
-        llmchange: '切換 LLM 模型',
+        model: '查看或切換聊天模型',
+        llmchange: '切換 LLM 模型（舊指令）',
         help: '顯示此幫助訊息',
         new: '開始新對話',
         start: '開始使用機器人',
@@ -155,7 +158,8 @@ const i18nData = {
         img2: 'Generate image (multi-model) - Usage: /img2 [description]',
         setimg: 'Set image generation model',
         gps: 'Find nearby places - Usage: /gps',
-        llmchange: 'Switch LLM model',
+        model: 'Show or switch chat model',
+        llmchange: 'Switch LLM model (legacy command)',
         help: 'Show this help message',
         new: 'Start new conversation',
         start: 'Start using the bot',
@@ -207,6 +211,11 @@ async function defaultIndexAction() {
  * 綁定 Webhook - 自動為所有 Bot 設定 Webhook 和指令
  */
 async function bindWebHookAction(request) {
+  const form = await request.formData().catch(() => null);
+  if (form?.get('confirm') !== 'update') {
+    return new Response('Confirmation required', { status: 400 });
+  }
+
   const result = {};
   const domain = new URL(request.url).host;
   const hookMode = API_GUARD ? "safehook" : "webhook";
@@ -227,9 +236,26 @@ async function bindWebHookAction(request) {
     ${Object.keys(result).map((id) => `
         <br/>
         <h4>Bot ID: ${id}</h4>
-        <p style="color: ${result[id].webhook?.ok ? "green" : "red"}">Webhook: ${JSON.stringify(result[id].webhook)}</p>
-        <p style="color: ${result[id].command?.ok ? "green" : "red"}">Command: ${JSON.stringify(result[id].command)}</p>
+        <p style="color: ${result[id].webhook?.ok ? "green" : "red"}">Webhook: ${escapeHTML(JSON.stringify(result[id].webhook))}</p>
+        <p style="color: ${result[id].command?.ok ? "green" : "red"}">Command: ${escapeHTML(JSON.stringify(result[id].command))}</p>
         `).join("")}
+    ${footer}
+  `);
+  return new Response(HTML, { status: 200, headers: { 'Content-Type': 'text/html' } });
+}
+
+/**
+ * 顯示初始化確認頁。GET 不得修改 Telegram 設定。
+ */
+async function bindWebHookConfirmationAction() {
+  const HTML = renderHTML(`
+    <h1>Telegram-Bot-Workers</h1>
+    <h2>Update Telegram webhook and command menu</h2>
+    <p>This action updates all bots configured in this Worker.</p>
+    <form method="post" action="/init">
+      <input type="hidden" name="confirm" value="update">
+      <button type="submit">Submit</button>
+    </form>
     ${footer}
   `);
   return new Response(HTML, { status: 200, headers: { 'Content-Type': 'text/html' } });
@@ -303,7 +329,8 @@ async function handleRequest(request) {
 
   // 路由定義
   router.get('/', defaultIndexAction);
-  router.get('/init', bindWebHookAction);
+  router.get('/init', bindWebHookConfirmationAction);
+  router.post('/init', bindWebHookAction);
   router.post('/telegram/:token/webhook', telegramWebhook);
   router.post('/telegram/:token/safehook', telegramSafeHook);
 

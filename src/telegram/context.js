@@ -3,7 +3,7 @@
  * 管理對話上下文、用戶配置、聊天狀態
  */
 
-import { ENV, DATABASE, CONST, UserConfig, mergeEnvironment } from '../config/env.js';
+import { ENV, DATABASE, CONST, UserConfig, mergeEnvironment, WORKER_ENV } from '../config/env.js';
 
 /**
  * 建立 Telegram Context
@@ -77,6 +77,11 @@ export class Context {
   USER_CONFIG = new UserConfig();
   CURRENT_CHAT_CONTEXT = new CurrentChatContext();
   SHARE_CONTEXT = new ShareContext();
+
+  constructor(workerEnv = WORKER_ENV) {
+    this.env = workerEnv;
+    this.AI_BINDING = workerEnv?.AI || null;
+  }
 
   /**
    * 初始化聊天上下文

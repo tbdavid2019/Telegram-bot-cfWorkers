@@ -1,5 +1,5 @@
 import { JsonRpcTransportHandler } from '@a2a-js/sdk/server';
-import { ENV } from '../config/env.js';
+import { ENV, WORKER_ENV } from '../config/env.js';
 import { requestCompletionsFromLLM } from '../agent/llm.js';
 import { loadChatLLM } from '../agent/agents.js';
 import { getAvailableCommands } from '../telegram/commands.js';
@@ -74,7 +74,7 @@ class TelegramBotA2AHandler {
         chat_id: chatId,
         parse_mode: "Markdown"
       },
-      env: context.env // Pass worker env
+      env: context.env || WORKER_ENV
     };
 
     // 3. Load LLM and request completions
@@ -129,7 +129,7 @@ export async function handleA2ARequest(request, env) {
     
     const context = {
       user: { isAuthenticated: true, id: "a2a_peer" },
-      env: env
+      env: env || WORKER_ENV
     };
 
     const response = await transportHandler.handle(body, context);
