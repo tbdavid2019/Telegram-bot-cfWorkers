@@ -4,8 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
-- **Cloudflare Workers AI profiles**: Added `Kimi` (`@cf/moonshotai/kimi-k2.6`) to every deployment profile as an additional selectable chat model. The existing `gemini` deployment's `DEFAULT_LLM_PROFILE = "Kimi"` now resolves to this profile.
+### Fixed
+- **Workers Free compatibility**: Removed the unavailable `@cf/moonshotai/kimi-k2.6` profile. The `gemini` deployment now defaults to its existing Gemini Flash profile instead of an unavailable model.
 
 ## [1.6.1] - 2026-03-31
 

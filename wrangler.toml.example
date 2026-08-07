@@ -135,12 +135,6 @@ LLM_PROFILES = '''
     "provider": "workers",
     "model": "@cf/openai/gpt-oss-120b",
     "options": {"max_tokens": 4096}
-  },
-  "Kimi": {
-    "name": "Cloudflare Kimi K2.6",
-    "provider": "workers",
-    "model": "@cf/moonshotai/kimi-k2.6",
-    "options": {"max_tokens": 4096}
   }
 }
 '''
@@ -261,12 +255,6 @@ LLM_PROFILES = '''
     "name": "Cloudflare GPT-OSS 120B",
     "provider": "workers",
     "model": "@cf/openai/gpt-oss-120b",
-    "options": {"max_tokens": 4096}
-  },
-  "Kimi": {
-    "name": "Cloudflare Kimi K2.6",
-    "provider": "workers",
-    "model": "@cf/moonshotai/kimi-k2.6",
     "options": {"max_tokens": 4096}
   }
 }
