@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+.gemini
+.kilocode
+.opencode
+.codex
+node_modules
+dist
+.dev.vars*
+.env*
+wrangler.toml
+*.log
+test
+image.png
+googlekey*.json
+googlekey*.txt
