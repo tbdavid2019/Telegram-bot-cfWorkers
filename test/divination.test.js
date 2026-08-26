@@ -88,7 +88,6 @@ test('commandTarot parses spread and formats response correctly', async () => {
     assert.match(sentMessage, /鑽石牌陣/);
     assert.match(sentMessage, /\[核心\] 愚者 \(正位\)/);
     assert.match(sentMessage, /這是塔羅解讀建議內容/);
-    assert.match(sentMessage, /test-ai gpt-test/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -176,10 +176,6 @@ export async function commandTarot(message, command, subcommand, context) {
 
     reply += '\n' + (ans ? ans : '（無回覆內容）');
 
-    if (meta.provider || meta.model) {
-      reply += `\n\n— 來源：${meta.provider || ''} ${meta.model || ''}`.trimEnd();
-    }
-
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
@@ -246,10 +242,6 @@ export async function commandQimen(message, command, subcommand, context) {
     }
     reply += '\n';
     reply += ans ? ans : '（無回覆內容）';
-
-    if (meta.provider || meta.model) {
-      reply += `\n\n— 來源：${meta.provider || ''} ${meta.model || ''}`.trimEnd();
-    }
 
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
@@ -388,10 +380,6 @@ export async function commandBazi(message, command, subcommand, context) {
     reply += `問題：${cleanQuestion}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
 
-    if (meta.provider || meta.model) {
-      reply += `\n\n— 來源：${meta.provider || ''} ${meta.model || ''}`.trimEnd();
-    }
-
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
@@ -500,10 +488,6 @@ export async function commandFengshui(message, command, subcommand, context) {
     reply += `問題：${data.question || question}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
 
-    if (meta.provider || meta.model) {
-      reply += `\n\n— 來源：${meta.provider || ''} ${meta.model || ''}`.trimEnd();
-    }
-
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
@@ -514,7 +498,7 @@ export async function commandFengshui(message, command, subcommand, context) {
  * 月老姻緣與感情測算指令
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
- * @param {string} subcommand - 參數與問題 (格式：[問題] 或 [年份1] [年份2] [問題])
+ * @param {string} subcommand - 參數與問題 (支援格式：模式或問題 / 西元出生年份1 西元出生年份2 問題)
  * @param {Object} context - 上下文對象
  */
 export async function commandYinyuan(message, command, subcommand, context) {
@@ -522,43 +506,42 @@ export async function commandYinyuan(message, command, subcommand, context) {
   if (!input) {
     return sendMessageToTelegramWithContext(context)(
       '🏮 *月老姻緣與感情測算*\n\n' +
-      '請輸入您想諮詢的感情問題、求月老籤或生肖合婚。\n\n' +
+      '請輸入想詢問的感情問題，或提供雙方出生年份進行合婚測算。\n\n' +
       '📝 *使用範例*：\n' +
-      '• `/yinyuan 求問今年感情發展與正緣` （月老靈籤抽籤）\n' +
-      '• `/yinyuan 1995 1998 我們合適嗎？` （生肖合婚契合度測算）\n' +
-      '• `/yinyuan 1996 桃花運與有利方位` （個人桃花運勢指引）\n\n' +
-      '模式說明：\n' +
-      '• 包含兩個年份（如 `1995 1998`）→ 自動進行 *生肖合婚*\n' +
-      '• 包含單一年份（如 `1996`）→ 自動進行 *桃花測算*\n' +
-      '• 一般問題或求籤 → 自動進行 *月老靈籤求籤*'
+      '• `/yinyuan 求問今年感情與正緣指引`（月老靈籤）\n' +
+      '• `/yinyuan 1995 1998 我們合適嗎？`（生肖合婚契合度）\n' +
+      '• `/yinyuan 1996 桃花運與有利方位`（個人桃花指引）\n\n' +
+      '支援模式：\n' +
+      '• *月老靈籤*：直接輸入感情相關問題\n' +
+      '• *生肖合婚*：輸入兩個西元年份（如 1995 1998）\n' +
+      '• *個人桃花*：輸入單一西元年份（如 1996）'
     );
   }
 
-  // 尋找 4 位數年份 (1900-2099)
-  const years = input.match(/\b(19\d{2}|20\d{2})\b/g);
+  // 1. 判斷是否有年份 (西元年 1900 ~ 2099)
+  const yearMatches = [...input.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => Number(m[1]));
   let mode = 'fortune';
-  const payload = {
-    question: input,
-    purpose: '感情',
-    lang: 'zh-tw'
-  };
+  let firstYear = undefined;
+  let secondYear = undefined;
 
-  if (years && years.length >= 2) {
+  if (yearMatches.length >= 2) {
     mode = 'zodiac';
-    payload.mode = 'zodiac';
-    payload.firstYear = Number(years[0]);
-    payload.secondYear = Number(years[1]);
-  } else if (years && years.length === 1 && (input.includes('桃花') || input.includes('方位') || input.includes('運勢'))) {
+    firstYear = yearMatches[0];
+    secondYear = yearMatches[1];
+  } else if (yearMatches.length === 1) {
     mode = 'peach-blossom';
-    payload.mode = 'peach-blossom';
-    payload.firstYear = Number(years[0]);
-    payload.status = /(交往|已婚|有對象|穩聊)/.test(input) ? '交往中' : '單身';
-  } else {
-    mode = 'fortune';
-    payload.mode = 'fortune';
+    firstYear = yearMatches[0];
   }
 
   const url = 'https://qi.david888.com/api/yinyuan-question';
+  const payload = {
+    question: input,
+    mode,
+    firstYear,
+    secondYear,
+    status: '單身',
+    lang: 'zh-tw'
+  };
 
   try {
     const response = await fetch(url, {
@@ -587,16 +570,14 @@ export async function commandYinyuan(message, command, subcommand, context) {
 
     const ans = (data.answer || '').trim();
     const result = data.result || {};
-    const meta = data.metadata || {};
 
-    let reply = '【🏮 月老姻緣】\n';
-
-    if (mode === 'fortune' && result.poem) {
-      reply += `籤詩：第${result.number || ''}籤【${result.title || ''}】${result.poem}\n`;
+    let reply = `【🏮 月老姻緣】\n`;
+    if (mode === 'fortune' && (result.poem || result.title)) {
+      reply += `籤詩：第${result.number || ''}籤【${result.title || ''}】${result.poem || ''}\n`;
     } else if (mode === 'zodiac' && result.first && result.second) {
-      reply += `生肖合婚：${result.first.year}年(${result.first.zodiac}) ＆ ${result.second.year}年(${result.second.zodiac})\n`;
-      if (result.relationship) {
-        reply += `契合分析：${result.relationship}（評分：${result.score || 'N/A'}分）\n`;
+      reply += `生肖合婚：${result.first.year}年(${result.first.zodiac || ''}) ＆ ${result.second.year}年(${result.second.zodiac || ''})\n`;
+      if (result.relationship || result.score !== undefined) {
+        reply += `契合分析：${result.relationship || ''}（評分：${result.score || 0}分）\n`;
       }
     } else if (mode === 'peach-blossom' && result.zodiac) {
       reply += `桃花指引：${result.zodiac}年生肖（狀態：${result.status || '單身'}）\n`;
@@ -607,10 +588,6 @@ export async function commandYinyuan(message, command, subcommand, context) {
 
     reply += `問題：${data.question || input}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
-
-    if (meta.provider || meta.model) {
-      reply += `\n\n— 來源：${meta.provider || ''} ${meta.model || ''}`.trimEnd();
-    }
 
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {

@@ -522,7 +522,6 @@ function formatFundReport(data, tickers) {
     }
   }
 
-  reply += '— 資料來源：AI Hedge Fund Committee (dns.glsoft.ai:6000)';
   return reply.trim();
 }
 
