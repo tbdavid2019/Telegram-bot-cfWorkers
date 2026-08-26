@@ -401,6 +401,46 @@ function formatStockInfo(stock) {
   `;
 }
 
+// 中文公司名稱與熱門股票代號對照表
+const CHINESE_STOCK_MAP = {
+  '微軟': 'MSFT',
+  '輝達': 'NVDA',
+  '英偉達': 'NVDA',
+  '特斯拉': 'TSLA',
+  '蘋果': 'AAPL',
+  '谷歌': 'GOOGL',
+  '谷哥': 'GOOGL',
+  '亞馬遜': 'AMZN',
+  '臉書': 'META',
+  '超微': 'AMD',
+  '台積電': '2330.TW',
+  '台積': '2330.TW',
+  '鴻海': '2317.TW',
+  '聯發科': '2454.TW',
+  '發哥': '2454.TW',
+  '廣達': '2382.TW',
+  '緯創': '3231.TW',
+  '技嘉': '2376.TW',
+  '富邦金': '2881.TW',
+  '國泰金': '2882.TW',
+  '台達電': '2308.TW',
+  '中信金': '2891.TW',
+  '聯電': '2303.TW',
+  '長榮': '2603.TW',
+  '陽明': '2609.TW',
+  '萬海': '2615.TW',
+  '中鋼': '2002.TW',
+  '中華電': '2412.TW',
+  '阿里巴巴': 'BABA',
+  '阿里': 'BABA',
+  '騰訊': '0700.HK',
+  '美團': '3690.HK',
+  '拼多多': 'PDD',
+  '網易': 'NTES',
+  '京東': 'JD',
+  '百度': 'BIDU'
+};
+
 // 14 位投資大師名稱對照表
 const ANALYST_NAMES = {
   'warren_buffett_agent': '👴 華倫·巴菲特 (Warren Buffett)',
@@ -425,12 +465,16 @@ const ANALYST_NAMES = {
   'wsb': '🎰 華爾街賭場 (WallStreetBets)',
   'technical_analyst_agent': '📈 技術分析師 (Technicals)',
   'technical_analyst': '📈 技術分析師 (Technicals)',
+  'technical_agent': '📈 技術分析師 (Technicals)',
   'fundamentals_analyst_agent': '📑 基本面分析師 (Fundamentals)',
   'fundamentals_analyst': '📑 基本面分析師 (Fundamentals)',
+  'fundamentals_agent': '📑 基本面分析師 (Fundamentals)',
   'sentiment_analyst_agent': '📰 即時新聞情緒 (Sentiment)',
   'sentiment_analyst': '📰 即時新聞情緒 (Sentiment)',
+  'sentiment_agent': '📰 即時新聞情緒 (Sentiment)',
   'valuation_analyst_agent': '💵 內在估值分析師 (DCF Valuation)',
   'valuation_analyst': '💵 內在估值分析師 (DCF Valuation)',
+  'valuation_agent': '💵 內在估值分析師 (DCF Valuation)',
   'risk_management_agent': '🛡️ 風險管理 (Risk Management)',
   'risk_management': '🛡️ 風險管理 (Risk Management)'
 };
@@ -453,6 +497,111 @@ function getActionTag(action) {
 }
 
 /**
+ * 清理中英雙語混雜文字，優先擷取繁體中文翻譯段落
+ */
+function cleanMixedLanguage(text) {
+  if (!text || typeof text !== 'string') return '';
+
+  // 1. 若含有【繁體中文解析】或【中文解析】標記
+  if (text.includes('【繁體中文解析】') || text.includes('【中文解析】')) {
+    const segments = text.split(/【(?:繁體)?中文解析】/);
+    const cleaned = [];
+    for (let i = 1; i < segments.length; i++) {
+      const lines = segments[i].split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (/[\u4e00-\u9fa5]/.test(trimmed)) {
+          cleaned.push(trimmed);
+        }
+      }
+    }
+    if (cleaned.length > 0) return cleaned.join('\n');
+  }
+
+  // 2. 若為前後段英文＋中文結構，擷取中文部分
+  const firstChineseIdx = text.search(/[\u4e00-\u9fa5]/);
+  if (firstChineseIdx > 20) {
+    const chinesePart = text.slice(firstChineseIdx).trim();
+    if (chinesePart.length > 15) return chinesePart;
+  }
+
+  return text.trim();
+}
+
+/**
+ * 擷取分析師結構化或字串觀點
+ */
+function extractReasoning(sig) {
+  if (!sig) return '';
+  if (typeof sig.reasoning === 'string') {
+    return cleanMixedLanguage(sig.reasoning);
+  }
+  if (sig.reasoning && typeof sig.reasoning === 'object') {
+    const parts = [];
+    if (sig.reasoning.dcf_analysis) {
+      parts.push(`DCF估值: ${sig.reasoning.dcf_analysis.details || sig.reasoning.dcf_analysis.signal}`);
+    }
+    if (sig.reasoning.owner_earnings_analysis) {
+      parts.push(`股東收益: ${sig.reasoning.owner_earnings_analysis.details || sig.reasoning.owner_earnings_analysis.signal}`);
+    }
+    if (parts.length > 0) return parts.join('；');
+    return Object.entries(sig.reasoning)
+      .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+      .join('；');
+  }
+  if (sig.strategy_signals && typeof sig.strategy_signals === 'object') {
+    const stratMap = {
+      trend_following: '趨勢追蹤',
+      momentum: '動能指標',
+      mean_reversion: '均值回歸',
+      statistical_arbitrage: '統計套利',
+      volatility: '波動率'
+    };
+    return Object.entries(sig.strategy_signals)
+      .map(([k, v]) => `${stratMap[k] || k}: ${getSignalTag(v.signal)}`)
+      .join(' | ');
+  }
+  return '';
+}
+
+/**
+ * 智慧解析輸入中的股票代碼或公司名稱
+ */
+function resolveStockTickers(input) {
+  let text = input.trim();
+  const isAll = text.toLowerCase().includes('all');
+
+  // 去除常見結尾疑問詞
+  text = text.replace(/(可以買嗎|能買嗎|值得買嗎|該買嗎|怎麼樣|評價|如何|走勢|分析|好嗎|？|\?)/g, ' ').trim();
+
+  // 1. 檢查中文公司名稱
+  for (const [name, ticker] of Object.entries(CHINESE_STOCK_MAP)) {
+    if (text.includes(name)) {
+      return { tickers: [ticker], isAll };
+    }
+  }
+
+  // 2. 提取股票代碼
+  const tokens = text.split(/[\s,]+/);
+  const tickers = [];
+  for (let token of tokens) {
+    token = token.toUpperCase().trim();
+    if (!token || token === 'ALL') continue;
+    if (/^\d{4,6}$/.test(token)) {
+      tickers.push(`${token}.TW`);
+    } else if (/^[A-Z0-9.\-_]{1,12}$/.test(token)) {
+      tickers.push(token);
+    }
+  }
+
+  if (tickers.length === 0 && text) {
+    tickers.push(tokens[0] || text);
+  }
+
+  return { tickers, isAll };
+}
+
+/**
  * 格式化 AI 對沖基金報告
  */
 function formatFundReport(data, tickers) {
@@ -468,17 +617,20 @@ function formatFundReport(data, tickers) {
     const rt = roundTable[ticker];
 
     // 1. 最終委員會決策
-    if (dec) {
+    if (dec && (dec.action || dec.reasoning)) {
       reply += `🎯 *【投資委員會最終決策・${ticker}】*\n`;
-      reply += `• 建議動作：${getActionTag(dec.action)}\n`;
+      if (dec.action) {
+        reply += `• 建議動作：${getActionTag(dec.action)}\n`;
+      }
       if (dec.confidence !== undefined) {
-        reply += `• 決策信心度：${dec.confidence}%\n`;
+        const confText = dec.confidence <= 100 ? `${dec.confidence}%` : `評分 ${Math.round(dec.confidence)}`;
+        reply += `• 決策信心度：${confText}\n`;
       }
       if (dec.quantity) {
         reply += `• 建議倉位股數：${dec.quantity} 股\n`;
       }
       if (dec.reasoning) {
-        reply += `• 決策理由：${dec.reasoning}\n`;
+        reply += `• 決策理由：${cleanMixedLanguage(dec.reasoning)}\n`;
       }
       reply += '\n';
     }
@@ -490,13 +642,13 @@ function formatFundReport(data, tickers) {
         reply += `• 會議整體傾向：${getSignalTag(rt.signal)} (信心度: ${rt.confidence || 0}%)\n`;
       }
       if (rt.consensus_view) {
-        reply += `• 會議共識：${rt.consensus_view}\n`;
+        reply += `• 會議共識：${cleanMixedLanguage(rt.consensus_view)}\n`;
       }
       if (rt.discussion_summary) {
-        reply += `• 多空交鋒焦點：${rt.discussion_summary}\n`;
+        reply += `• 多空交鋒焦點：${cleanMixedLanguage(rt.discussion_summary)}\n`;
       }
       if (rt.dissenting_opinions) {
-        reply += `• 分歧與保留意見：${rt.dissenting_opinions}\n`;
+        reply += `• 分歧與保留意見：${cleanMixedLanguage(rt.dissenting_opinions)}\n`;
       }
       reply += '\n';
     }
@@ -512,10 +664,11 @@ function formatFundReport(data, tickers) {
         if (!sig) continue;
         const displayName = ANALYST_NAMES[agentKey] || agentKey.replace('_agent', '');
         const tag = getSignalTag(sig.signal);
-        const conf = sig.confidence !== undefined ? ` (${sig.confidence}%)` : '';
+        const conf = sig.confidence !== undefined ? (sig.confidence <= 100 ? ` (${sig.confidence}%)` : ` (評分: ${Math.round(sig.confidence)})`) : '';
         reply += `• ${displayName}：${tag}${conf}\n`;
-        if (sig.reasoning && typeof sig.reasoning === 'string') {
-          reply += `  └ 觀點：${sig.reasoning}\n`;
+        const reasoningText = extractReasoning(sig);
+        if (reasoningText) {
+          reply += `  └ 觀點：${reasoningText}\n`;
         }
       }
       reply += '\n';
@@ -537,11 +690,11 @@ export async function commandFund(message, command, subcommand, context) {
   if (!input) {
     return sendMessageToTelegramWithContext(context)(
       '📈 *AI 對沖基金・多大師投資決策與圓桌辯論*\n\n' +
-      '請在指令後輸入股票代碼（支援美股、台股與多標的）。\n\n' +
+      '請在指令後輸入股票代碼（支援美股、台股與中文公司名）。\n\n' +
       '📝 *使用範例*：\n' +
-      '• `/fund NVDA` （分析輝達，含巴菲特、木頭姐、貝瑞等大師決策與圓桌辯論）\n' +
-      '• `/fund TSLA` （分析特斯拉）\n' +
-      '• `/fund 2330.TW` （分析台積電）\n' +
+      '• `/fund NVDA` 或 `/fund 輝達` （分析輝達）\n' +
+      '• `/fund TSLA` 或 `/fund 特斯拉` （分析特斯拉）\n' +
+      '• `/fund 2330` 或 `/fund 台積電` （分析台積電）\n' +
       '• `/fund AAPL,MSFT` （多標的組合分析）\n' +
       '• `/fund NVDA all` （召集全部 14 位投資大師進行全方位分析）\n\n' +
       '👥 *涵蓋 14 位傳奇投資大師與分析維度*：\n' +
@@ -552,25 +705,14 @@ export async function commandFund(message, command, subcommand, context) {
     );
   }
 
-  // 解析股票代號
-  const parts = input.split(/\s+/);
-  const tickerArg = parts[0];
-  const isAllAnalysts = input.toLowerCase().includes('all');
-
-  // 整理 ticker 格式（例如 2330 -> 2330.TW，英文字母大寫）
-  const tickers = tickerArg.split(',').map(t => {
-    let clean = t.trim().toUpperCase();
-    if (/^\d{4,6}$/.test(clean)) {
-      clean = `${clean}.TW`;
-    }
-    return clean;
-  }).filter(Boolean);
+  // 智慧解析股票代號與公司名稱
+  const { tickers, isAll } = resolveStockTickers(input);
 
   if (tickers.length === 0) {
-    return sendMessageToTelegramWithContext(context)('錯誤: 請輸入有效的股票代碼（如 NVDA, TSLA, 2330.TW）。');
+    return sendMessageToTelegramWithContext(context)('錯誤: 請輸入有效的股票代碼或公司名稱（如 NVDA, TSLA, 台積電, 微軟）。');
   }
 
-  const selectedAnalysts = isAllAnalysts ? [] : [
+  const selectedAnalysts = isAll ? [] : [
     'warren_buffett',
     'cathie_wood',
     'michael_burry',
@@ -607,4 +749,5 @@ export async function commandFund(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)(`❌ AI 對沖基金分析失敗：${e.message}\n\n請確認代號正確或稍後再試。`);
   }
 }
+
 

@@ -109,3 +109,91 @@ test('commandFund formats ticker, calls API, and formats report correctly', asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test('commandFund resolves Chinese company names and cleans bilingual text', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/analysis')) {
+      const reqBody = JSON.parse(opts.body);
+      // "微軟可以買嗎" should resolve to "MSFT"
+      assert.equal(reqBody.tickers, 'MSFT');
+
+      return new Response(JSON.stringify({
+        decisions: {
+          MSFT: {
+            action: 'buy',
+            confidence: 88.0,
+            quantity: 200,
+            reasoning: 'English reasoning.\n【繁體中文解析】多數分析師看好微軟雲端與AI成長力道。'
+          }
+        },
+        round_table: {
+          MSFT: {
+            signal: 'bullish',
+            confidence: 75.0,
+            consensus_view: 'English consensus. 委員會認為微軟長期護城河深厚，具備高度成長潛力。',
+            discussion_summary: 'English discussion. 巴菲特與木頭姐重點討論雲端成長率與估值。',
+            dissenting_opinions: 'English dissent. 麥可·貝瑞對自由現金流殖利率提出審慎看法。'
+          }
+        },
+        analyst_signals: {
+          technical_analyst_agent: {
+            MSFT: {
+              confidence: 60.0,
+              signal: 'bullish',
+              strategy_signals: {
+                trend_following: { signal: 'bullish' },
+                momentum: { signal: 'neutral' }
+              }
+            }
+          },
+          valuation_agent: {
+            MSFT: {
+              confidence: 90.0,
+              signal: 'bullish',
+              reasoning: {
+                dcf_analysis: { details: '內在價值高於市價 (Gap: 45%)', signal: 'bullish' }
+              }
+            }
+          },
+          warren_buffett_agent: {
+            MSFT: {
+              signal: 'neutral',
+              confidence: 50.0,
+              reasoning: 'English text.\n【繁體中文解析】雖然具備優異股東權益報酬率，但安全邊際尚未達到30%水準。'
+            }
+          }
+        }
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandFund({}, '/fund', '微軟可以買嗎', context);
+    assert.match(sentMessage, /【📈 AI 對沖基金・投資分析報告】/);
+    assert.match(sentMessage, /標的：MSFT/);
+    assert.match(sentMessage, /建議動作：🟢 買入 \(BUY\)/);
+    assert.match(sentMessage, /多數分析師看好微軟雲端與AI成長力道/);
+    assert.match(sentMessage, /技術分析師/);
+    assert.match(sentMessage, /趨勢追蹤: 🟢 看多 \(BUY\)/);
+    assert.match(sentMessage, /內在估值分析師/);
+    assert.match(sentMessage, /DCF估值: 內在價值高於市價/);
+    assert.match(sentMessage, /安全邊際尚未達到30%水準/);
+    // Ensure raw English headers are cleaned
+    assert.doesNotMatch(sentMessage, /English text/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
