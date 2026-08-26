@@ -6,7 +6,8 @@ import {
 } from '../features/weather.js';
 import {
   commandStockTW,
-  commandStock
+  commandStock,
+  commandFund
 } from '../features/stock.js';
 import {
   commandDictCN,
@@ -15,6 +16,10 @@ import {
 import {
   commandQimen,
   commandMeiHua,
+  commandTarot,
+  commandBazi,
+  commandFengshui,
+  commandYinyuan,
   commandTempleOracleJP,
   commandTangPoetry,
   commandAnswerBook,
@@ -74,6 +79,10 @@ export const commandSortList = [
   "/bo",            // 解答之書原版
   "/qi",            // 奇門遁甲
   "/mei",           // 梅花易數
+  "/tarot",         // 塔羅占卜
+  "/bazi",          // 生辰八字
+  "/fengshui",      // 八宅風水
+  "/yinyuan",       // 月老姻緣
   "/oracle",        // 淺草籤詩
   "/poetry",        // 唐詩
   "/law",           // 法律問答
@@ -87,6 +96,7 @@ export const commandSortList = [
   "/memory",        // 查看長期記憶
   "/memoryclear",   // 清除個人記憶
   "/system",        // 查看系統狀態
+  "/fund",          // AI 對沖基金投資分析
   "/stock2",        // 美國國際股市 (要加參數)
   "/stock",         // 台灣股市 (要加參數)
   "/wt",            // 台灣地區天氣 (要加參數)
@@ -123,6 +133,11 @@ export const commandHandlers = {
   },
 
   // 股票相關
+  "/fund": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandFund,
+    description: "AI 對沖基金投資分析 - 使用: /fund [股票代號]"
+  },
   "/stock": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandStockTW,
@@ -156,6 +171,26 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandMeiHua,
     description: "梅花易數占卜 - 使用: /mei [問題]"
+  },
+  "/tarot": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandTarot,
+    description: "塔羅占卜 - 使用: /tarot [問題] 或 /tarot [牌陣] [問題]"
+  },
+  "/bazi": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandBazi,
+    description: "生辰八字排盤 - 使用: /bazi [YYYY-MM-DD] [男/女] [問題]"
+  },
+  "/fengshui": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandFengshui,
+    description: "八宅風水與流年飛星 - 使用: /fengshui [座向] [問題]"
+  },
+  "/yinyuan": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandYinyuan,
+    description: "月老姻緣與感情測算 - 使用: /yinyuan [問題] 或 /yinyuan [年份1] [年份2]"
   },
   "/oracle": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],

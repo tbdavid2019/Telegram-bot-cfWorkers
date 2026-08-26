@@ -1,6 +1,7 @@
 # 開發注意事項 (Development Notes)
 
 > ⚠️ **重要**：此文件記錄專案中容易踩到的坑和需要特別注意的設計模式，請在開發前詳細閱讀！
+> 🤖 **Agent 規範**：每次修改代碼或新增功能後，**務必同步更新 `CHANGELOG.md` 與 `README.md`**（詳見 [AGENT.md](./AGENT.md)）。
 
 ---
 

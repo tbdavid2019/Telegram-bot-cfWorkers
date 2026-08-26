@@ -116,8 +116,8 @@ export async function generateCommandSystemPrompt(context) {
     // 按類別組織指令
     const cachedCategories = {
         '天氣相關': ['/wt', '/weatheralert'],
-        '股票相關': ['/stocktw', '/stock', '/stock2'],
-        '占卜相關': ['/qi', '/oracle', '/poetry', '/boa', '/bo'],
+        '股票相關': ['/stocktw', '/stock', '/stock2', '/fund'],
+        '占卜相關': ['/qi', '/mei', '/tarot', '/bazi', '/fengshui', '/yinyuan', '/oracle', '/poetry', '/boa', '/bo'],
         '法律相關': ['/law'],
         '字典相關': ['/dict', '/dictcn', '/dicten'],
         '網路工具': ['/ip', '/dns', '/dns2'],
@@ -190,20 +190,22 @@ export async function generateCommandSystemPrompt(context) {
     prompt += '**範例**：\n';
     prompt += '用戶問「台北天氣如何？」→ 回應中包含 `[CALL:/wt 台北]`\n';
     prompt += '- 用戶問「查詢台股 2330」→ 回應中包含 `[CALL:/stocktw 2330]`\n';
+    prompt += '- 用戶問「分析輝達股票 / 投資大師怎麼看特斯拉」→ 回應中包含 `[CALL:/fund NVDA]` 或 `[CALL:/fund TSLA]`\n';
+    prompt += '- 用戶問「幫我抽張塔羅牌看工作」→ 回應中包含 `[CALL:/tarot 換工作順利嗎？]`\n';
+    prompt += '- 用戶問「算八字：我是1995-08-18出生男生，看今年事業」→ 回應中包含 `[CALL:/bazi 1995-08-18 男 看今年事業]`\n';
+    prompt += '- 用戶問「客廳座北朝南，財位該怎麼擺？」→ 回應中包含 `[CALL:/fengshui 坐北朝南 客廳財位擺設]`\n';
+    prompt += '- 用戶問「我想求個月老籤看感情」→ 回應中包含 `[CALL:/yinyuan 求問今年感情正緣]`\n';
+    prompt += '- 用戶問「我和男友合不合（1995與1997）」→ 回應中包含 `[CALL:/yinyuan 1995 1997 我們合適嗎]`\n';
     prompt += '- 用戶問「AI 生成內容的法律問題」→ 回應中包含 `[CALL:/law AI產生的不實訊息會構成誹謗罪嗎？]`\n';
     // /budget 和 /schedule 已改為 Tool Calling，不再顯示為 Inline Keyboard 範例
     prompt += '- 用戶問「記帳：12月房租 15000」→ 回應中包含 `[CALL:/budgetwrite {"month": "2025/12", "category": "rent", "amount": 15000}]`\n';
     prompt += '- 用戶問「幫我加行程：明天下午3點去好市多」 (假設今天是 2025/01/01) →\n';
     prompt += '  回應中包含 `[CALL:/scheduleadd {"date": "2025/01/02", "time": "15:00", "targetUser": "爸爸", "event": "去好市多"}]`\n';
     prompt += '- 用戶問「請 no.2 跟我打個招呼」 → 回應中包含 `[CALL:/delegate no.2 跟我打個招呼]`\n\n';
-    prompt += '**重要**：\n';
-    prompt += '1. 調用標記會被自動處理，用戶看不到這個標記\n';
-    prompt += '2. 指令會自動執行並回覆用戶\n';
-    prompt += '3. 你只需要告知用戶「正在為您查詢...」或類似的提示\n';
-    prompt += '4. 一次可以調用多個指令\n';
-    prompt += '5. 請謹慎判斷用戶意圖，只在確實需要時才調用指令\n';
-    prompt += '6. **關鍵**：當用戶詢問「家庭收支」或「行程」時，你**必須主動**使用 `[CALL:/budget ...]` 或 `[CALL:/schedule ...]` 指令來獲取資料。資料**不會**自動出現，你必須調用指令！**絕對不可以**自己編造數據或日期！\n';
-    prompt += '7. 如果你沒有調用指令，你就無法回答用戶的問題。請務必生成 `[CALL:...]` 標記。\n';
+    prompt += '**重要多輪引導規則**：\n';
+    prompt += '1. **八字排盤**：需要西元出生日期（YYYY-MM-DD）與性別。如果用戶只說「幫我算八字/算命」而未提供出生日期，請先以親切語氣在對話中詢問用戶的出生年月日與性別，待用戶提供後再生成 `[CALL:/bazi ...]`。\n';
+    prompt += '2. **生肖合婚**：若用戶想看兩人是否相配，請先詢問雙方的西元出生年份（如 1995 與 1997），獲取後生成 `[CALL:/yinyuan 年份1 年份2 問題]`。\n';
+    prompt += '3. 調用標記會被自動處理，用戶看不到這個標記；指令會自動執行並回覆用戶。\n';
 
     return prompt;
 }

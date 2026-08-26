@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-26
+
+### Added
+- **AI 對沖基金投資分析 (`/fund`)**：串接 `http://dns.glsoft.ai:6000/api/analysis`，提供 14 位傳奇投資大師（巴菲特、蒙格、木頭姐、麥可·貝瑞、彼得·林區等）多維度量化與質化評級，並支援多輪圓桌會議辯論、共識整合與多空倉位決策。
+  - `/fund [股票代碼]` — 支援美股 (TSLA, NVDA)、台股 (2330.TW)、港股與多標的組合分析 (AAPL,MSFT)。
+- **四大占卜與術數功能整合**：串接 `https://qi.david888.com/api/`，新增塔羅占卜、生辰八字2、八宅風水、月老姻緣功能。
+  - `/tarot [問題]` — 塔羅牌抽牌與 AI 心理指引解讀（支援 `single`, `three`, `diamond`, `moon`, `horseshoe`, `celtic` 六種牌陣）。
+  - `/bazi [YYYY-MM-DD] [男/女] [問題]` — 生辰八字排盤、四柱干支、十神、五行分佈統計與 AI 大師深度解盤。
+  - `/fengshui [座向] [問題]` — 八宅風水宅卦分析、本命卦、九運與流年飛星吉凶佈局建議。
+  - `/yinyuan [問題 或 年份 年份]` — 月老靈籤求籤、生肖合婚契合度測算、個人桃花方位指引三合一。
+- **雙軌制（Dual-Track）智能引導機制**：
+  - 指令層：自動進行正則容錯提取（如股票代號格式、出生年月日、性別、朝向、生肖年份），參數不齊全時回傳清晰範例引導。
+  - 對話層：LLM 指令發現系統配置多輪對話引導規則，當使用者在聊天中提出算命/合婚/選股需求時，LLM 會先親切追問必要參數，收集完畢後自動觸發指令按鈕。
+- **單元測試**：新增 `test/divination.test.js` 與 `test/stock-fund.test.js` 涵蓋完整測試套件。
 ## [1.6.2] - 2026-08-07
 
 ### Added

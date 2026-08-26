@@ -400,3 +400,212 @@ function formatStockInfo(stock) {
   市盈率 (P/E): ${stock.pe.toFixed(2)}
   `;
 }
+
+// 14 位投資大師名稱對照表
+const ANALYST_NAMES = {
+  'warren_buffett_agent': '👴 華倫·巴菲特 (Warren Buffett)',
+  'warren_buffett': '👴 華倫·巴菲特 (Warren Buffett)',
+  'charlie_munger_agent': '🧠 查理·蒙格 (Charlie Munger)',
+  'charlie_munger': '🧠 查理·蒙格 (Charlie Munger)',
+  'ben_graham_agent': '📜 班傑明·葛拉漢 (Ben Graham)',
+  'ben_graham': '📜 班傑明·葛拉漢 (Ben Graham)',
+  'cathie_wood_agent': '🚀 凱薩琳·伍德 / 木頭姐 (Cathie Wood)',
+  'cathie_wood': '🚀 凱薩琳·伍德 / 木頭姐 (Cathie Wood)',
+  'bill_ackman_agent': '🎯 比爾·艾克曼 (Bill Ackman)',
+  'bill_ackman': '🎯 比爾·艾克曼 (Bill Ackman)',
+  'nancy_pelosi_agent': '🏛️ 南希·裴洛西 (Nancy Pelosi)',
+  'nancy_pelosi': '🏛️ 南希·裴洛西 (Nancy Pelosi)',
+  'michael_burry_agent': '🐻 麥可·貝瑞 / 大賣空 (Michael Burry)',
+  'michael_burry': '🐻 麥可·貝瑞 / 大賣空 (Michael Burry)',
+  'peter_lynch_agent': '📊 彼得·林區 (Peter Lynch)',
+  'peter_lynch': '📊 彼得·林區 (Peter Lynch)',
+  'phil_fisher_agent': '🌱 菲利普·費雪 (Phil Fisher)',
+  'phil_fisher': '🌱 菲利普·費雪 (Phil Fisher)',
+  'wsb_agent': '🎰 華爾街賭場 (WallStreetBets)',
+  'wsb': '🎰 華爾街賭場 (WallStreetBets)',
+  'technical_analyst_agent': '📈 技術分析師 (Technicals)',
+  'technical_analyst': '📈 技術分析師 (Technicals)',
+  'fundamentals_analyst_agent': '📑 基本面分析師 (Fundamentals)',
+  'fundamentals_analyst': '📑 基本面分析師 (Fundamentals)',
+  'sentiment_analyst_agent': '📰 即時新聞情緒 (Sentiment)',
+  'sentiment_analyst': '📰 即時新聞情緒 (Sentiment)',
+  'valuation_analyst_agent': '💵 內在估值分析師 (DCF Valuation)',
+  'valuation_analyst': '💵 內在估值分析師 (DCF Valuation)',
+  'risk_management_agent': '🛡️ 風險管理 (Risk Management)',
+  'risk_management': '🛡️ 風險管理 (Risk Management)'
+};
+
+function getSignalTag(signal) {
+  const s = String(signal || '').toLowerCase();
+  if (s.includes('bull') || s.includes('buy')) return '🟢 看多 (BUY)';
+  if (s.includes('bear') || s.includes('sell')) return '🔴 看空 (SELL)';
+  if (s.includes('short')) return '🔴 做空 (SHORT)';
+  return '⚪ 中立 (HOLD)';
+}
+
+function getActionTag(action) {
+  const a = String(action || '').toLowerCase();
+  if (a === 'buy') return '🟢 買入 (BUY)';
+  if (a === 'sell') return '🔴 賣出 (SELL)';
+  if (a === 'short') return '🔴 做空 (SHORT)';
+  if (a === 'hold') return '⚪ 觀望 (HOLD)';
+  return a.toUpperCase();
+}
+
+/**
+ * 格式化 AI 對沖基金報告
+ */
+function formatFundReport(data, tickers) {
+  let reply = '【📈 AI 對沖基金・投資分析報告】\n';
+  reply += `標的：${tickers.join(', ')}\n\n`;
+
+  const decisions = data.decisions || {};
+  const roundTable = data.round_table || {};
+  const analystSignals = data.analyst_signals || {};
+
+  for (const ticker of tickers) {
+    const dec = decisions[ticker];
+    const rt = roundTable[ticker];
+
+    // 1. 最終委員會決策
+    if (dec) {
+      reply += `🎯 *【投資委員會最終決策・${ticker}】*\n`;
+      reply += `• 建議動作：${getActionTag(dec.action)}\n`;
+      if (dec.confidence !== undefined) {
+        reply += `• 決策信心度：${dec.confidence}%\n`;
+      }
+      if (dec.quantity) {
+        reply += `• 建議倉位股數：${dec.quantity} 股\n`;
+      }
+      if (dec.reasoning) {
+        reply += `• 決策理由：${dec.reasoning}\n`;
+      }
+      reply += '\n';
+    }
+
+    // 2. 圓桌會議共識與辯論
+    if (rt && (rt.consensus_view || rt.discussion_summary)) {
+      reply += `🏛️ *【圓桌會議辯論與共識】*\n`;
+      if (rt.signal) {
+        reply += `• 會議整體傾向：${getSignalTag(rt.signal)} (信心度: ${rt.confidence || 0}%)\n`;
+      }
+      if (rt.consensus_view) {
+        reply += `• 會議共識：${rt.consensus_view}\n`;
+      }
+      if (rt.discussion_summary) {
+        reply += `• 多空交鋒焦點：${rt.discussion_summary}\n`;
+      }
+      if (rt.dissenting_opinions) {
+        reply += `• 分歧與保留意見：${rt.dissenting_opinions}\n`;
+      }
+      reply += '\n';
+    }
+
+    // 3. 各大師獨立信號
+    const personaEntries = Object.entries(analystSignals).filter(
+      ([agentName]) => agentName !== 'round_table' && agentName !== 'risk_management_agent'
+    );
+    if (personaEntries.length > 0) {
+      reply += `👥 *【傳奇投資大師獨立評級】*\n`;
+      for (const [agentKey, signalObj] of personaEntries) {
+        const sig = signalObj[ticker];
+        if (!sig) continue;
+        const displayName = ANALYST_NAMES[agentKey] || agentKey.replace('_agent', '');
+        const tag = getSignalTag(sig.signal);
+        const conf = sig.confidence !== undefined ? ` (${sig.confidence}%)` : '';
+        reply += `• ${displayName}：${tag}${conf}\n`;
+        if (sig.reasoning && typeof sig.reasoning === 'string') {
+          reply += `  └ 觀點：${sig.reasoning}\n`;
+        }
+      }
+      reply += '\n';
+    }
+  }
+
+  reply += '— 資料來源：AI Hedge Fund Committee (dns.glsoft.ai:6000)';
+  return reply.trim();
+}
+
+/**
+ * AI 對沖基金投資分析指令
+ * @param {Object} message - Telegram 訊息對象
+ * @param {string} command - 指令名稱
+ * @param {string} subcommand - 股票代碼或分析參數
+ * @param {Object} context - 上下文對象
+ */
+export async function commandFund(message, command, subcommand, context) {
+  const input = (subcommand || '').trim();
+  if (!input) {
+    return sendMessageToTelegramWithContext(context)(
+      '📈 *AI 對沖基金・多大師投資決策與圓桌辯論*\n\n' +
+      '請在指令後輸入股票代碼（支援美股、台股與多標的）。\n\n' +
+      '📝 *使用範例*：\n' +
+      '• `/fund NVDA` （分析輝達，含巴菲特、木頭姐、貝瑞等大師決策與圓桌辯論）\n' +
+      '• `/fund TSLA` （分析特斯拉）\n' +
+      '• `/fund 2330.TW` （分析台積電）\n' +
+      '• `/fund AAPL,MSFT` （多標的組合分析）\n' +
+      '• `/fund NVDA all` （召集全部 14 位投資大師進行全方位分析）\n\n' +
+      '👥 *涵蓋 14 位傳奇投資大師與分析維度*：\n' +
+      '• 價值派：巴菲特、蒙格、葛拉漢、艾克曼\n' +
+      '• 成長/創新派：木頭姐、費雪、彼得·林區\n' +
+      '• 反向/事件派：麥可·貝瑞 (大賣空)、裴洛西 (國會交易)、WSB (社群散戶)\n' +
+      '• 量化數據：技術指標、財務基本面、即時新聞情緒、DCF 估值模型'
+    );
+  }
+
+  // 解析股票代號
+  const parts = input.split(/\s+/);
+  const tickerArg = parts[0];
+  const isAllAnalysts = input.toLowerCase().includes('all');
+
+  // 整理 ticker 格式（例如 2330 -> 2330.TW，英文字母大寫）
+  const tickers = tickerArg.split(',').map(t => {
+    let clean = t.trim().toUpperCase();
+    if (/^\d{4,6}$/.test(clean)) {
+      clean = `${clean}.TW`;
+    }
+    return clean;
+  }).filter(Boolean);
+
+  if (tickers.length === 0) {
+    return sendMessageToTelegramWithContext(context)('錯誤: 請輸入有效的股票代碼（如 NVDA, TSLA, 2330.TW）。');
+  }
+
+  const selectedAnalysts = isAllAnalysts ? [] : [
+    'warren_buffett',
+    'cathie_wood',
+    'michael_burry',
+    'peter_lynch',
+    'technical_analyst',
+    'valuation_analyst'
+  ];
+
+  const url = 'http://dns.glsoft.ai:6000/api/analysis';
+  const payload = {
+    tickers: tickers.length === 1 ? tickers[0] : tickers,
+    selectedAnalysts,
+    enableRoundTable: true,
+    roundTableRounds: 1
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errText || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const formattedReport = formatFundReport(data, tickers);
+    return sendMessageToTelegramWithContext(context)(formattedReport);
+  } catch (e) {
+    console.error('AI Hedge Fund Error:', e);
+    return sendMessageToTelegramWithContext(context)(`❌ AI 對沖基金分析失敗：${e.message}\n\n請確認代號正確或稍後再試。`);
+  }
+}
+
