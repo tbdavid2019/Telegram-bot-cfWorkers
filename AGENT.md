@@ -1,6 +1,8 @@
 # 🤖 AI Agent 開發與維護指南 (AGENT.md)
 
 > 本文件為 AI 輔助開發（如 Google Antigravity、Claude Code、Cursor 等 Agent）在維護本專案時的**強制性規範與核心守則**。
+> - **專案維護者 (Maintainer)**: `tbdavid2019`
+> - **GitHub Repository**: `https://github.com/tbdavid2019/Telegram-bot-cfWorkers`
 
 ---
 

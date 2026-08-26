@@ -1,4 +1,8 @@
-本專案來自 fork https://github.com/TBXark/ChatGPT-Telegram-Workers
+# Telegram Bot on Cloudflare Workers
+
+> **Maintainer**: [@tbdavid2019](https://github.com/tbdavid2019)  
+> **Repository**: [https://github.com/tbdavid2019/Telegram-bot-cfWorkers](https://github.com/tbdavid2019/Telegram-bot-cfWorkers)  
+> *(Forked & Enhanced from TBXark/ChatGPT-Telegram-Workers)*
 
 ---
 
