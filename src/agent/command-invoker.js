@@ -69,6 +69,14 @@ export function extractCommandCalls(text) {
             }
         }
 
+        if (endPos === -1) {
+            // 容錯防禦：若 LLM 內部包含未轉義引號導致狀態機失真，尋找最外層的閉合中括號 ']'
+            const lastBracket = text.lastIndexOf(']');
+            if (lastBracket > callPos) {
+                endPos = lastBracket;
+            }
+        }
+
         if (endPos !== -1) {
             const fullMatch = text.slice(callPos, endPos + 1);
             const args = text.slice(argsStart, endPos).trim();

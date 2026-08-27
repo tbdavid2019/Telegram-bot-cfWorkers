@@ -211,6 +211,90 @@ export async function parseToMarkdown(input, context = null) {
   return json.data?.markdown || '';
 }
 
+/**
+ * 健壯解析 LLM 傳入的 /wiki 參數 (支援標準 JSON、含 raw 換行之容錯 JSON、與純文字格式)
+ * @param {string} args - 參數字串
+ * @returns {{slug: string, title: string, content: string, options: Object}}
+ */
+export function parseWikiArgs(args) {
+  if (!args || typeof args !== 'string') {
+    return { slug: '', title: '', content: '', options: {} };
+  }
+
+  const trimmed = args.trim();
+  let slug = '';
+  let title = '';
+  let content = '';
+  let options = {};
+
+  // 1. JSON 格式解析 (處理標準 JSON 與 LLM raw newlines / quotes)
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return {
+        slug: parsed.slug || parsed.path || parsed.title || '',
+        title: parsed.title || '',
+        content: parsed.content || parsed.text || parsed.markdown || '',
+        options: {
+          theme: parsed.theme,
+          width: parsed.width,
+          append: parsed.append,
+          pw: parsed.pw,
+          vpw: parsed.vpw
+        }
+      };
+    } catch (e) {
+      // 容錯正則抽取
+      const slugMatch = trimmed.match(/"(?:slug|path)"\s*:\s*"([^"]+)"/i);
+      const titleMatch = trimmed.match(/"title"\s*:\s*"([^"]+)"/i);
+      const themeMatch = trimmed.match(/"theme"\s*:\s*"([^"]+)"/i);
+      const contentMatch = trimmed.match(/"(?:content|text|markdown)"\s*:\s*"([\s\S]*)/i);
+
+      if (slugMatch) slug = slugMatch[1];
+      if (titleMatch) title = titleMatch[1];
+      if (themeMatch) options.theme = themeMatch[1];
+
+      if (contentMatch) {
+        let rawContent = contentMatch[1];
+        rawContent = rawContent.replace(/"\s*\}?\s*$/g, '');
+        content = rawContent.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      }
+
+      if (content) {
+        return { slug: slug || title, title, content, options };
+      }
+    }
+  }
+
+  // 2. 純文字格式解析：/wiki <slug> <markdown>
+  const firstSpace = trimmed.indexOf(' ');
+  const firstNewline = trimmed.indexOf('\n');
+  let splitIdx = -1;
+
+  if (firstSpace !== -1 && firstNewline !== -1) {
+    splitIdx = Math.min(firstSpace, firstNewline);
+  } else if (firstSpace !== -1) {
+    splitIdx = firstSpace;
+  } else if (firstNewline !== -1) {
+    splitIdx = firstNewline;
+  }
+
+  if (splitIdx !== -1 && !trimmed.slice(0, splitIdx).includes('\n')) {
+    const potentialSlug = trimmed.slice(0, splitIdx).trim();
+    const textContent = trimmed.slice(splitIdx + 1).trim();
+    if (textContent.length > 0) {
+      slug = potentialSlug;
+      content = textContent;
+    } else {
+      content = trimmed;
+    }
+  } else {
+    content = trimmed;
+  }
+
+  return { slug, title: '', content, options };
+}
+
 // ========== Telegram 指令處理器 ==========
 
 /**
@@ -262,56 +346,20 @@ export async function commandWiki(message, command, subcommand, context) {
     }
   }
 
-  // 4. 檢查是否以 JSON 格式傳遞參數 (適合 LLM Tool Calling)
-  let markdownToPublish = '';
+  // 4. 檢查是否回覆訊息發布 (Reply to Message)
   let targetSlug = '';
+  let markdownToPublish = '';
   let publishOptions = {};
 
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      targetSlug = parsed.slug || parsed.path || parsed.title || '';
-      markdownToPublish = parsed.content || parsed.text || parsed.markdown || '';
-      if (parsed.theme) publishOptions.theme = parsed.theme;
-      if (parsed.width) publishOptions.width = parsed.width;
-      if (parsed.append) publishOptions.append = parsed.append;
-      if (parsed.pw) publishOptions.pw = parsed.pw;
-      if (parsed.vpw) publishOptions.vpw = parsed.vpw;
-    } catch (e) {
-      // JSON 解析失敗則按純文字處理
-    }
-  }
-
-  // 5. 檢查是否回覆訊息發布 (Reply to Message)
-  if (!markdownToPublish && message.reply_to_message && (message.reply_to_message.text || message.reply_to_message.caption)) {
+  if (message.reply_to_message && (message.reply_to_message.text || message.reply_to_message.caption)) {
     markdownToPublish = message.reply_to_message.text || message.reply_to_message.caption;
     targetSlug = trimmed; // subcommand 作為自訂 slug/標題
-  } else if (!markdownToPublish && trimmed !== '') {
-    // 檢查是否有路徑與正文分離：/wiki <slug> <markdown>
-    const firstSpace = trimmed.indexOf(' ');
-    const firstNewline = trimmed.indexOf('\n');
-    let splitIdx = -1;
-
-    if (firstSpace !== -1 && firstNewline !== -1) {
-      splitIdx = Math.min(firstSpace, firstNewline);
-    } else if (firstSpace !== -1) {
-      splitIdx = firstSpace;
-    } else if (firstNewline !== -1) {
-      splitIdx = firstNewline;
-    }
-
-    if (splitIdx !== -1 && !trimmed.slice(0, splitIdx).includes('\n')) {
-      const potentialSlug = trimmed.slice(0, splitIdx).trim();
-      const content = trimmed.slice(splitIdx + 1).trim();
-      if (content.length > 0) {
-        targetSlug = potentialSlug;
-        markdownToPublish = content;
-      } else {
-        markdownToPublish = trimmed;
-      }
-    } else {
-      markdownToPublish = trimmed;
-    }
+  } else {
+    // 5. 解析參數（支援 JSON / Plaintext）
+    const parsed = parseWikiArgs(trimmed);
+    targetSlug = parsed.slug;
+    markdownToPublish = parsed.content;
+    publishOptions = parsed.options || {};
   }
 
   if (!markdownToPublish || markdownToPublish.trim() === '') {

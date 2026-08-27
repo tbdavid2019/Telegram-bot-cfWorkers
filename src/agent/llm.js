@@ -177,7 +177,24 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       (memoryPrompt ? '\n\n' + memoryPrompt : '')
   };
 
-  let answer = await llm(llmParams, context, onStream);
+  // 建立 safeStream，避免第一輪中 LLM 生成 [CALL:...] 時流式洩漏給用戶
+  let safeStream = null;
+  if (typeof onStream === 'function') {
+    safeStream = async (chunkText) => {
+      if (!chunkText || typeof chunkText !== 'string') return;
+      if (chunkText.includes('[CALL:') || chunkText.startsWith('{') || chunkText.includes('"content":')) {
+        const { removeCommandMarkers } = await import('./command-invoker.js');
+        const cleaned = removeCommandMarkers(chunkText);
+        if (!cleaned || cleaned.trim() === '') {
+          return;
+        }
+        return onStream(cleaned);
+      }
+      return onStream(chunkText);
+    };
+  }
+
+  let answer = await llm(llmParams, context, safeStream);
 
   // 🆕 處理 LLM 回應中的指令調用（Tool Calling 模式）
   if (isCommandDiscoveryEnabled && typeof answer === 'string') {
@@ -429,34 +446,8 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
           } else if (command === '/wiki') {
             console.log('🤖 [Tool Calling] Executing Wiki publisher...');
-            const { publishWikiNote } = await import('../features/wiki.js');
-            let slug = '';
-            let content = '';
-            let options = {};
-
-            const trimmedArgs = (args || '').trim();
-            if (trimmedArgs.startsWith('{') && trimmedArgs.endsWith('}')) {
-              try {
-                const parsed = JSON.parse(trimmedArgs);
-                slug = parsed.slug || parsed.path || parsed.title || '';
-                content = parsed.content || parsed.text || parsed.markdown || '';
-                if (parsed.theme) options.theme = parsed.theme;
-                if (parsed.width) options.width = parsed.width;
-                if (parsed.append) options.append = parsed.append;
-              } catch (e) {
-                console.error('❌ [Tool Calling] Failed to parse JSON args for /wiki:', e);
-              }
-            }
-
-            if (!content) {
-              const firstSpace = trimmedArgs.indexOf(' ');
-              if (firstSpace !== -1) {
-                slug = trimmedArgs.slice(0, firstSpace).trim();
-                content = trimmedArgs.slice(firstSpace + 1).trim();
-              } else {
-                content = trimmedArgs;
-              }
-            }
+            const { publishWikiNote, parseWikiArgs } = await import('../features/wiki.js');
+            const { slug, content, options } = parseWikiArgs(args || '');
 
             const pubRes = await publishWikiNote(slug, content, options, context);
             dataText = `✅ [David888 Wiki 長文發布成功]\n`;
@@ -624,6 +615,14 @@ export async function chatWithLLM(params, context, modifier) {
         try {
           if (nextEnableTime && nextEnableTime > Date.now()) {
             return;
+          }
+          if (text && typeof text === 'string' && (text.includes('[CALL:') || text.startsWith('{') || text.includes('"content":'))) {
+            const { removeCommandMarkers } = await import('./command-invoker.js');
+            const cleaned = removeCommandMarkers(text);
+            if (!cleaned || cleaned.trim() === '') {
+              return;
+            }
+            text = cleaned;
           }
           const resp = await sendMessageToTelegramWithContext(context)(text);
           if (resp.status === 429) {
