@@ -81,6 +81,7 @@ export async function saveSoul(context, soulData) {
  * @returns {Promise<Object|null>}
  */
 export async function getSoul(context) {
+  if (!DATABASE || typeof DATABASE.get !== 'function') return null;
   const key = getSoulKey(context);
   try {
     const data = await DATABASE.get(key);

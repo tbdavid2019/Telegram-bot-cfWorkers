@@ -67,7 +67,9 @@ function extractJsonObject(text) {
 export async function loadHistory(key) {
   let history = [];
   try {
-    history = JSON.parse(await DATABASE.get(key));
+    if (DATABASE && typeof DATABASE.get === 'function') {
+      history = JSON.parse(await DATABASE.get(key));
+    }
   } catch (e) {
     console.error(e);
   }
@@ -122,7 +124,12 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
   }
 
   let commandPrompt = '';
-  if (ENV.ENABLE_COMMAND_DISCOVERY) {
+  const isCommandDiscoveryEnabled = Boolean(
+    context?.USER_CONFIG?.ENABLE_COMMAND_DISCOVERY ||
+    ENV?.USER_CONFIG?.ENABLE_COMMAND_DISCOVERY ||
+    ENV?.ENABLE_COMMAND_DISCOVERY
+  );
+  if (isCommandDiscoveryEnabled) {
     try {
       const { generateCommandSystemPrompt } = await import('./command-discovery.js');
       commandPrompt = await generateCommandSystemPrompt(context);
@@ -173,29 +180,30 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
   let answer = await llm(llmParams, context, onStream);
 
   // 🆕 處理 LLM 回應中的指令調用（Tool Calling 模式）
-  if (ENV.ENABLE_COMMAND_DISCOVERY && typeof answer === 'string') {
+  if (isCommandDiscoveryEnabled && typeof answer === 'string') {
     console.log('🤖 [Command Discovery] Checking LLM response for command markers...');
 
     const { parseCommandsFromLLMResponse } = await import('./command-invoker.js');
     const commands = parseCommandsFromLLMResponse(answer);
 
-    // 檢查是否有需要立即執行的工具指令（家庭管理相關）
-    // 只有在 ENABLE_FAMILY_SHEETS 明確設為 true 時才執行
-    // 如果未啟用，則從 commands 列表中移除，並從 answer 中剝離，防止回退到 Inline Keyboard
+    // 檢查是否有需要立即自主執行的工具指令（即時搜尋、網頁閱讀、A2A 協作、家庭管理）
+    // 只有在 ENABLE_FAMILY_SHEETS 明確設為 true 時才執行家庭管理指令
     let toolCommands = [];
-    console.log(`🤖 [Debug] Family Sheets Enabled: ${ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS} (Type: ${typeof ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS})`);
+    const baseTools = ['/web', '/read', '/delegate'];
+    const enableFamilySheets = Boolean(context?.USER_CONFIG?.ENABLE_FAMILY_SHEETS || ENV?.USER_CONFIG?.ENABLE_FAMILY_SHEETS);
+    console.log(`🤖 [Debug] Family Sheets Enabled: ${enableFamilySheets}`);
 
     // 使用 Truthiness 檢查，避免 "true" !== true 的問題
-    if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS) {
+    if (enableFamilySheets) {
       toolCommands = commands.filter(cmd =>
+        baseTools.includes(cmd.command) ||
         cmd.command === '/budget' ||
         cmd.command === '/schedule' ||
         cmd.command === '/scheduleadd' ||
-        cmd.command === '/budgetwrite' ||
-        cmd.command === '/delegate'
+        cmd.command === '/budgetwrite'
       );
     } else {
-      toolCommands = commands.filter(cmd => cmd.command === '/delegate');
+      toolCommands = commands.filter(cmd => baseTools.includes(cmd.command));
 
       // 找出被禁用的指令
       const prohibitedCommands = commands.filter(cmd =>
@@ -238,7 +246,26 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
         try {
           let dataText = '';
 
-          if (command === '/budget') {
+          if (command === '/web') {
+            console.log(`🤖 [Tool Calling] Executing autonomous 2MD web search for: ${args}`);
+            const { fetch2MD } = await import('../features/search.js');
+            const input = (args || '').trim();
+            if (/^https?:\/\//i.test(input)) {
+              const { text } = await fetch2MD(`/${input}`);
+              dataText = `🌐 [網頁解析結果 (${input})]\n${text.slice(0, 4000)}`;
+            } else {
+              const { text } = await fetch2MD(`/s/${encodeURIComponent(input)}`);
+              dataText = `🔍 [即時網路搜尋結果 (${input})]\n${text}`;
+            }
+
+          } else if (command === '/read') {
+            console.log(`🤖 [Tool Calling] Executing autonomous 2MD web reader for: ${args}`);
+            const { fetch2MD } = await import('../features/search.js');
+            const url = (args || '').trim();
+            const { text } = await fetch2MD(`/${url}`);
+            dataText = `📄 [網頁/文件解析內容 (${url})]\n${text.slice(0, 4000)}`;
+
+          } else if (command === '/budget') {
             console.log('🤖 [Tool Calling] Fetching budget data...');
             const { readBudgetSheet, parseBudgetData } = await import('../features/google-sheets.js');
             const rawData = await readBudgetSheet(context.env);
@@ -412,6 +439,8 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       // 再次調用 LLM，這次它可以看到工具結果
       console.log('🤖 [Tool Calling] Calling LLM again with tool results...');
       answer = await llm(llmParams, context, onStream);
+      const { removeCommandMarkers } = await import('./command-invoker.js');
+      answer = removeCommandMarkers(answer);
 
     } else {
       // 沒有工具指令，使用原來的 Inline Keyboard 模式
@@ -478,7 +507,9 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
   if (!historyDisable) {
     history.push({ role: "user", content: message || "", images });
     history.push({ role: "assistant", content: answer });
-    await DATABASE.put(historyKey, JSON.stringify(history)).catch(console.error);
+    if (DATABASE && typeof DATABASE.put === 'function') {
+      await DATABASE.put(historyKey, JSON.stringify(history)).catch(console.error);
+    }
   }
 
   return answer;
@@ -557,7 +588,7 @@ export async function chatWithLLM(params, context, modifier) {
 
     // 檢查是否需要語音回覆
     const chatId = context.CURRENT_CHAT_CONTEXT.chat_id;
-    const replyMode = await DATABASE.get(`voice_reply:${chatId}`) || 'text';
+    const replyMode = (DATABASE && typeof DATABASE.get === 'function') ? (await DATABASE.get(`voice_reply:${chatId}`) || 'text') : 'text';
 
     if (replyMode === 'voice' && ENV.ENABLE_VOICE_REPLY !== 'false') {
       try {

@@ -162,3 +162,97 @@ test('commandRead handles direct URL and formats markdown', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('autonomous tool calling executes /web search during LLM conversation', async () => {
+  const { chatWithLLM } = await import('../src/agent/llm.js');
+  const { ENV } = await import('../src/config/env.js');
+  ENV.ENABLE_COMMAND_DISCOVERY = true;
+
+  let llmCallCount = 0;
+  let sentMessage = '';
+
+  const context = {
+    SHARE_CONTEXT: {
+      currentBotToken: 'fake_token',
+      chatHistoryKey: 'history:12345',
+      chatType: 'private',
+      speakerId: 12345
+    },
+    CURRENT_CHAT_CONTEXT: {
+      chat_id: 12345,
+      api_base: 'https://api.openai.com/v1',
+      model: 'test-model'
+    },
+    USER_CONFIG: {
+      SYSTEM_INIT_MESSAGE: 'You are an assistant',
+      AI_PROVIDER: 'openai',
+      OPENAI_API_KEY: ['test-key'],
+      ENABLE_COMMAND_DISCOVERY: true,
+      DEFAULT_LLM_PROFILE: 'test-profile',
+      LLM_PROFILES: {
+        'test-profile': {
+          provider: 'openai',
+          model: 'test-model',
+          apiBase: 'https://api.openai.com/v1',
+          apiKey: 'test-key'
+        }
+      }
+    },
+    env: {}
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    // console.log('Mock fetch received:', url);
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts?.body || '{}');
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 12345 } }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('/s/')) {
+      return new Response(
+        `[1] Title: SpaceX - Private Aerospace Company\n[1] URL Source: https://spacex.com\n[1] Description: SpaceX remains a privately held company and has not filed for an IPO.`,
+        { status: 200 }
+      );
+    }
+    if (typeof url === 'string' && url.includes('chat/completions')) {
+      llmCallCount++;
+      const reqBody = JSON.parse(opts.body);
+      if (llmCallCount === 1) {
+        // First LLM call emits [CALL:/web SpaceX 上市狀態]
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '[CALL:/web SpaceX 上市狀態]'
+            }
+          }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      } else {
+        // Second LLM call receives tool result and produces grounded answer
+        const systemMsg = reqBody.messages.find(m => m.role === 'system' && m.content.includes('工具執行結果'));
+        assert.ok(systemMsg);
+        assert.match(systemMsg.content, /SpaceX remains a privately held company/);
+
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '根據最新的即時網路查證，SpaceX 目前仍然是一家非公開發行（未上市）的私有公司，並未在公開股票市場上市。'
+            }
+          }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+    }
+    console.log('Unmatched fetch url:', url);
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await chatWithLLM({ message: 'SpaceX 是否上市？' }, context);
+    assert.equal(llmCallCount, 2);
+    assert.match(sentMessage, /SpaceX 目前仍然是一家非公開發行（未上市）的私有公司/);
+    assert.doesNotMatch(sentMessage, /\[CALL:/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
