@@ -348,14 +348,14 @@ export async function commandBazi(message, command, subcommand, context) {
       '請提供您的出生日期（YYYY-MM-DD）與性別，並附上要諮詢的問題。\n\n' +
       '📝 *使用範例*：\n' +
       '• `/bazi 1995-08-18 男 請問近幾年事業與財運`\n' +
-      '• `/bazi 1992-03-05 14:30 女 感情姻緣發展`\n' +
-      '• `/bazi 1988-11-20 男 農曆 創業時機評估`\n\n' +
+      '• `/bazi 1992-03-05 14:30 女 姓名:林小美 感情姻緣發展`\n' +
+      '• `/bazi 1988-11-20 男 農曆 曾用名:張偉 出生地:台北 創業評估`\n\n' +
       '參數說明：\n' +
       '• *日期*：`YYYY-MM-DD`（必填，如 1995-08-18）\n' +
       '• *性別*：`男` 或 `女`（預設男）\n' +
       '• *時間*：`HH:mm`（可選，如 14:30，預設 12:00）\n' +
       '• *曆法*：支援在內容中加入 `農曆` 或 `陰曆`（預設公曆）\n' +
-      '• *進階*：支援姓名（`姓名:張三`）、出生地（`出生地:台北`）'
+      '• *進階*：支援姓名（`姓名:張三`）、曾用名（`曾用名:張偉`）、出生地（`出生地:台北`）'
     );
   }
 
@@ -394,9 +394,12 @@ export async function commandBazi(message, command, subcommand, context) {
   // 4. 擷取曆法 (農曆 / 公曆)
   const calendar = /(農曆|陰曆|lunar)/i.test(input) ? 'lunar' : 'solar';
 
-  // 5. 擷取姓名與出生地
+  // 5. 擷取姓名、曾用名與出生地
   const nameMatch = input.match(/(?:姓名|名字|命主)[:：]\s*([\u4e00-\u9fa5a-zA-Z]+)/);
   const name = nameMatch ? nameMatch[1] : undefined;
+
+  const formerNameMatch = input.match(/(?:曾用名|舊名|原名)[:：]\s*([\u4e00-\u9fa5a-zA-Z]+)/);
+  const formerName = formerNameMatch ? formerNameMatch[1] : undefined;
 
   const placeMatch = input.match(/(?:出生地|地點|出生於)[:：]\s*([\u4e00-\u9fa5a-zA-Z]+)/);
   const place = placeMatch ? placeMatch[1] : undefined;
@@ -408,6 +411,7 @@ export async function commandBazi(message, command, subcommand, context) {
     .replace(/(?:^|\s)(女生|女性|女命|女|男生|男性|男命|男)(?:\s|$)/g, ' ')
     .replace(/(?:^|\s)(國曆|公曆|陽曆|農曆|陰曆|solar|lunar)(?:\s|$)/gi, ' ')
     .replace(nameMatch ? nameMatch[0] : '', '')
+    .replace(formerNameMatch ? formerNameMatch[0] : '', '')
     .replace(placeMatch ? placeMatch[0] : '', '')
     .trim();
 
@@ -425,6 +429,7 @@ export async function commandBazi(message, command, subcommand, context) {
     sex,
     calendar,
     name,
+    formerName,
     place,
     purpose,
     lang: 'zh-tw'
@@ -486,6 +491,7 @@ export async function commandBazi(message, command, subcommand, context) {
 
 /**
  * 八宅風水、玄空飛星、形煞化解與協紀辨方擇日指令
+ * 支援 8 大朝向與 24 山坐向立極、入住年、生年、8 大形煞移形易位、4 大擇日
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
  * @param {string} subcommand - 參數與問題 (格式：[座向/形煞/擇日] [問題])
@@ -499,9 +505,10 @@ export async function commandFengshui(message, command, subcommand, context) {
       '請輸入您的房屋座向、空間問題或擇日需求。\n\n' +
       '📝 *使用範例*：\n' +
       '• `/fengshui 坐北朝南 書房財位與文昌位如何佈置？`（陽宅玄空飛星）\n' +
+      '• `/fengshui 乾山巽向 2024年入住 客廳招財佈局`（24山精密立極）\n' +
       '• `/fengshui 客廳大門正對陽台穿堂煞如何化解？`（形煞診斷與化解）\n' +
       '• `/fengshui 2026年10月 入宅搬家吉日良辰`（協紀辨方擇日）\n\n' +
-      '支援朝向：`東`、`西`、`南`、`北`、`東南`、`東北`、`西南`、`西北`（或 `坐北朝南` 等）'
+      '支援朝向：8 大方向（`東`、`西`、`南`、`北`、`東南`、`東北`、`西南`、`西北`）與 24 山坐向（如 `乾山巽向`、`子山午向` 等）'
     );
   }
 
@@ -509,6 +516,8 @@ export async function commandFengshui(message, command, subcommand, context) {
   let mode = 'yangzhai';
   let shaType = undefined;
   let matter = undefined;
+  let zeriYear = undefined;
+  let zeriMonth = undefined;
 
   if (/(路沖|天斬|壁刀|反弓|穿堂|橫梁|梁壓頂|鏡對床|形煞|煞氣)/.test(input)) {
     mode = 'shaqi';
@@ -525,32 +534,60 @@ export async function commandFengshui(message, command, subcommand, context) {
     else if (input.includes('開市') || input.includes('開業')) matter = 'open';
     else if (input.includes('動土') || input.includes('裝修') || input.includes('修造')) matter = 'renovate';
     else if (input.includes('結婚') || input.includes('嫁娶')) matter = 'marry';
+
+    const zeriDateMatch = input.match(/\b(20\d{2})[-/.年](\d{1,2})月?\b/);
+    if (zeriDateMatch) {
+      zeriYear = Number(zeriDateMatch[1]);
+      zeriMonth = Number(zeriDateMatch[2]);
+    }
   }
 
-  // 2. 判斷朝向 (facing)
+  // 2. 判斷朝向 (facing) - 支援 8 大朝向與 24 山
+  const mountains24 = [
+    '壬山丙向', '子山午向', '癸山丁向', '丑山未向', '艮山坤向', '寅山申向',
+    '甲山庚向', '卯山酉向', '乙山辛向', '辰山戌向', '巽山乾向', '巳山亥向',
+    '丙山壬向', '午山子向', '丁山癸向', '未山丑向', '坤山艮向', '申山寅向',
+    '庚山甲向', '酉山卯向', '辛山乙向', '戌山辰向', '乾山巽向', '亥山巳向'
+  ];
   const validFacings = ['東南', '東北', '西南', '西北', '南', '北', '東', '西'];
   let facing = '南';
 
-  const zuoChaoMatch = input.match(/坐[東西南北]+朝([東西南北]+)/);
-  if (zuoChaoMatch && validFacings.includes(zuoChaoMatch[1])) {
-    facing = zuoChaoMatch[1];
-  } else {
-    const chaoMatch = input.match(/(?:朝|面|向)([東西南北]+)/);
-    if (chaoMatch && validFacings.includes(chaoMatch[1])) {
-      facing = chaoMatch[1];
+  // 檢查 24 山
+  let found24 = false;
+  for (const m of mountains24) {
+    if (input.includes(m)) {
+      facing = m;
+      found24 = true;
+      break;
+    }
+  }
+
+  if (!found24) {
+    const zuoChaoMatch = input.match(/坐[東西南北]+朝([東西南北]+)/);
+    if (zuoChaoMatch && validFacings.includes(zuoChaoMatch[1])) {
+      facing = zuoChaoMatch[1];
     } else {
-      for (const dir of validFacings) {
-        if (input.includes(dir)) {
-          facing = dir;
-          break;
+      const chaoMatch = input.match(/(?:朝|面|向)([東西南北]+)/);
+      if (chaoMatch && validFacings.includes(chaoMatch[1])) {
+        facing = chaoMatch[1];
+      } else {
+        for (const dir of validFacings) {
+          if (input.includes(dir)) {
+            facing = dir;
+            break;
+          }
         }
       }
     }
   }
 
-  // 3. 判斷生年與入住年 (可選)
+  // 3. 判斷入住年份與主要居住者生年
+  const moveInMatch = input.match(/(?:^|\D)(19\d{2}|20\d{2})(?:年)?(?:入住|建造|入厝|建於)/);
+  const moveInYear = moveInMatch ? Number(moveInMatch[1]) : undefined;
+
+  const residentMatch = input.match(/(?:^|\D)(19\d{2}|20\d{2})(?:年)?(?:生|出生|命主)/);
   const yearMatch = input.match(/\b(19\d{2}|20\d{2})\b/);
-  const residentYear = yearMatch ? Number(yearMatch[1]) : 1990;
+  const residentYear = residentMatch ? Number(residentMatch[1]) : (yearMatch && !moveInMatch ? Number(yearMatch[1]) : 1990);
 
   // 4. 判斷性別 (可選)
   const sexMatch = input.match(/(?:^|\s)(男生|男性|男命|男|女生|女性|女命|女)(?:\s|$)/);
@@ -561,10 +598,15 @@ export async function commandFengshui(message, command, subcommand, context) {
     question: input,
     mode,
     facing,
+    moveInYear,
     residentYear,
     sex,
     shaType,
     matter,
+    zeriYear,
+    zeriMonth,
+    month: zeriMonth,
+    year: zeriYear || new Date().getFullYear(),
     purpose: detectPurpose(input),
     lang: 'zh-tw'
   };
@@ -602,11 +644,11 @@ export async function commandFengshui(message, command, subcommand, context) {
 
     let reply = `【🧭 易經風水】\n`;
     if (mode === 'yangzhai') {
-      reply += `模式：陽宅八宅玄空　朝向：朝${facing}${house ? ` (${house})` : ''}${mingGua ? `　本命卦：${mingGua}命` : ''}\n`;
+      reply += `模式：陽宅八宅玄空　朝向：${facing.includes('向') ? facing : `朝${facing}`}${house ? ` (${house})` : ''}${mingGua ? `　本命卦：${mingGua}命` : ''}\n`;
     } else if (mode === 'shaqi') {
       reply += `模式：形煞診斷與化解${shaType ? ` (${shaType})` : ''}\n`;
     } else if (mode === 'zeri') {
-      reply += `模式：協紀辨方擇日${matter ? ` (${matter})` : ''}\n`;
+      reply += `模式：協紀辨方擇日${matter ? ` (${matter})` : ''}${zeriYear ? ` (${zeriYear}年${zeriMonth}月)` : ''}\n`;
     }
     reply += `問題：${data.question || input}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
@@ -633,11 +675,11 @@ export async function commandYinyuan(message, command, subcommand, context) {
       '請輸入想詢問的感情問題，或提供生辰/年份進行合婚與桃花測算。\n\n' +
       '📝 *使用範例*：\n' +
       '• `/yinyuan 求問今年感情與正緣指引`（月老靈籤 100 籤）\n' +
-      '• `/yinyuan 第58籤 感情復合指引`（自選籤號解籤）\n' +
+      '• `/yinyuan 第58籤 感情復合指引`（自選籤號解籤，1-100）\n' +
       '• `/yinyuan 1995 1998 我們合適嗎？`（生肖合婚契合評分）\n' +
       '• `/yinyuan 1996 桃花運與有利方位`（個人桃花運勢）\n' +
       '• `/yinyuan 紫微夫妻宮 1994-06-12 男 配偶特質`（夫妻宮主星）\n' +
-      '• `/yinyuan 紅線測算 尋找對象與時機窗口`（正緣畫像）\n\n' +
+      '• `/yinyuan 紅線測算 找女生 喜歡孝順溫柔`（正緣畫像與時機）\n\n' +
       '支援模式：`月老靈籤`、`生肖合婚`、`紫微夫妻宮`、`桃花運勢`、`八字合婚`、`紅線測算`'
     );
   }
@@ -672,6 +714,22 @@ export async function commandYinyuan(message, command, subcommand, context) {
     firstYear = yearMatches[0];
   }
 
+  // 判斷生肖配對 (支援生肖文字，如「屬鼠 屬牛」)
+  const zodiacList = ['鼠', '牛', '虎', '兔', '龍', '蛇', '馬', '羊', '猴', '雞', '狗', '豬'];
+  const foundZodiacs = [];
+  for (const z of zodiacList) {
+    if (input.includes(z)) {
+      foundZodiacs.push(z);
+    }
+  }
+  let firstZodiac = undefined;
+  let secondZodiac = undefined;
+  if (foundZodiacs.length >= 2 && mode !== 'fortune') {
+    mode = 'zodiac';
+    firstZodiac = foundZodiacs[0];
+    secondZodiac = foundZodiacs[1];
+  }
+
   // 判斷感情狀態 (status)
   let status = '單身';
   if (input.includes('暗戀')) status = '暗戀';
@@ -681,14 +739,52 @@ export async function commandYinyuan(message, command, subcommand, context) {
   else if (input.includes('已婚') || input.includes('結婚')) status = '已婚';
   else if (input.includes('分手') || input.includes('復合')) status = '分手挽回';
 
+  // 判斷交往階段 (stage)
+  let stage = undefined;
+  if (input.includes('初識') || input.includes('剛認識')) stage = '初識';
+  else if (input.includes('曖昧')) stage = '曖昧';
+  else if (input.includes('熱戀') || input.includes('交往')) stage = '熱戀';
+  else if (input.includes('備婚')) stage = '備婚';
+  else if (input.includes('已婚')) stage = '已婚';
+
+  // 判斷尋找對象性別 (seekingSex)
+  let seekingSex = undefined;
+  if (/(找男|尋找男|找男生|對象男)/.test(input)) seekingSex = '男';
+  else if (/(找女|尋找女|找女生|對象女)/.test(input)) seekingSex = '女';
+
+  // 判斷理想型偏好 (preference)
+  const prefMatch = input.match(/(?:理想型|偏好|喜歡)[:：]?\s*([\u4e00-\u9fa5a-zA-Z0-9，、 ]+)/);
+  const preference = prefMatch ? prefMatch[1].trim() : undefined;
+
+  // 判斷桃花時效範圍 (scope)
+  let scope = undefined;
+  if (input.includes('2026') || input.includes('今年')) scope = '2026';
+  else if (input.includes('近期') || input.includes('幾個月') || input.includes('半年')) scope = '近期3-6個月';
+
+  // 擷取姓名與日期
+  const nameMatch = input.match(/(?:姓名|信士|信女)[:：]\s*([\u4e00-\u9fa5a-zA-Z]+)/);
+  const name = nameMatch ? nameMatch[1] : undefined;
+
+  const dateMatch = input.match(/\b(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?\b/);
+  const birthDate = dateMatch ? `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}` : undefined;
+
   const url = 'https://qi.david888.com/api/yinyuan-question';
   const payload = {
     question: input,
     mode,
     firstYear,
     secondYear,
+    firstZodiac,
+    secondZodiac,
     stickNum,
     status,
+    stage,
+    seekingSex,
+    preference,
+    scope,
+    name,
+    date: birthDate,
+    birthDate,
     lang: 'zh-tw'
   };
 
@@ -724,12 +820,12 @@ export async function commandYinyuan(message, command, subcommand, context) {
     if (mode === 'fortune' && (result.poem || result.title)) {
       reply += `籤詩：第${result.number || stickNum || ''}籤【${result.title || ''}】${result.poem || ''}\n`;
     } else if (mode === 'zodiac' && result.first && result.second) {
-      reply += `生肖合婚：${result.first.year}年(${result.first.zodiac || ''}) ＆ ${result.second.year}年(${result.second.zodiac || ''})\n`;
+      reply += `生肖合婚：${result.first.year || firstZodiac}年(${result.first.zodiac || ''}) ＆ ${result.second.year || secondZodiac}年(${result.second.zodiac || ''})\n`;
       if (result.relationship || result.score !== undefined) {
         reply += `契合分析：${result.relationship || ''}（評分：${result.score || 0}分）\n`;
       }
     } else if (mode === 'peach-blossom' && result.zodiac) {
-      reply += `桃花指引：${result.zodiac}年生肖（狀態：${status}）\n`;
+      reply += `桃花指引：${result.zodiac}年生肖（狀態：${status}${scope ? `・${scope}` : ''}）\n`;
       if (result.favorableDirection) {
         reply += `有利方位：${result.favorableDirection}\n`;
       }

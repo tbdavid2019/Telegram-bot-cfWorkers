@@ -509,3 +509,129 @@ test('commandAnswerBook queries qi.david888.com and falls back gracefully', asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test('commandFengshui supports 24 mountain facings and moveInYear', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/fengshui-question')) {
+      const reqBody = JSON.parse(opts.body);
+      assert.equal(reqBody.facing, '乾山巽向');
+      assert.equal(reqBody.moveInYear, 2024);
+      return new Response(JSON.stringify({
+        success: true,
+        question: reqBody.question,
+        answer: '乾山巽向九運旺山旺向，大吉。',
+        report: {
+          facing: '乾山巽向',
+          eightMansions: { house: '乾宅' },
+          resident: { mingGua: { name: '離' } }
+        }
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandFengshui({}, '/fengshui', '乾山巽向 2024年入住 客廳招財佈局', context);
+    assert.match(sentMessage, /朝向：乾山巽向 \(乾宅\)/);
+    assert.match(sentMessage, /乾山巽向九運旺山旺向/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandBazi supports formerName, place, and name parameters', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/bazi2-question')) {
+      const reqBody = JSON.parse(opts.body);
+      assert.equal(reqBody.name, '張三');
+      assert.equal(reqBody.formerName, '張偉');
+      assert.equal(reqBody.place, '台北');
+      assert.equal(reqBody.calendar, 'lunar');
+      return new Response(JSON.stringify({
+        success: true,
+        question: reqBody.question,
+        answer: '命主張三，八字身旺，財星得地。',
+        chart: {
+          fourPillars: [
+            { label: '年柱', value: '戊辰', tenGod: '偏印' },
+            { label: '月柱', value: '癸亥', tenGod: '正官' },
+            { label: '日柱', value: '丙午', tenGod: '日主' },
+            { label: '時柱', value: '甲午', tenGod: '偏印' }
+          ],
+          dayMaster: { stem: '丙', element: '火' },
+          fiveElements: { counts: { 木: 2, 火: 2, 土: 1, 金: 0, 水: 3 } }
+        }
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandBazi({}, '/bazi', '1988-11-20 男 農曆 姓名:張三 曾用名:張偉 出生地:台北 創業評估', context);
+    assert.match(sentMessage, /命主：張三 1988-11-20 12:00（男命・農曆）/);
+    assert.match(sentMessage, /命主張三，八字身旺/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandYinyuan supports red-thread mode with preferences and seekingSex', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/yinyuan-question')) {
+      const reqBody = JSON.parse(opts.body);
+      assert.equal(reqBody.mode, 'red-thread');
+      assert.equal(reqBody.seekingSex, '女');
+      assert.match(reqBody.preference, /孝順溫柔/);
+      return new Response(JSON.stringify({
+        success: true,
+        question: reqBody.question,
+        answer: '紅線正緣畫像：預計在今年秋季文化展覽或咖啡廳相遇，對方溫柔文靜。'
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandYinyuan({}, '/yinyuan', '紅線測算 找女生 喜歡孝順溫柔 正緣何時出現？', context);
+    assert.match(sentMessage, /【🏮 月老姻緣】/);
+    assert.match(sentMessage, /紅線正緣畫像/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
