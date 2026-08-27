@@ -135,6 +135,20 @@ export async function commandGenerateImg(message, command, subcommand, context) 
       return sendMessageToTelegramWithContext(context)("ERROR: Image generator not found");
     }
     const img = await requestFn(subcommand, context, requestOptions);
+    
+    // 如果啟用了 AUTO_SAVE_TO_BOX，自動備份至 888box
+    if (context.USER_CONFIG.AUTO_SAVE_TO_BOX) {
+      try {
+        const { saveAssetToBox } = await import('./box.js');
+        const boxRes = await saveAssetToBox(img, subcommand, {}, context);
+        if (boxRes?.share_url) {
+          context.CURRENT_CHAT_CONTEXT.caption = `🎨 ${subcommand}\n📦 888box 備份: ${boxRes.share_url}`;
+        }
+      } catch (boxErr) {
+        console.warn('[Image-Gen] Auto-save to 888box failed:', boxErr.message);
+      }
+    }
+
     return sendPhotoToTelegramWithContext(context)(img);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);

@@ -67,6 +67,15 @@ node build.js
 
 ## 🌐 常用後端與外部 API 節點參考
 
+- **David888 Wiki 長文發布與知識庫 (David888 Wiki Publisher)**：
+  - 端點：`https://wiki.david888.com/api`
+  - 規格說明：`https://wiki.david888.com/.well-known/agent-skills/david888-wiki-publisher/SKILL.md`
+  - 核心規則：**發布完成後永遠回傳 `shareUrl` 給使用者（非內部 edit url）**，支援 `/present` 簡報與 `/book` 電子書模式。
+- **888box 雲端資產管理與多媒體儲存 (888box Asset Management & Storage)**：
+  - 主力：`https://box.david888.com/`
+  - 備援 1：`https://box.glsoft.ai/`
+  - 備援 2：`https://box.aiurl.tw/`
+  - 規格說明：`https://box.david888.com/skill.php`
 - **2MD 即時聯網搜尋與網頁閱讀 (SERP & AnyDoc Reader)**：
   - 主力：`https://2md.aiurl.tw/`
   - 備援 1：`https://2md.glsoft.ai/`

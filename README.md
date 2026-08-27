@@ -8,12 +8,70 @@
 
 ## 🆕 最新功能
 
+### 📘 David888 Wiki 長文發布與知識庫自動同步 (David888 Wiki Publisher) (2026-08-27)
+
+**支援將長篇產品文檔、整理報告、教材手冊與對話分析一鍵發布至 David888 Wiki，並自動產生公開閱讀分享連結 (`shareUrl`)、2D 簡報播放連結 (`/present`) 與雙欄電子書連結 (`/book`)！**
+
+串接 `https://wiki.david888.com/api`，規格說明：`https://wiki.david888.com/.well-known/agent-skills/david888-wiki-publisher/SKILL.md`
+
+#### 功能特點
+
+- ✅ **長文一鍵發布 (`/wiki <路徑/標題> <長文Markdown>`)** - 將產出的長篇產品整理、技術手冊直接發布到 Wiki，自動回傳美觀的公開 `shareUrl`。
+- ✅ **回覆訊息發布** - 對 Bot 先前產生的長篇分析報告或對話直接回覆 `/wiki [標題]`，Bot 自動提取正文發布至 Wiki。
+- ✅ **豐富 Markdown 語法全息支援** - 自動支援 `[TOC]` 目錄樹、Mermaid 流程圖、代碼區塊檔名標籤與行號、高亮標籤、GitHub 樣式警示區塊與多欄學術排版。
+- ✅ **2D 簡報模式 (`/present`)** - 支援以 Slidev-Lite 播放 2D 矩陣簡報。
+- ✅ **雙欄電子書模式 (`/book`)** - 支援將目錄筆記以電子書雙欄閱讀器開啟，具備即時搜尋目錄與鍵盤快捷鍵切換章節。
+- ✅ **LLM 自主寫入 Wiki** - 當請 Bot 整理長篇產品文檔或研究報告並發布時，LLM 在背景自主調用 `/wiki` 工具，並在最終回覆中附上公開分享連結。
+
+#### 指令範例
+
+| 指令 | 說明 | 範例 |
+|------|------|------|
+| `/wiki` | 發布長文 或 回覆訊息發布至 Wiki | `/wiki ai-roadmap # AI 產品路線圖\n\n[TOC]\n\n## 第一季...`<br>*(回覆長文訊息)* `/wiki 產品深度整理` |
+| `/wikiread` | 讀取 Wiki 頁面原始 Markdown 內容 | `/wikiread ai-roadmap`<br>`/wikiread https://wiki.david888.com/share/abc123` |
+| `/wiki append` | 追加內容至既有 Wiki 頁面 | `/wiki append ai-roadmap ## 補充章節...` |
+
+---
+
+### 📦 888box 雲端資產管理與多媒體儲存 (888box Asset Storage & Multi-tier Failover) (2026-08-27)
+
+**支援將產出的檔案、生成的圖片/音訊、下載的影片源直接轉存至 888box，並具備 3-Tier 自動容錯備援與 Podcast RSS 自動同步！**
+
+串接 888box 雲端儲存系統，具備 **3-Tier 自動容錯備援機制**：
+1. 👑 **主要節點**：`https://box.david888.com/`
+2. 🛡️ **備援節點 1**：`https://box.glsoft.ai/`
+3. 🛡️ **備援節點 2**：`https://box.aiurl.tw/`
+4. 📄 **規格說明**：`https://box.david888.com/skill.php`
+
+#### 功能特點
+
+- ✅ **遠端網址轉存 (`/box <URL> [標題]`)** - 支援將任何遠端圖片、影片、音訊、文件網址直接轉存並快取至 888box。
+- ✅ **回覆 Telegram 媒體轉存** - 對群組或私聊中的任何照片、影片、文件、音訊、語音訊息回覆 `/box [標題]`，Bot 自動提取並儲存至 888box。
+- ✅ **AI 生成圖片與檔案自動備份 (`AUTO_SAVE_TO_BOX`)** - 啟用後，`/img` 與 `/img2` 生成的圖片將自動備份至 888box 並附帶直連與分享連結。
+- ✅ **資產瀏覽與搜尋 (`/boxlist`, `/boxsearch`)** - 支援按類型篩選（圖片、影片、音訊、檔案）與關鍵字快速檢索。
+- ✅ **Podcast RSS 自動發布 (`/box podcast`)** - 上傳的影片與音訊自動同步至 Video RSS (`/storage/podcast.xml`) 與 Audio RSS (`/storage/podcast_audio.xml`)，可用 Apple Podcasts 或泛用型 Podcast App 訂閱。
+- ✅ **儲存容量與節點狀態統計 (`/boxstats`)** - 即時查看各節點健康度與多媒體分類計數。
+
+#### 指令範例
+
+| 指令 | 說明 | 範例 |
+|------|------|------|
+| `/box` | 遠端轉存 或 回覆 Telegram 媒體轉存 | `/box https://example.com/video.mp4 精彩影片`<br>`/box https://example.com/photo.jpg`<br>*(回覆影片/圖片訊息)* `/box 我的備份` |
+| `/boxlist` | 瀏覽 888box 資產清單與分頁 | `/boxlist`<br>`/boxlist video 1`<br>`/boxlist image 2` |
+| `/boxsearch` | 關鍵字搜尋 888box 資產 | `/boxsearch 簡報`<br>`/boxsearch 貓咪` |
+| `/boxstats` | 查看 888box 儲存統計與備援節點 | `/boxstats` |
+| `/box podcast` | 取得 Video & Audio Podcast RSS 訂閱源 | `/box podcast` |
+
+---
+
 ### 🤖 原生底層工具自主執行引擎 (Universal Autonomous Tool Engine) (2026-08-27)
 
 **將全系統所有工具深度寫入 LLM 原生底層，實現完全自主、無感調用與客觀事實查證！**
 
 使用者在對話中無需手動輸入斜線指令或點擊按鈕，Bot 會根據問題自動在背景調用對應工具獲取真實數據，並基於客觀數據直接產出結構清晰的回答：
 
+- 📘 **知識庫與長文發布** (`/wiki`, `/wikiread`) — David888 Wiki 長篇產品整理、技術手冊發布、2D 簡報與電子書閱讀。
+- 📦 **雲端多媒體轉存與資產管理** (`/box`, `/boxlist`, `/boxsearch`, `/boxstats`) — 888box 3-Tier 雲端儲存、多媒體下載源轉存與 Podcast RSS。
 - 🌐 **即時聯網查證與文件閱讀** (`/web`, `/read`) — 2MD 3-Tier SERP 搜尋引擎與 AnyDoc Markdown 解析。
 - 🌤️ **即時氣象與天氣特報** (`/wt`, `/weatheralert`) — 全球氣象預報、降雨機率、體感溫度與台灣災害天氣特報。
 - 📈 **金融行情與對沖基金** (`/stock`, `/stock2`, `/fund`) — 即時盤口報價、漲跌幅，以及 14 位投資大師圓桌會議分析。

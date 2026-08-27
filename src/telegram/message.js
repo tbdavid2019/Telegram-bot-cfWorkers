@@ -216,6 +216,18 @@ export async function msgFilterUnsupportedMessage(message, context) {
   if (message.voice) {
     return null;
   }
+  if (message.document) {
+    return null;
+  }
+  if (message.video) {
+    return null;
+  }
+  if (message.audio) {
+    return null;
+  }
+  if (message.animation) {
+    return null;
+  }
   throw new Error("Not supported message type");
 }
 

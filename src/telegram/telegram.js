@@ -188,6 +188,103 @@ export function sendPhotoToTelegramWithContext(context) {
   };
 }
 
+// ========== 檔案、影片、音訊發送 ==========
+
+export async function sendDocumentToTelegram(document, token, context, filename = "file.dat") {
+  const url = `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendDocument`;
+  let body;
+  const headers = {};
+
+  if (typeof document === "string" && !document.startsWith("data:")) {
+    body = JSON.stringify({ document, ...context });
+    headers["Content-Type"] = "application/json";
+  } else {
+    body = new FormData();
+    body.append("document", document, filename);
+    for (const key of Object.keys(context)) {
+      if (context[key] !== undefined && context[key] !== null) {
+        body.append(key, `${context[key]}`);
+      }
+    }
+  }
+
+  return await fetch(url, { method: "POST", headers, body });
+}
+
+export function sendDocumentToTelegramWithContext(context) {
+  return (document, filename) => {
+    return sendDocumentToTelegram(
+      document,
+      context.SHARE_CONTEXT.currentBotToken,
+      context.CURRENT_CHAT_CONTEXT,
+      filename
+    );
+  };
+}
+
+export async function sendVideoToTelegram(video, token, context) {
+  const url = `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendVideo`;
+  let body;
+  const headers = {};
+
+  if (typeof video === "string" && !video.startsWith("data:")) {
+    body = JSON.stringify({ video, ...context });
+    headers["Content-Type"] = "application/json";
+  } else {
+    body = new FormData();
+    body.append("video", video, "video.mp4");
+    for (const key of Object.keys(context)) {
+      if (context[key] !== undefined && context[key] !== null) {
+        body.append(key, `${context[key]}`);
+      }
+    }
+  }
+
+  return await fetch(url, { method: "POST", headers, body });
+}
+
+export function sendVideoToTelegramWithContext(context) {
+  return (video) => {
+    return sendVideoToTelegram(
+      video,
+      context.SHARE_CONTEXT.currentBotToken,
+      context.CURRENT_CHAT_CONTEXT
+    );
+  };
+}
+
+export async function sendAudioToTelegram(audio, token, context, filename = "audio.mp3") {
+  const url = `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendAudio`;
+  let body;
+  const headers = {};
+
+  if (typeof audio === "string" && !audio.startsWith("data:")) {
+    body = JSON.stringify({ audio, ...context });
+    headers["Content-Type"] = "application/json";
+  } else {
+    body = new FormData();
+    body.append("audio", audio, filename);
+    for (const key of Object.keys(context)) {
+      if (context[key] !== undefined && context[key] !== null) {
+        body.append(key, `${context[key]}`);
+      }
+    }
+  }
+
+  return await fetch(url, { method: "POST", headers, body });
+}
+
+export function sendAudioToTelegramWithContext(context) {
+  return (audio, filename) => {
+    return sendAudioToTelegram(
+      audio,
+      context.SHARE_CONTEXT.currentBotToken,
+      context.CURRENT_CHAT_CONTEXT,
+      filename
+    );
+  };
+}
+
 // ========== Chat Action ==========
 
 export async function sendChatActionToTelegram(action, token, chatId) {

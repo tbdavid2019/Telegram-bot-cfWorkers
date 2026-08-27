@@ -39,6 +39,16 @@ import {
   commandSetImageProvider
 } from '../features/image-gen.js';
 import {
+  commandBox,
+  commandBoxList,
+  commandBoxSearch,
+  commandBoxStats
+} from '../features/box.js';
+import {
+  commandWiki,
+  commandWikiRead
+} from '../features/wiki.js';
+import {
   commandGetHelp,
   commandCreateNewChatContext,
   commandUpdateUserConfig,
@@ -95,6 +105,10 @@ export const commandSortList = [
   "/dicten",        // 英文字典 (要加參數)
   "/web",           // 即時搜尋與網頁解析 (2MD)
   "/read",          // 網頁文件解析閱讀 (2MD)
+  "/box",           // 888box 雲端資產轉存與管理
+  "/boxlist",       // 888box 資產列表
+  "/boxsearch",     // 888box 資產搜尋
+  "/boxstats",      // 888box 儲存統計
   "/memory",        // 查看長期記憶
   "/memoryclear",   // 清除個人記憶
   "/system",        // 查看系統狀態
@@ -259,6 +273,40 @@ export const commandHandlers = {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandRead,
     description: "網頁/文件轉Markdown閱讀 - 使用: /read [網址]"
+  },
+
+  // 888box 雲端資產管理與轉存
+  "/box": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandBox,
+    description: "888box 雲端資產轉存/管理 - 使用: /box [網址 或 回覆媒體]"
+  },
+  "/boxlist": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandBoxList,
+    description: "888box 資產列表 - 使用: /boxlist [type] [page]"
+  },
+  "/boxsearch": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandBoxSearch,
+    description: "888box 資產搜尋 - 使用: /boxsearch [關鍵字]"
+  },
+  "/boxstats": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandBoxStats,
+    description: "888box 儲存統計"
+  },
+
+  // David888 Wiki 長文發布與知識庫
+  "/wiki": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandWiki,
+    description: "David888 Wiki 長文發布/整理 - 使用: /wiki <路徑> <長文> 或 回覆訊息"
+  },
+  "/wikiread": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandWikiRead,
+    description: "讀取 David888 Wiki 頁面 - 使用: /wikiread <路徑/網址>"
   },
 
   // AI 圖片生成

@@ -143,6 +143,18 @@ export class UserConfig {
   A2A_PEERS = {}; // A2A 鄰近節點設定
   A2A_AGENT_NAME = ""; // A2A 代理人名稱 (若未設定則使用 TELEGRAM_BOT_NAME)
 
+  // -- 888box 雲端資產管理與儲存 (3-Tier Fallback) --
+  BOX_API_BASE = "https://box.david888.com";
+  BOX_FALLBACK_BASES = ["https://box.glsoft.ai", "https://box.aiurl.tw"];
+  BOX_API_TOKEN = "";
+  AUTO_SAVE_TO_BOX = false;
+
+  // -- David888 Wiki 發布服務 --
+  WIKI_API_BASE = "https://wiki.david888.com";
+  WIKI_DEFAULT_THEME = "claude-canvas";
+  WIKI_DEFAULT_WIDTH = "100%";
+  WIKI_API_PASSWORD = "";
+
 }
 
 export class Environment {
@@ -304,7 +316,17 @@ const ENV_TYPES = {
   ENABLE_HOURLY_REMINDER: "boolean",
   FAMILY_GROUP_ID: "string",
   A2A_PEERS: "object",
-  A2A_AGENT_NAME: "string"
+  A2A_AGENT_NAME: "string",
+  // 888box 雲端儲存
+  BOX_API_BASE: "string",
+  BOX_FALLBACK_BASES: "array",
+  BOX_API_TOKEN: "string",
+  AUTO_SAVE_TO_BOX: "boolean",
+  // David888 Wiki 發布
+  WIKI_API_BASE: "string",
+  WIKI_DEFAULT_THEME: "string",
+  WIKI_DEFAULT_WIDTH: "string",
+  WIKI_API_PASSWORD: "string"
 };
 
 const ENV_KEY_MAPPER = {

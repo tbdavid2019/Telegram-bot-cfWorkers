@@ -121,6 +121,8 @@ export async function generateCommandSystemPrompt(context) {
         '法律相關': ['/law'],
         '字典相關': ['/dict', '/dictcn', '/dicten'],
         '網路工具': ['/web', '/read', '/ip', '/dns', '/dns2'],
+        '雲端資產': ['/box', '/boxlist', '/boxsearch', '/boxstats'],
+        '知識發布': ['/wiki', '/wikiread'],
         '位置服務': ['/gps'],
         '圖片生成': ['/img', '/img2', '/setimg'],
         '系統功能': ['/help', '/new', '/system', '/model'],
@@ -201,13 +203,18 @@ export async function generateCommandSystemPrompt(context) {
     prompt += '- **⛩️ 淺草寺籤詩與解答之書**：用戶問「幫我抽淺草寺籤」→ `[CALL:/oracle]`；「解答之書」→ `[CALL:/boa]`\n';
     prompt += '- **⚖️ 台灣法律諮詢**：用戶問「網路誹謗的刑責構成要件」→ `[CALL:/law 網路散布不實言論構成誹謗罪的要件是什麼？]`\n';
     prompt += '- **🛠️ 網路工具與字典**：用戶問「查 8.8.8.8 的 IP」→ `[CALL:/ip 8.8.8.8]`；「google.com 的 DNS」→ `[CALL:/dns google.com]`；「查詢成語」→ `[CALL:/dictcn 臥薪嘗膽]`\n';
+    prompt += '- **📘 David888 Wiki 長文/報導/整理自動發布（LLM 專用長文推送工具）**：當用戶要求「撰寫 2000 字長文報導 / 整理產品手冊 / 深度分析戰爭時事 / 製作教學手冊」時，請直接撰寫完整詳實的 Markdown 長文（包含 [TOC]、各章節深度分析、數據或圖表），並主動調用：\n';
+    prompt += '  `[CALL:/wiki {"slug": "自訂英文slug", "title": "文章標題", "content": "完整Markdown長文內容"}]`\n';
+    prompt += '  系統會在背景自動將長文推送到 David888 Wiki 並回傳公開 `shareUrl`。你收到結果後，直接在回覆中呈現精華摘要與公開閱讀連結（Share URL、/present 簡報、/book 電子書）！\n';
+    prompt += '- **📦 888box 雲端資產轉存**：用戶請你將影片源、圖片、音訊、文件轉存到 888box → `[CALL:/box <url> <標題>]`\n';
     prompt += '- **👥 代理人協調**：用戶問「請 no.2 打個招呼」→ `[CALL:/delegate no.2 打個招呼]`\n';
     prompt += '- **📅 家庭收支與日程**（若已啟用）：記帳 → `[CALL:/budgetwrite {"month": "2025/12", "category": "rent", "amount": 15000}]`；加行程 → `[CALL:/scheduleadd {"date": "2025/01/02", "time": "15:00", "targetUser": "爸爸", "event": "好市多"}]`\n\n';
     prompt += '**重要多輪引導與自主聯網規則**：\n';
     prompt += '1. **🌐 零幻覺與即時聯網自主查證（鐵律）**：你的靜態權重有截止時間，絕對不可憑空猜測任何即時市場狀態、公司上市現狀、即時股價、最新時事新聞或突發事件。**遇到此類問題，必須主動輸出 `[CALL:/web 關鍵字]` 查證**。\n';
-    prompt += '2. **八字排盤**：需要西元出生日期（YYYY-MM-DD）與性別。如果用戶只說「幫我算八字/算命」而未提供出生日期，請先以親切語氣在對話中詢問用戶的出生年月日與性別，待用戶提供後再生成 `[CALL:/bazi ...]`。\n';
-    prompt += '3. **生肖合婚**：若用戶想看兩人是否相配，請先詢問雙方的西元出生年份（如 1995 與 1997），獲取後生成 `[CALL:/yinyuan 年份1 年份2 問題]`。\n';
-    prompt += '4. **無感執行**：所有調用標記會被系統在底層攔截與執行，用戶不會看到標記；工具結果反饋後你會直接生成最終客觀且結構分明的答案。\n';
+    prompt += '2. **📘 長文與產品/時事深度整理自動推送 Wiki**：當用戶需要長篇內容（如白宮主導的戰爭整理、深度產業分析、2000 字報導），請撰寫完整豐富內容並透過 `[CALL:/wiki ...]` 發布至 David888 Wiki，最後回傳公開 shareUrl 給用戶。\n';
+    prompt += '3. **八字排盤**：需要西元出生日期（YYYY-MM-DD）與性別。如果用戶只說「幫我算八字/算命」而未提供出生日期，請先以親切語氣在對話中詢問用戶的出生年月日與性別，待用戶提供後再生成 `[CALL:/bazi ...]`。\n';
+    prompt += '4. **生肖合婚**：若用戶想看兩人是否相配，請先詢問雙方的西元出生年份（如 1995 與 1997），獲取後生成 `[CALL:/yinyuan 年份1 年份2 問題]`。\n';
+    prompt += '5. **無感執行**：所有調用標記會被系統在底層攔截與執行，用戶不會看到標記；工具結果反饋後你會直接生成最終客觀且結構分明的答案。\n';
 
     return prompt;
 }

@@ -2,7 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.9.0] - 2026-08-27
+
+### Added
+- **David888 Wiki 長文發布與知識庫自動同步 (David888 Wiki Publisher)**：
+  - 串接 `https://wiki.david888.com/api`，支援長篇產品文件、整理報告、手冊教材與長對話紀錄一鍵推送發布。
+  - **全新指令支援**：
+    - `/wiki <路徑> <長文Markdown>`：發布長篇文章至 Wiki，自動返回公開唯讀 `shareUrl`、2D 簡報播放連結 (`/present`) 與雙欄電子書連結 (`/book`)。
+    - **回覆訊息發布**：對 Bot 回覆的任何長文、分析報告或對話訊息回覆 `/wiki [標題/代稱]`，一鍵推送到 Wiki 知識庫。
+    - `/wikiread <路徑/分享網址>` 或 `/wiki read <路徑>`：讀取 Wiki 頁面的原始 Markdown 內容。
+    - `/wiki append <路徑> <內容>`：追加內容至既有 Wiki 頁面。
+  - **豐富 Markdown 語法支援**：自動支援 `[TOC]` 深度目錄導航、Mermaid 流程圖、代碼區塊行號與標籤、文字高亮標籤、GitHub 樣式警示區塊與多欄學術排版。
+  - **LLM 自主寫入 Wiki 工具調用**：當用戶要求 Bot 整理長篇產品文檔、研究報告並發布到 Wiki 時，LLM 自主調用 `[CALL:/wiki <slug> <markdown>]` 並回傳公開分享連結。
+- **888box 雲端資產管理與多媒體儲存整合 (888box Asset Storage & Multi-tier Failover)**：
+  - 串接 888box 雲端儲存與資產管理系統，提供 3-Tier 自動容錯備援架構：
+    - 👑 **主節點**：`https://box.david888.com`
+    - 🛡️ **備援節點 1**：`https://box.glsoft.ai`
+    - 🛡️ **備援節點 2**：`https://box.aiurl.tw`
+  - 支援雙模存取（MCP JSON-RPC 2.0 與 REST API Gateway）。
+  - **全新指令支援**：
+    - `/box [URL] [標題]`：將遠端圖片、影片、音訊、文件即時轉存至 888box。
+    - **回覆媒體轉存**：對任何 Telegram 圖片、影片、文件、音訊、語音訊息回覆 `/box [標題]`，自動提取 Telegram 檔案並轉存至 888box。
+    - `/boxlist [type] [page]`：瀏覽資產清單（支援 image/video/audio/file/all 與分頁）。
+    - `/boxsearch [關鍵字]`：全域搜尋已儲存資產。
+    - `/boxstats`：即時查看 888box 儲存統計與備援節點狀態。
+    - `/box podcast`：取得自動同步的 Video / Audio Podcast RSS 訂閱源。
+  - **多媒體產出與下載自動備份 (`AUTO_SAVE_TO_BOX`)**：
+    - 支援將 AI 生成圖片 (`/img`, `/img2`)、下載影片源、音訊與文件自動存檔至 888box 並回傳直連/分享連結。
+  - **Telegram 媒體發送與中介層增強**：擴展 `msgFilterUnsupportedMessage` 與 Telegram API 客戶端（`sendDocument`, `sendVideo`, `sendAudio`），完整支援 document/video/audio/animation/voice 等多媒體處理。
+  - **單元測試**：新增 `test/box.test.js` 與 `test/wiki.test.js`，全專案 **64 項單元測試全數通過**。
 
 ## [1.8.0] - 2026-08-27
 
