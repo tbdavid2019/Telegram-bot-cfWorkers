@@ -286,3 +286,23 @@ test('command-invoker correctly parses [CALL:/wiki {...}] containing [TOC] and n
   assert.equal(cleaned, '');
 });
 
+test('sanitizeWikiMarkdown ensures # Title precedes [TOC] automatically', async () => {
+  const { sanitizeWikiMarkdown } = await import('../src/features/wiki.js');
+  
+  // Case 1: [TOC] before # Title -> moves # Title to top
+  const case1 = `[TOC]\n\n# 商務英語口說練習\n\n## 第一章\n內容...`;
+  const res1 = sanitizeWikiMarkdown(case1);
+  assert.ok(res1.startsWith('# 商務英語口說練習\n\n[TOC]\n\n## 第一章'));
+
+  // Case 2: [TOC] at top without # Title in content, but fallback title provided
+  const case2 = `[TOC]\n\n## 第一章\n內容...`;
+  const res2 = sanitizeWikiMarkdown(case2, '商務英語對話手冊');
+  assert.ok(res2.startsWith('# 商務英語對話手冊\n\n[TOC]\n\n## 第一章'));
+
+  // Case 3: Already starting with # Title
+  const case3 = `# 正確標題\n\n[TOC]\n\n## 內容`;
+  const res3 = sanitizeWikiMarkdown(case3);
+  assert.equal(res3, `# 正確標題\n\n[TOC]\n\n## 內容`);
+});
+
+

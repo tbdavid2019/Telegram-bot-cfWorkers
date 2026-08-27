@@ -45,8 +45,44 @@ export function generateWikiSlug(hint = '') {
 }
 
 /**
- * 發布或更新 Wiki 頁面 (POST /api/<path>)
- * @param {string} path - 頁面路徑 (Slug)
+ * 格式化 Wiki Markdown 內容，確保文章第一行為 # 大標題，避免 [TOC] 被 Wiki 後端誤判為文章 Title
+ * @param {string} markdown - 原始 Markdown
+ * @param {string} [fallbackTitle=''] - 備用標題
+ * @returns {string} 格式化後的 Markdown
+ */
+export function sanitizeWikiMarkdown(markdown, fallbackTitle = '') {
+  if (!markdown || typeof markdown !== 'string') return markdown;
+  let text = markdown.trim();
+
+  // 檢查是否以 [TOC] 或 [toc] 開頭
+  const tocRegex = /^\s*\[(TOC|toc)\]\s*\n*/;
+  if (tocRegex.test(text)) {
+    const withoutToc = text.replace(tocRegex, '').trim();
+    const headingMatch = withoutToc.match(/^#\s+([^\n]+)/m);
+    if (headingMatch) {
+      const heading = headingMatch[0];
+      const restContent = withoutToc.replace(headingMatch[0], '').trim();
+      text = `${heading}\n\n[TOC]\n\n${restContent}`;
+    } else if (fallbackTitle) {
+      text = `# ${fallbackTitle}\n\n[TOC]\n\n${withoutToc}`;
+    } else {
+      text = withoutToc;
+    }
+  } else {
+    if (!text.startsWith('#') && fallbackTitle) {
+      const firstHeading = text.match(/^#\s+([^\n]+)/m);
+      if (!firstHeading) {
+        text = `# ${fallbackTitle}\n\n${text}`;
+      }
+    }
+  }
+
+  return text;
+}
+
+/**
+ * 發布筆記至 David888 Wiki (POST /api/<path>)
+ * @param {string} path - 自訂路徑/slug
  * @param {string} markdown - Markdown 內容
  * @param {Object} [options={}] - 主題、寬度、密碼、是否公開、是否追加
  * @param {Object} [context=null] - 上下文
@@ -57,6 +93,8 @@ export async function publishWikiNote(path, markdown, options = {}, context = nu
     throw new Error('Markdown 內容不能為空');
   }
 
+  const fallbackTitle = options.title || '';
+  const sanitizedMarkdown = sanitizeWikiMarkdown(markdown, fallbackTitle);
   const slug = (path && path.trim() !== '') ? path.trim() : generateWikiSlug();
   const baseUrl = getWikiBaseUrl(context);
   const theme = options.theme || context?.USER_CONFIG?.WIKI_DEFAULT_THEME || ENV.USER_CONFIG?.WIKI_DEFAULT_THEME || WIKI_DEFAULT_THEME;
@@ -68,7 +106,7 @@ export async function publishWikiNote(path, markdown, options = {}, context = nu
 
   const url = `${baseUrl}/api/${encodeURIComponent(slug)}`;
   const payload = {
-    text: markdown,
+    text: sanitizedMarkdown,
     public: isPublic,
     theme,
     width,
@@ -231,11 +269,13 @@ export function parseWikiArgs(args) {
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
+      const title = parsed.title || '';
       return {
         slug: parsed.slug || parsed.path || parsed.title || '',
-        title: parsed.title || '',
+        title,
         content: parsed.content || parsed.text || parsed.markdown || '',
         options: {
+          title,
           theme: parsed.theme,
           width: parsed.width,
           append: parsed.append,
@@ -253,6 +293,7 @@ export function parseWikiArgs(args) {
       if (slugMatch) slug = slugMatch[1];
       if (titleMatch) title = titleMatch[1];
       if (themeMatch) options.theme = themeMatch[1];
+      if (title) options.title = title;
 
       if (contentMatch) {
         let rawContent = contentMatch[1];
