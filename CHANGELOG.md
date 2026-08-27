@@ -19,11 +19,19 @@ All notable changes to this project will be documented in this file.
     - 📖 **字典**：`/dictcn`（漢語成語辭典）、`/dicten`（英文字典）
     - 🔑 **實用工具**：`/password`（安全隨機密碼生成）
     - 👥 **協同調度**：`/delegate`（A2A 跨代理人協同）
+- **全面對齊 `tbdavid2019/qimen` 7 大正統術數全息架構規範（5 層參數端到端對齊）**：
+  - 🧭 **奇門遁甲 (`/qi`)**：十天干克應格局（青龍返首、飛鳥跌穴等）、三遁九遁吉格、門迫宮迫、8 大專題用神自動提取（求財/事業/感情/考試/健康/出行/官司）與主客動靜攻守策略。
+  - 🌸 **梅花易數 (`/mei`)**：支援時間起卦、數字起卦（3個數字）、漢字報字起卦（`字:平安`），五卦全息（本互變錯綜）與三百八十四爻動爻爻辭。
+  - 🎴 **生辰八字 (`/bazi`)**：支援四柱排盤、十神藏干、神煞、旺衰格局、命主姓名、曾用名、出生地與公曆/農曆雙曆法。
+  - 🧭 **易經風水 (`/fengshui`)**：支援三元陽宅玄空飛星、8 大朝向與 24 山、8 大內外形煞化解（`shaqi`）與協紀辨方擇日（`zeri`）。
+  - 🏮 **月老姻緣 (`/yinyuan`)**：支援 6 大模式（100 支月老靈籤自選/搖籤、生肖配對合婚、紫微夫妻宮、桃花運勢時效範圍、八字合婚與紅線正緣測算）。
+  - 🔮 **韋特塔羅 (`/tarot`)**：支援 6 大牌陣與 3 大解讀變體維度（時間之流、現狀阻力、關係抉擇）。
+  - 📖 **解答之書 (`/boa` / `/bo`)**：全面升級串接 `https://qi.david888.com/api/answerbook-question`，支援問題深度洞察與默念翻頁雙模式，並具備自動備援。
 - **2MD 即時聯網搜尋與網頁/文件解析 (SERP & Web Reader)**：
   - 串接 2MD 高效能引擎，具備 3-Tier 自動容錯備援（`https://2md.aiurl.tw/` ➜ `https://2md.glsoft.ai/` ➜ `https://create360.ai/`）。
 - **零幻覺自主查證鐵律（Zero-Hallucination Directive）**：
   - 靜態知識無法確定的公司上市現狀、即時股價、最新時事新聞，LLM 一律自動在背景發起 `/web` 或專屬工具查證後直接回答。
-- **單元測試**：新增 `test/autonomous-tools.test.js` 與 `test/search-2md.test.js`，38 項單元測試全數通過。
+- **單元測試**：新增 `test/autonomous-tools.test.js` 與 `test/search-2md.test.js`，擴展 `test/divination.test.js`，全專案 **42 項單元測試全數通過**。
 
 ## [1.7.0] - 2026-08-26
 

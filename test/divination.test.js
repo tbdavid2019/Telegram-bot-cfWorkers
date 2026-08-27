@@ -236,7 +236,7 @@ test('commandFengshui correctly parses facing and formats response', async () =>
 
   try {
     await commandFengshui({}, '/fengshui', '朝東南 客廳財位與文昌位佈置', context);
-    assert.match(sentMessage, /【🧭 風水格局】/);
+    assert.match(sentMessage, /【🧭 (?:易經風水|風水格局)】/);
     assert.match(sentMessage, /朝向：朝東南 \(乾宅\)/);
     assert.match(sentMessage, /本命卦：坤命/);
     assert.match(sentMessage, /這是風水佈局建議內容/);
@@ -306,6 +306,205 @@ test('commandYinyuan supports fortune mode, zodiac mode, and peach-blossom mode'
     assert.match(sentMessage, /生肖合婚：1995年\(豬\) ＆ 1997年\(牛\)/);
     assert.match(sentMessage, /契合分析：六合契合良好（評分：88分）/);
     assert.match(sentMessage, /這是合婚解讀內容/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// ===== 奇門遁甲與梅花易數測試 =====
+test('commandQimen automatically detects purpose and formats response correctly', async () => {
+  const { commandQimen } = await import('../src/features/divination.js');
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/qimen-question')) {
+      const reqBody = JSON.parse(opts.body);
+      assert.equal(reqBody.purpose, '事業');
+      assert.equal(reqBody.mode, 'advanced');
+      assert.equal(reqBody.lang, 'zh-tw');
+      return new Response(JSON.stringify({
+        success: true,
+        question: reqBody.question,
+        answer: '奇門解盤：直符落乾六宮，生門乘天乙，事業發展大吉。',
+        qimenInfo: {
+          localDate: '2026-08-27',
+          localTime: '10:00',
+          mode: 'advanced',
+          purpose: '事業'
+        }
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandQimen({}, '/qi', '換工作跳槽到新公司好不好？', context);
+    assert.match(sentMessage, /【🧭 奇門遁甲】/);
+    assert.match(sentMessage, /專題用神：事業/);
+    assert.match(sentMessage, /生門乘天乙/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandMeiHua supports numbers method and text method', async () => {
+  const { commandMeiHua } = await import('../src/features/divination.js');
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/meihua-question')) {
+      const reqBody = JSON.parse(opts.body);
+      if (reqBody.method === 'numbers') {
+        assert.equal(reqBody.num1, 12);
+        assert.equal(reqBody.num2, 34);
+        assert.equal(reqBody.num3, 56);
+        return new Response(JSON.stringify({
+          success: true,
+          question: reqBody.question,
+          answer: '數字起卦得天火同人，志同道合。',
+          result: {
+            bengua: { name: '天火同人' },
+            biangua: { name: '乾為天' }
+          }
+        }), { status: 200 });
+      } else if (reqBody.method === 'text') {
+        assert.equal(reqBody.text, '平安');
+        return new Response(JSON.stringify({
+          success: true,
+          question: reqBody.question,
+          answer: '報字【平安】起卦得地天泰，安泰吉祥。',
+          result: {
+            bengua: { name: '地天泰' },
+            biangua: { name: '坤為地' }
+          }
+        }), { status: 200 });
+      }
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    // 1. Numbers method
+    await commandMeiHua({}, '/mei', '12 34 56 是否適合換工作？', context);
+    assert.match(sentMessage, /【🌸 梅花易數】/);
+    assert.match(sentMessage, /本卦【天火同人】/);
+    assert.match(sentMessage, /數字 \(12, 34, 56\)/);
+
+    // 2. Text method
+    await commandMeiHua({}, '/mei', '字:平安 是否能順利過關？', context);
+    assert.match(sentMessage, /本卦【地天泰】/);
+    assert.match(sentMessage, /漢字 \(平安\)/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandFengshui supports shaqi mode and zeri mode', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/fengshui-question')) {
+      const reqBody = JSON.parse(opts.body);
+      if (reqBody.mode === 'shaqi') {
+        assert.equal(reqBody.shaType, 'chuangtang');
+        return new Response(JSON.stringify({
+          success: true,
+          question: reqBody.question,
+          answer: '穿堂煞建議在玄關設置屏風或置放闊葉盆栽阻隔氣流直衝。',
+          report: {
+            mode: 'shaqi',
+            shaType: 'chuangtang'
+          }
+        }), { status: 200 });
+      } else if (reqBody.mode === 'zeri') {
+        assert.equal(reqBody.matter, 'movein');
+        return new Response(JSON.stringify({
+          success: true,
+          question: reqBody.question,
+          answer: '2026年10月入宅吉日：10月8日辰時、10月18日巳時。',
+          report: {
+            mode: 'zeri',
+            matter: 'movein'
+          }
+        }), { status: 200 });
+      }
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    // 1. Shaqi mode
+    await commandFengshui({}, '/fengshui', '客廳大門正對陽台穿堂煞如何化解？', context);
+    assert.match(sentMessage, /模式：形煞診斷與化解 \(chuangtang\)/);
+    assert.match(sentMessage, /設置屏風/);
+
+    // 2. Zeri mode
+    await commandFengshui({}, '/fengshui', '2026年10月 入宅搬家吉日良辰', context);
+    assert.match(sentMessage, /模式：協紀辨方擇日 \(movein\)/);
+    assert.match(sentMessage, /10月8日辰時/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandAnswerBook queries qi.david888.com and falls back gracefully', async () => {
+  const { commandAnswerBook } = await import('../src/features/divination.js');
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/answerbook-question')) {
+      return new Response(JSON.stringify({
+        success: true,
+        answer: '順其自然，答案即在眼前。'
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandAnswerBook({}, '/boa', '我該接受這個工作 offer 嗎？', context);
+    assert.match(sentMessage, /📖 【解答之書】/);
+    assert.match(sentMessage, /順其自然，答案即在眼前。/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -1,26 +1,82 @@
 /**
  * Divination Features
  * 占卜功能（解答之書、奇門遁甲、梅花易數、塔羅牌、生辰八字2、八宅風水、月老姻緣、淺草籤詩、唐詩）
+ * 完整對齊 qi.david888.com 與 tbdavid2019/qimen 權威架構規範
  */
 
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 
 /**
+ * 根據問題關鍵詞智能推導占問目的 (purpose)
+ * 支援：綜合, 求財, 事業, 感情, 考試, 健康, 出行, 官司
+ */
+export function detectPurpose(text) {
+  if (!text) return '綜合';
+  if (/(求財|財運|理財|投資|股票|營收|利潤|買房|金錢|賺錢|發財)/i.test(text)) return '求財';
+  if (/(事業|工作|跳槽|轉職|升遷|面試|創業|職涯|升職|老闆|公司)/i.test(text)) return '事業';
+  if (/(感情|婚姻|戀愛|復合|對象|正緣|桃花|結婚|另一半|分手|男朋友|女朋友)/i.test(text)) return '感情';
+  if (/(考試|學業|升學|證照|成績|考研|錄取|留學|學校)/i.test(text)) return '考試';
+  if (/(健康|疾病|身體|手術|就醫|病情|病灶|痛|醫學)/i.test(text)) return '健康';
+  if (/(出行|旅遊|出差|方位|搬家|搬遷|出國|交通|行車)/i.test(text)) return '出行';
+  if (/(官司|合約|訴訟|法律|糾紛|仲裁|賠償|法庭|律師)/i.test(text)) return '官司';
+  return '綜合';
+}
+
+/**
  * 梅花易數占卜指令
+ * 支援時間起卦、數字起卦（3個數字）、漢字報字起卦
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
- * @param {string} subcommand - 要詢問的問題
+ * @param {string} subcommand - 要詢問的問題或起卦參數
  * @param {Object} context - 上下文對象
  */
 export async function commandMeiHua(message, command, subcommand, context) {
-  const question = (subcommand || '').trim();
-  if (!question) {
-    return sendMessageToTelegramWithContext(context)('錯誤: 請在指令後面輸入要詢問的問題。');
+  const input = (subcommand || '').trim();
+  if (!input) {
+    return sendMessageToTelegramWithContext(context)(
+      '🌸 *梅花易數大師解卦*\n\n' +
+      '請在指令後面輸入您要詢問的問題（支援時間起卦、數字起卦、漢字報字起卦）。\n\n' +
+      '📝 *使用範例*：\n' +
+      '• `/mei 這次面試能順利錄取嗎？` （預設時間起卦）\n' +
+      '• `/mei 12 34 56 是否適合換工作？` （三數起卦，1-100）\n' +
+      '• `/mei 字:平安 是否能順利過關？` （漢字報字起卦）\n\n' +
+      '五卦全息：本卦（現狀）、互卦（過程）、變卦（趨勢）、錯卦（盲點危機）、綜卦（換位思考）與三百八十四爻動爻爻辭。'
+    );
+  }
+
+  let method = 'time';
+  let question = input;
+  let num1, num2, num3, text;
+  const purpose = detectPurpose(input);
+
+  // 1. 檢查數字起卦 (3個數字)
+  const numbersMatch = input.match(/\b(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\b/);
+  if (numbersMatch) {
+    method = 'numbers';
+    num1 = Number(numbersMatch[1]);
+    num2 = Number(numbersMatch[2]);
+    num3 = Number(numbersMatch[3]);
+    question = input.replace(numbersMatch[0], '').trim() || '梅花數字占卜吉凶';
+  } else {
+    // 2. 檢查漢字報字起卦 (字:XXX 或 報字:XXX)
+    const textMatch = input.match(/(?:字|報字|漢字)[:：]\s*([\u4e00-\u9fa5]+)/);
+    if (textMatch) {
+      method = 'text';
+      text = textMatch[1];
+      question = input.replace(textMatch[0], '').trim() || `梅花報字【${text}】吉凶占卜`;
+    }
   }
 
   const url = 'https://qi.david888.com/api/meihua-question';
   const payload = {
     question,
+    method,
+    num1,
+    num2,
+    num3,
+    text,
+    purpose,
+    lang: 'zh-tw'
   };
 
   try {
@@ -30,27 +86,34 @@ export async function commandMeiHua(message, command, subcommand, context) {
       body: JSON.stringify(payload),
     });
 
-    const text = await response.text();
+    const respText = await response.text();
 
-    if (!(text.startsWith('{') && text.endsWith('}'))) {
-      return sendMessageToTelegramWithContext(context)(`錯誤: API回應非JSON，內容: ${text}`);
+    if (!(respText.startsWith('{') && respText.endsWith('}'))) {
+      return sendMessageToTelegramWithContext(context)(`錯誤: API回應非JSON，內容: ${respText}`);
     }
 
     let data;
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(respText);
     } catch (e) {
-      return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。內容: ${text}`);
+      return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。內容: ${respText}`);
     }
 
     if (!data.success) {
-      const msg = data.message || '未知錯誤';
+      const msg = data.message || data.error || '未知錯誤';
       return sendMessageToTelegramWithContext(context)(`梅花易數服務回應失敗：${msg}`);
     }
 
     const ans = (data.answer || '').trim();
+    const result = data.result || data.data || {};
+    const bengua = result.bengua || {};
+    const biangua = result.biangua || {};
 
-    let reply = `【梅花易數】\n問題：${question}\n\n`;
+    let reply = `【🌸 梅花易數】\n問題：${question}\n`;
+    if (bengua.name) {
+      reply += `卦象：本卦【${bengua.name}】 ➜ 變卦【${biangua.name || '無'}】\n`;
+    }
+    reply += `起卦：${method === 'numbers' ? `數字 (${num1}, ${num2}, ${num3})` : method === 'text' ? `漢字 (${text})` : '時間起卦'}　目的：${purpose}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
 
     return sendMessageToTelegramWithContext(context)(reply);
@@ -128,11 +191,20 @@ export async function commandTarot(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)('錯誤: 請提供要詢問的問題。');
   }
 
+  // 檢查 variant (三牌陣解讀維度)
+  let variant = 'timeline';
+  if (/(現狀|阻力|障礙|困難|怎麼辦)/.test(question)) {
+    variant = 'situation';
+  } else if (/(他|她|感情|我們|關係|對方|戀愛)/.test(question)) {
+    variant = 'relationship';
+  }
+
   const url = 'https://qi.david888.com/api/tarot-question';
   const payload = {
     question,
     spread,
-    purpose: '綜合',
+    variant,
+    purpose: detectPurpose(question),
     lang: 'zh-tw'
   };
 
@@ -184,24 +256,38 @@ export async function commandTarot(message, command, subcommand, context) {
 
 /**
  * 奇門遁甲查詢指令
+ * 支援十天干克應格局、三遁九遁、門迫宮迫、專題用神與主客動靜
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
  * @param {string} subcommand - 要詢問的問題
  * @param {Object} context - 上下文對象
  */
 export async function commandQimen(message, command, subcommand, context) {
-  const question = (subcommand || '').trim();
-  if (!question) {
-    return sendMessageToTelegramWithContext(context)('錯誤: 請在指令後面輸入要詢問的問題。');
+  const input = (subcommand || '').trim();
+  if (!input) {
+    return sendMessageToTelegramWithContext(context)(
+      '🧭 *奇門遁甲問事占卜*\n\n' +
+      '請在指令後面輸入您要詢問的具體問題與事項。\n\n' +
+      '📝 *使用範例*：\n' +
+      '• `/qi 今天下午商務談判運勢如何？`\n' +
+      '• `/qi 換工作跳槽到新公司好不好？`\n' +
+      '• `/qi 求財 這筆投資項目是否可行？`\n\n' +
+      '系統自動精確鎖定十天干克應格局（青龍返首、飛鳥跌穴等）、三遁九遁吉格、專題用神（求財/工作/感情/考試/健康/出行/官司）與主客動靜攻守策略。'
+    );
   }
+
+  const mode = /(傳統|traditional)/i.test(input) ? 'traditional' : 'advanced';
+  const purpose = detectPurpose(input);
+  const cleanQuestion = input.replace(/(傳統|traditional)/gi, '').trim();
 
   const url = 'https://qi.david888.com/api/qimen-question';
   const payload = {
-    question,
-    mode: 'advanced',
-    purpose: '綜合',
+    question: cleanQuestion,
+    mode,
+    purpose,
     datetime: new Date().toISOString(),
     timezone: '+08:00',
+    lang: 'zh-tw'
   };
 
   try {
@@ -233,14 +319,11 @@ export async function commandQimen(message, command, subcommand, context) {
     const qi = data.qimenInfo || {};
     const meta = data.metadata || {};
 
-    let reply = `【奇門遁甲】\n問題：${data.question || question}\n\n`;
+    let reply = `【🧭 奇門遁甲】\n問題：${data.question || cleanQuestion}\n`;
     if (qi.localDate || qi.localTime) {
       reply += `時間：${qi.localDate || ''} ${qi.localTime || ''}\n`;
     }
-    if (qi.mode || qi.purpose) {
-      reply += `模式：${qi.mode || 'N/A'}　目的：${qi.purpose || '綜合'}\n`;
-    }
-    reply += '\n';
+    reply += `模式：${mode === 'traditional' ? '傳統時辰' : '進階九時段'}　專題用神：${purpose}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
 
     return sendMessageToTelegramWithContext(context)(reply);
@@ -251,6 +334,7 @@ export async function commandQimen(message, command, subcommand, context) {
 
 /**
  * 生辰八字排盤與 AI 解讀指令
+ * 支援四柱、十神藏干、神煞、旺衰格局與大師解讀
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
  * @param {string} subcommand - 參數與問題 (格式：YYYY-MM-DD [時間] [男/女] [問題])
@@ -270,7 +354,8 @@ export async function commandBazi(message, command, subcommand, context) {
       '• *日期*：`YYYY-MM-DD`（必填，如 1995-08-18）\n' +
       '• *性別*：`男` 或 `女`（預設男）\n' +
       '• *時間*：`HH:mm`（可選，如 14:30，預設 12:00）\n' +
-      '• *曆法*：支援在內容中加入 `農曆` 或 `陰曆`（預設公曆）'
+      '• *曆法*：支援在內容中加入 `農曆` 或 `陰曆`（預設公曆）\n' +
+      '• *進階*：支援姓名（`姓名:張三`）、出生地（`出生地:台北`）'
     );
   }
 
@@ -309,17 +394,28 @@ export async function commandBazi(message, command, subcommand, context) {
   // 4. 擷取曆法 (農曆 / 公曆)
   const calendar = /(農曆|陰曆|lunar)/i.test(input) ? 'lunar' : 'solar';
 
-  // 5. 擷取問題 (移除已解析的日期、時間、性別、曆法字串)
+  // 5. 擷取姓名與出生地
+  const nameMatch = input.match(/(?:姓名|名字|命主)[:：]\s*([\u4e00-\u9fa5a-zA-Z]+)/);
+  const name = nameMatch ? nameMatch[1] : undefined;
+
+  const placeMatch = input.match(/(?:出生地|地點|出生於)[:：]\s*([\u4e00-\u9fa5a-zA-Z]+)/);
+  const place = placeMatch ? placeMatch[1] : undefined;
+
+  // 6. 擷取問題 (移除已解析的字串)
   let cleanQuestion = input
     .replace(dateMatch[0], '')
     .replace(timeMatch ? timeMatch[0] : '', '')
     .replace(/(?:^|\s)(女生|女性|女命|女|男生|男性|男命|男)(?:\s|$)/g, ' ')
     .replace(/(?:^|\s)(國曆|公曆|陽曆|農曆|陰曆|solar|lunar)(?:\s|$)/gi, ' ')
+    .replace(nameMatch ? nameMatch[0] : '', '')
+    .replace(placeMatch ? placeMatch[0] : '', '')
     .trim();
 
   if (!cleanQuestion) {
     cleanQuestion = '整體命盤解析與近況運勢指引';
   }
+
+  const purpose = detectPurpose(cleanQuestion);
 
   const url = 'https://qi.david888.com/api/bazi2-question';
   const payload = {
@@ -328,7 +424,9 @@ export async function commandBazi(message, command, subcommand, context) {
     time,
     sex,
     calendar,
-    purpose: '綜合',
+    name,
+    place,
+    purpose,
     lang: 'zh-tw'
   };
 
@@ -365,7 +463,7 @@ export async function commandBazi(message, command, subcommand, context) {
     const meta = data.metadata || {};
 
     let reply = `【🎴 生辰八字】\n`;
-    reply += `命主：${date} ${time}（${sex}命・${calendar === 'lunar' ? '農曆' : '公曆'}）\n`;
+    reply += `命主：${name ? `${name} ` : ''}${date} ${time}（${sex}命・${calendar === 'lunar' ? '農曆' : '公曆'}）\n`;
 
     if (pillars.length >= 4) {
       const pillarText = pillars.map(p => `${p.label}:${p.value}(${p.tenGod || ''})`).join(' ');
@@ -387,41 +485,60 @@ export async function commandBazi(message, command, subcommand, context) {
 }
 
 /**
- * 八宅風水與流年飛星指令
+ * 八宅風水、玄空飛星、形煞化解與協紀辨方擇日指令
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
- * @param {string} subcommand - 參數與問題 (格式：[座向] [問題])
+ * @param {string} subcommand - 參數與問題 (格式：[座向/形煞/擇日] [問題])
  * @param {Object} context - 上下文對象
  */
 export async function commandFengshui(message, command, subcommand, context) {
   const input = (subcommand || '').trim();
   if (!input) {
     return sendMessageToTelegramWithContext(context)(
-      '🧭 *八宅風水與流年飛星*\n\n' +
-      '請輸入您的房屋座向與要諮詢的風水問題。\n\n' +
+      '🧭 *易經風水・陽宅飛星・形煞化解・擇日*\n\n' +
+      '請輸入您的房屋座向、空間問題或擇日需求。\n\n' +
       '📝 *使用範例*：\n' +
-      '• `/fengshui 坐北朝南 書房財位與文昌位如何佈置？`\n' +
-      '• `/fengshui 朝東南 客廳如何增旺財運與家運？`\n' +
-      '• `/fengshui 客廳大門正對陽台如何化解穿堂煞？`（未指定座向時預設朝南）\n\n' +
-      '支援朝向：`東`、`西`、`南`、`北`、`東南`、`東北`、`西南`、`西北`（或 `坐北朝南`、`坐南朝北` 等）'
+      '• `/fengshui 坐北朝南 書房財位與文昌位如何佈置？`（陽宅玄空飛星）\n' +
+      '• `/fengshui 客廳大門正對陽台穿堂煞如何化解？`（形煞診斷與化解）\n' +
+      '• `/fengshui 2026年10月 入宅搬家吉日良辰`（協紀辨方擇日）\n\n' +
+      '支援朝向：`東`、`西`、`南`、`北`、`東南`、`東北`、`西南`、`西北`（或 `坐北朝南` 等）'
     );
   }
 
-  // 1. 判斷朝向 (facing)
+  // 1. 判斷模式 (yangzhai 陽宅 / shaqi 形煞 / zeri 擇日)
+  let mode = 'yangzhai';
+  let shaType = undefined;
+  let matter = undefined;
+
+  if (/(路沖|天斬|壁刀|反弓|穿堂|橫梁|梁壓頂|鏡對床|形煞|煞氣)/.test(input)) {
+    mode = 'shaqi';
+    if (input.includes('路沖')) shaType = 'road_rush';
+    else if (input.includes('天斬')) shaType = 'tianzan';
+    else if (input.includes('壁刀')) shaType = 'bidau';
+    else if (input.includes('反弓')) shaType = 'fangong';
+    else if (input.includes('穿堂')) shaType = 'chuangtang';
+    else if (input.includes('橫梁') || input.includes('梁')) shaType = 'beam';
+    else if (input.includes('鏡')) shaType = 'mirror';
+  } else if (/(擇日|吉日|良辰吉時|開市|開業|入宅|搬家|動土|修造|裝修|結婚|嫁娶)/.test(input)) {
+    mode = 'zeri';
+    if (input.includes('入宅') || input.includes('搬家')) matter = 'movein';
+    else if (input.includes('開市') || input.includes('開業')) matter = 'open';
+    else if (input.includes('動土') || input.includes('裝修') || input.includes('修造')) matter = 'renovate';
+    else if (input.includes('結婚') || input.includes('嫁娶')) matter = 'marry';
+  }
+
+  // 2. 判斷朝向 (facing)
   const validFacings = ['東南', '東北', '西南', '西北', '南', '北', '東', '西'];
   let facing = '南';
 
-  // 檢查 "坐X朝Y"
   const zuoChaoMatch = input.match(/坐[東西南北]+朝([東西南北]+)/);
   if (zuoChaoMatch && validFacings.includes(zuoChaoMatch[1])) {
     facing = zuoChaoMatch[1];
   } else {
-    // 檢查 "朝X" 或 "面X" 或 "向X"
     const chaoMatch = input.match(/(?:朝|面|向)([東西南北]+)/);
     if (chaoMatch && validFacings.includes(chaoMatch[1])) {
       facing = chaoMatch[1];
     } else {
-      // 檢查獨立方向關鍵詞（優先匹配雙字方位）
       for (const dir of validFacings) {
         if (input.includes(dir)) {
           facing = dir;
@@ -431,24 +548,24 @@ export async function commandFengshui(message, command, subcommand, context) {
     }
   }
 
-  // 2. 判斷生年 (可選)
+  // 3. 判斷生年與入住年 (可選)
   const yearMatch = input.match(/\b(19\d{2}|20\d{2})\b/);
   const residentYear = yearMatch ? Number(yearMatch[1]) : 1990;
 
-  // 3. 判斷性別 (可選)
+  // 4. 判斷性別 (可選)
   const sexMatch = input.match(/(?:^|\s)(男生|男性|男命|男|女生|女性|女命|女)(?:\s|$)/);
   const sex = sexMatch ? (sexMatch[1].startsWith('男') ? '男' : '女') : '女';
 
-  // 4. 問題
-  const question = input;
-
   const url = 'https://qi.david888.com/api/fengshui-question';
   const payload = {
-    question,
+    question: input,
+    mode,
     facing,
     residentYear,
     sex,
-    purpose: '綜合',
+    shaType,
+    matter,
+    purpose: detectPurpose(input),
     lang: 'zh-tw'
   };
 
@@ -483,9 +600,15 @@ export async function commandFengshui(message, command, subcommand, context) {
     const mingGua = report.resident?.mingGua?.name || '';
     const meta = data.metadata || {};
 
-    let reply = `【🧭 風水格局】\n`;
-    reply += `朝向：朝${facing}${house ? ` (${house})` : ''}${mingGua ? `　本命卦：${mingGua}命` : ''}\n`;
-    reply += `問題：${data.question || question}\n\n`;
+    let reply = `【🧭 易經風水】\n`;
+    if (mode === 'yangzhai') {
+      reply += `模式：陽宅八宅玄空　朝向：朝${facing}${house ? ` (${house})` : ''}${mingGua ? `　本命卦：${mingGua}命` : ''}\n`;
+    } else if (mode === 'shaqi') {
+      reply += `模式：形煞診斷與化解${shaType ? ` (${shaType})` : ''}\n`;
+    } else if (mode === 'zeri') {
+      reply += `模式：協紀辨方擇日${matter ? ` (${matter})` : ''}\n`;
+    }
+    reply += `問題：${data.question || input}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
 
     return sendMessageToTelegramWithContext(context)(reply);
@@ -496,25 +619,26 @@ export async function commandFengshui(message, command, subcommand, context) {
 
 /**
  * 月老姻緣與感情測算指令
+ * 完整支援 6 大模式：月老靈籤(100籤)、生肖合婚、紫微夫妻宮、桃花運勢、八字合婚、紅線正緣
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
- * @param {string} subcommand - 參數與問題 (支援格式：模式或問題 / 西元出生年份1 西元出生年份2 問題)
+ * @param {string} subcommand - 參數與問題
  * @param {Object} context - 上下文對象
  */
 export async function commandYinyuan(message, command, subcommand, context) {
   const input = (subcommand || '').trim();
   if (!input) {
     return sendMessageToTelegramWithContext(context)(
-      '🏮 *月老姻緣與感情測算*\n\n' +
-      '請輸入想詢問的感情問題，或提供雙方出生年份進行合婚測算。\n\n' +
+      '🏮 *月老姻緣・六大感情測算*\n\n' +
+      '請輸入想詢問的感情問題，或提供生辰/年份進行合婚與桃花測算。\n\n' +
       '📝 *使用範例*：\n' +
-      '• `/yinyuan 求問今年感情與正緣指引`（月老靈籤）\n' +
-      '• `/yinyuan 1995 1998 我們合適嗎？`（生肖合婚契合度）\n' +
-      '• `/yinyuan 1996 桃花運與有利方位`（個人桃花指引）\n\n' +
-      '支援模式：\n' +
-      '• *月老靈籤*：直接輸入感情相關問題\n' +
-      '• *生肖合婚*：輸入兩個西元年份（如 1995 1998）\n' +
-      '• *個人桃花*：輸入單一西元年份（如 1996）'
+      '• `/yinyuan 求問今年感情與正緣指引`（月老靈籤 100 籤）\n' +
+      '• `/yinyuan 第58籤 感情復合指引`（自選籤號解籤）\n' +
+      '• `/yinyuan 1995 1998 我們合適嗎？`（生肖合婚契合評分）\n' +
+      '• `/yinyuan 1996 桃花運與有利方位`（個人桃花運勢）\n' +
+      '• `/yinyuan 紫微夫妻宮 1994-06-12 男 配偶特質`（夫妻宮主星）\n' +
+      '• `/yinyuan 紅線測算 尋找對象與時機窗口`（正緣畫像）\n\n' +
+      '支援模式：`月老靈籤`、`生肖合婚`、`紫微夫妻宮`、`桃花運勢`、`八字合婚`、`紅線測算`'
     );
   }
 
@@ -523,8 +647,23 @@ export async function commandYinyuan(message, command, subcommand, context) {
   let mode = 'fortune';
   let firstYear = undefined;
   let secondYear = undefined;
+  let stickNum = undefined;
 
-  if (yearMatches.length >= 2) {
+  // 檢查自選籤號 (第XX籤 或 XX籤)
+  const stickMatch = input.match(/(?:第\s*)?(\d{1,3})\s*籤/);
+  if (stickMatch && Number(stickMatch[1]) >= 1 && Number(stickMatch[1]) <= 100) {
+    mode = 'fortune';
+    stickNum = Number(stickMatch[1]);
+  } else if (/(夫妻宮|紫微)/.test(input)) {
+    mode = 'ziwei-marriage';
+  } else if (/(八字合婚|合婚)/.test(input)) {
+    mode = 'bazi-match';
+  } else if (/(紅線|正緣|理想型|尋找對象)/.test(input)) {
+    mode = 'red-thread';
+  } else if (/(桃花|桃花位|桃花運)/.test(input)) {
+    mode = 'peach-blossom';
+    if (yearMatches.length >= 1) firstYear = yearMatches[0];
+  } else if (yearMatches.length >= 2) {
     mode = 'zodiac';
     firstYear = yearMatches[0];
     secondYear = yearMatches[1];
@@ -533,13 +672,23 @@ export async function commandYinyuan(message, command, subcommand, context) {
     firstYear = yearMatches[0];
   }
 
+  // 判斷感情狀態 (status)
+  let status = '單身';
+  if (input.includes('暗戀')) status = '暗戀';
+  else if (input.includes('曖昧')) status = '曖昧';
+  else if (input.includes('熱戀') || input.includes('交往')) status = '熱戀';
+  else if (input.includes('備婚') || input.includes('論及婚嫁')) status = '備婚';
+  else if (input.includes('已婚') || input.includes('結婚')) status = '已婚';
+  else if (input.includes('分手') || input.includes('復合')) status = '分手挽回';
+
   const url = 'https://qi.david888.com/api/yinyuan-question';
   const payload = {
     question: input,
     mode,
     firstYear,
     secondYear,
-    status: '單身',
+    stickNum,
+    status,
     lang: 'zh-tw'
   };
 
@@ -573,14 +722,14 @@ export async function commandYinyuan(message, command, subcommand, context) {
 
     let reply = `【🏮 月老姻緣】\n`;
     if (mode === 'fortune' && (result.poem || result.title)) {
-      reply += `籤詩：第${result.number || ''}籤【${result.title || ''}】${result.poem || ''}\n`;
+      reply += `籤詩：第${result.number || stickNum || ''}籤【${result.title || ''}】${result.poem || ''}\n`;
     } else if (mode === 'zodiac' && result.first && result.second) {
       reply += `生肖合婚：${result.first.year}年(${result.first.zodiac || ''}) ＆ ${result.second.year}年(${result.second.zodiac || ''})\n`;
       if (result.relationship || result.score !== undefined) {
         reply += `契合分析：${result.relationship || ''}（評分：${result.score || 0}分）\n`;
       }
     } else if (mode === 'peach-blossom' && result.zodiac) {
-      reply += `桃花指引：${result.zodiac}年生肖（狀態：${result.status || '單身'}）\n`;
+      reply += `桃花指引：${result.zodiac}年生肖（狀態：${status}）\n`;
       if (result.favorableDirection) {
         reply += `有利方位：${result.favorableDirection}\n`;
       }
@@ -675,12 +824,40 @@ export async function commandTangPoetry(message, command, subcommand, context) {
 
 /**
  * 解答之書查詢指令
+ * 優先串接 qi.david888.com/api/answerbook-question，自動備援回退
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
  * @param {string} subcommand - 子指令參數
  * @param {Object} context - 上下文對象
  */
 export async function commandAnswerBook(message, command, subcommand, context) {
+  const question = (subcommand || '').trim();
+
+  // 1. 優先調用 qi.david888.com/api/answerbook-question
+  try {
+    const res = await fetch('https://qi.david888.com/api/answerbook-question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: question ? 'question' : 'direct',
+        question: question || undefined,
+        lang: 'zh-tw'
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.answer) {
+        let reply = `📖 【解答之書】\n`;
+        if (question) reply += `問題：${question}\n\n`;
+        reply += data.answer;
+        return sendMessageToTelegramWithContext(context)(reply);
+      }
+    }
+  } catch (e) {
+    console.warn('[AnswerBook] qi.david888.com API fallback:', e.message);
+  }
+
+  // 2. 備援節點：answerbook.david888.com
   const url = 'https://answerbook.david888.com/answers';
   try {
     const response = await fetch(url);
@@ -698,7 +875,7 @@ export async function commandAnswerBook(message, command, subcommand, context) {
         return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。回應內容: ${text}`);
       }
     } else {
-      return sendMessageToTelegramWithContext(context)(`錯誤: API回應錯誤，內容: ${text}`);
+      return sendMessageToTelegramWithContext(context)(`解答之書: ${text}`);
     }
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
