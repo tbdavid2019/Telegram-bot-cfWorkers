@@ -73,6 +73,13 @@ export async function sendMessageToTelegram(message, token, context) {
 
 export function sendMessageToTelegramWithContext(context) {
   return async (message) => {
+    if (context?.captureToolOutput && typeof context.captureToolOutput === 'function') {
+      context.captureToolOutput(message);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
     return sendMessageToTelegram(
       message, 
       context.SHARE_CONTEXT.currentBotToken, 

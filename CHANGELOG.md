@@ -7,15 +7,23 @@ All notable changes to this project will be documented in this file.
 ## [1.8.0] - 2026-08-27
 
 ### Added
+- **原生底層工具自主執行引擎（Universal Autonomous Tool Execution Engine）**：
+  - 將全系統所有查詢、運算、即時資訊工具全面納入 LLM 原生底層，實現完全自主、無感調用與兩階段事實接地生成（Grounding）。
+  - **支援自主調用工具庫（9 大維度）**：
+    - 🌐 **即時聯網與閱讀**：`/web`（2MD SERP 即時搜尋）、`/read`（AnyDoc Markdown 解析）
+    - 🌤️ **氣象特報**：`/wt`（即時氣溫/降雨機率/預報）、`/weatheralert`（災害天氣特報）
+    - 📈 **金融市場**：`/fund`（AI 對沖基金 14 位大師圓桌會議）、`/stock` / `/stock2` / `/stocktw`（Yahoo/TWSE 即時盤口與漲跌幅）
+    - 🔮 **占卜與命理**：`/tarot`（塔羅牌陣）、`/bazi`（生辰八字排盤）、`/fengshui`（八宅與飛星風水）、`/yinyuan`（月老籤詩與生肖合婚）、`/qi`（奇門遁甲）、`/mei`（梅花易數）、`/oracle`（淺草寺百籤）、`/boa` / `/bo`（解答之書）、`/poetry`（經典唐詩）
+    - ⚖️ **法律問答**：`/law`（台灣法規與實務判決要旨檢索）
+    - 🛠️ **網路工具**：`/ip`（IP 地理定位與 ASN）、`/dns` / `/dns2`（DoH 解析）
+    - 📖 **字典**：`/dictcn`（漢語成語辭典）、`/dicten`（英文字典）
+    - 🔑 **實用工具**：`/password`（安全隨機密碼生成）
+    - 👥 **協同調度**：`/delegate`（A2A 跨代理人協同）
 - **2MD 即時聯網搜尋與網頁/文件解析 (SERP & Web Reader)**：
-  - 串接 2MD 高效能引擎，具備 3-Tier 自動容錯備援：
-    - 主力節點：`https://2md.aiurl.tw/`
-    - 備援節點 1：`https://2md.glsoft.ai/`
-    - 備援節點 2：`https://create360.ai/`
-  - `/web [關鍵字 或 網址]` — 支援即時 SERP 網路搜尋，輸入網址時自動切換為網頁轉 Markdown 解析。
-  - `/read [網址]` — 專門讀取網頁、線上文件與 PDF（支援 AnyDoc 引擎），轉換為乾淨的 Markdown 格式供 LLM 與使用者閱讀。
-  - **LLM 基本內建工具升級**：在系統提示詞中配置 2MD 搜尋與網頁閱讀調用規則，使 AI 能在對話中主動搜尋即時新聞、查證時事或閱讀用戶提供的網頁連結。
-- **單元測試**：新增 `test/search-2md.test.js` 驗證 2MD 三重備援、搜尋格式化、URL 路由與 Markdown 解析。
+  - 串接 2MD 高效能引擎，具備 3-Tier 自動容錯備援（`https://2md.aiurl.tw/` ➜ `https://2md.glsoft.ai/` ➜ `https://create360.ai/`）。
+- **零幻覺自主查證鐵律（Zero-Hallucination Directive）**：
+  - 靜態知識無法確定的公司上市現狀、即時股價、最新時事新聞，LLM 一律自動在背景發起 `/web` 或專屬工具查證後直接回答。
+- **單元測試**：新增 `test/autonomous-tools.test.js` 與 `test/search-2md.test.js`，38 項單元測試全數通過。
 
 ## [1.7.0] - 2026-08-26
 

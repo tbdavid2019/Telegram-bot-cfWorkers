@@ -186,10 +186,19 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     const { parseCommandsFromLLMResponse } = await import('./command-invoker.js');
     const commands = parseCommandsFromLLMResponse(answer);
 
-    // 檢查是否有需要立即自主執行的工具指令（即時搜尋、網頁閱讀、A2A 協作、家庭管理）
-    // 只有在 ENABLE_FAMILY_SHEETS 明確設為 true 時才執行家庭管理指令
+    // 檢查是否有需要立即自主執行的工具指令（即時搜尋、網頁閱讀、股票行情、對沖基金、天氣、占卜、法律、網路工具、A2A 協作、家庭管理等）
     let toolCommands = [];
-    const baseTools = ['/web', '/read', '/delegate'];
+    const baseTools = [
+      '/web', '/read',
+      '/wt', '/weatheralert',
+      '/fund', '/stock', '/stock2',
+      '/tarot', '/bazi', '/fengshui', '/yinyuan', '/qi', '/mei', '/oracle', '/boa', '/bo', '/poetry',
+      '/law',
+      '/ip', '/dns', '/dns2',
+      '/dictcn', '/dicten',
+      '/gps', '/password',
+      '/delegate'
+    ];
     const enableFamilySheets = Boolean(context?.USER_CONFIG?.ENABLE_FAMILY_SHEETS || ENV?.USER_CONFIG?.ENABLE_FAMILY_SHEETS);
     console.log(`🤖 [Debug] Family Sheets Enabled: ${enableFamilySheets}`);
 
@@ -200,6 +209,7 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
         cmd.command === '/budget' ||
         cmd.command === '/schedule' ||
         cmd.command === '/scheduleadd' ||
+        cmd.command === '/scheduledelete' ||
         cmd.command === '/budgetwrite'
       );
     } else {
@@ -210,6 +220,7 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
         cmd.command === '/budget' ||
         cmd.command === '/schedule' ||
         cmd.command === '/scheduleadd' ||
+        cmd.command === '/scheduledelete' ||
         cmd.command === '/budgetwrite'
       );
 
@@ -221,6 +232,7 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
           cmd.command !== '/budget' &&
           cmd.command !== '/schedule' &&
           cmd.command !== '/scheduleadd' &&
+          cmd.command !== '/scheduledelete' &&
           cmd.command !== '/budgetwrite'
         );
 
@@ -412,6 +424,27 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             dataText += `📅 月份：${params.month}\n`;
             dataText += `📝 項目：${params.category}\n`;
             dataText += `💰 金額：${params.amount} 元\n`;
+
+          } else {
+            console.log(`🤖 [Tool Calling] Executing generic command handler for: ${command} ${args || ''}`);
+            const { commandHandlers } = await import('../telegram/commands.js');
+            const handler = commandHandlers[command];
+            if (handler && typeof handler.fn === 'function') {
+              const captured = [];
+              const toolContext = {
+                ...context,
+                CURRENT_CHAT_CONTEXT: {
+                  ...context.CURRENT_CHAT_CONTEXT,
+                  message_id: null,
+                  reply_markup: null
+                },
+                captureToolOutput: (text) => captured.push(text)
+              };
+              await handler.fn({}, command, (args || '').trim(), toolContext);
+              dataText = captured.join('\n\n') || `[${command} 執行完成]`;
+            } else {
+              dataText = `[未知指令 ${command}]`;
+            }
           }
 
           toolResults.push({
