@@ -65,6 +65,20 @@ node build.js
 
 ---
 
+## 🌐 常用後端與外部 API 節點參考
+
+- **2MD 即時聯網搜尋與網頁閱讀 (SERP & AnyDoc Reader)**：
+  - 主力：`https://2md.aiurl.tw/`
+  - 備援 1：`https://2md.glsoft.ai/`
+  - 備援 2：`https://create360.ai/`
+  - 規格說明：`https://2md.glsoft.ai/llms.txt`
+- **AI 對沖基金 (AI Hedge Fund)**：
+  - 端點：`http://dns.glsoft.ai:6000/api/analysis` (14 位投資大師 + 圓桌會議)
+- **術數占卜 (Qimen / Bazi / Tarot / Fengshui / Yinyuan)**：
+  - 端點：`https://qi.david888.com/api/`
+
+---
+
 ## 📌 專案架構概覽
 
 ```

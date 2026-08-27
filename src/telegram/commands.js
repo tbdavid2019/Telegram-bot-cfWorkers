@@ -32,7 +32,7 @@ import {
   commandDnsLookup,
   commandDnsLookup2
 } from '../features/network.js';
-import { commandDDGSearch } from '../features/search.js';
+import { commandDDGSearch, commandRead } from '../features/search.js';
 import {
   commandGenerateImg,
   commandGenerateImg2,
@@ -93,6 +93,8 @@ export const commandSortList = [
   "/setimg",        // 設定圖片生成模型
   "/dictcn",        // 中文字典 (要加參數)
   "/dicten",        // 英文字典 (要加參數)
+  "/web",           // 即時搜尋與網頁解析 (2MD)
+  "/read",          // 網頁文件解析閱讀 (2MD)
   "/memory",        // 查看長期記憶
   "/memoryclear",   // 清除個人記憶
   "/system",        // 查看系統狀態
@@ -247,11 +249,16 @@ export const commandHandlers = {
     description: "附近地點查詢 - 使用: /gps [地點類型] [半徑(公尺)]"
   },
 
-  // 搜尋相關
+  // 搜尋與網頁閱讀
   "/web": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandDDGSearch,
-    description: "網路搜尋 - 使用: /web [關鍵字]"
+    description: "網路即時搜尋/網頁解析 - 使用: /web [關鍵字 或 網址]"
+  },
+  "/read": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandRead,
+    description: "網頁/文件轉Markdown閱讀 - 使用: /read [網址]"
   },
 
   // AI 圖片生成

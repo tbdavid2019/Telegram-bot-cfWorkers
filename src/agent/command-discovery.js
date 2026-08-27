@@ -120,7 +120,7 @@ export async function generateCommandSystemPrompt(context) {
         '占卜相關': ['/qi', '/mei', '/tarot', '/bazi', '/fengshui', '/yinyuan', '/oracle', '/poetry', '/boa', '/bo'],
         '法律相關': ['/law'],
         '字典相關': ['/dict', '/dictcn', '/dicten'],
-        '網路工具': ['/ip', '/dns', '/dns2'],
+        '網路工具': ['/web', '/read', '/ip', '/dns', '/dns2'],
         '位置服務': ['/gps'],
         '圖片生成': ['/img', '/img2', '/setimg'],
         '系統功能': ['/help', '/new', '/system', '/model'],
@@ -191,6 +191,8 @@ export async function generateCommandSystemPrompt(context) {
     prompt += '用戶問「台北天氣如何？」→ 回應中包含 `[CALL:/wt 台北]`\n';
     prompt += '- 用戶問「查詢台股 2330」→ 回應中包含 `[CALL:/stocktw 2330]`\n';
     prompt += '- 用戶問「分析輝達股票 / 投資大師怎麼看特斯拉」→ 回應中包含 `[CALL:/fund NVDA]` 或 `[CALL:/fund TSLA]`\n';
+    prompt += '- 用戶問「搜尋台灣最新科技新聞 / 查一下某某公司近況」→ 回應中包含 `[CALL:/web 台灣最新科技新聞]`\n';
+    prompt += '- 用戶給予網址「幫我看這篇：https://example.com/article」→ 回應中包含 `[CALL:/read https://example.com/article]`\n';
     prompt += '- 用戶問「幫我抽張塔羅牌看工作」→ 回應中包含 `[CALL:/tarot 換工作順利嗎？]`\n';
     prompt += '- 用戶問「算八字：我是1995-08-18出生男生，看今年事業」→ 回應中包含 `[CALL:/bazi 1995-08-18 男 看今年事業]`\n';
     prompt += '- 用戶問「客廳座北朝南，財位該怎麼擺？」→ 回應中包含 `[CALL:/fengshui 坐北朝南 客廳財位擺設]`\n';

@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-27
+
+### Added
+- **2MD 即時聯網搜尋與網頁/文件解析 (SERP & Web Reader)**：
+  - 串接 2MD 高效能引擎，具備 3-Tier 自動容錯備援：
+    - 主力節點：`https://2md.aiurl.tw/`
+    - 備援節點 1：`https://2md.glsoft.ai/`
+    - 備援節點 2：`https://create360.ai/`
+  - `/web [關鍵字 或 網址]` — 支援即時 SERP 網路搜尋，輸入網址時自動切換為網頁轉 Markdown 解析。
+  - `/read [網址]` — 專門讀取網頁、線上文件與 PDF（支援 AnyDoc 引擎），轉換為乾淨的 Markdown 格式供 LLM 與使用者閱讀。
+  - **LLM 基本內建工具升級**：在系統提示詞中配置 2MD 搜尋與網頁閱讀調用規則，使 AI 能在對話中主動搜尋即時新聞、查證時事或閱讀用戶提供的網頁連結。
+- **單元測試**：新增 `test/search-2md.test.js` 驗證 2MD 三重備援、搜尋格式化、URL 路由與 Markdown 解析。
+
 ## [1.7.0] - 2026-08-26
 
 ### Added

@@ -8,6 +8,31 @@
 
 ## 🆕 最新功能
 
+### 🌐 2MD 即時聯網搜尋與網頁/文件解析 (2026-08-27)
+
+**為 Bot 與 LLM 提供即刻即時聯網能力、即時 SERP 搜尋與網頁/文件轉 Markdown 解析！**
+
+串接 2MD 服務引擎，內建 **3-Tier 自動容錯備援機制**：
+1. 主力節點：`https://2md.aiurl.tw/`
+2. 備援節點 1：`https://2md.glsoft.ai/`
+3. 備援節點 2：`https://create360.ai/`
+
+#### 功能特點
+
+- ✅ **即時網路搜尋 (`/web <關鍵字>`)** - 透過 2MD SERP 搜尋引擎獲取最新即時新聞、時事查證與網頁摘要。
+- ✅ **網頁轉 Markdown 閱讀 (`/read <網址>` 或 `/web <網址>`)** - 支援將任何公開網頁、線上技術文章自動轉換為乾淨的 Markdown 格式。
+- ✅ **線上文件與 PDF 解析** - 支援 AnyDoc 引擎，可直接讀取線上 PDF、Word 等格式文件。
+- ✅ **LLM 基本內建工具** - AI 在聊天時若偵測到需要查證最新時事或閱讀用戶給予的連結，可自動主動調用 `/web` 或 `/read` 工具。
+
+#### 指令範例
+
+| 指令 | 說明 | 範例 |
+|------|------|------|
+| `/web` | 即時網路搜尋 或 網頁解析 | `/web 台灣最新科技新聞`<br>`/web NVIDIA 財報重點`<br>`/web https://news.ycombinator.com` |
+| `/read` | 網頁與線上文件/PDF 解析閱讀 | `/read https://news.ycombinator.com`<br>`/read https://arxiv.org/pdf/2301.00001.pdf` |
+
+---
+
 ### 📈 AI 對沖基金・14 位投資大師決策與圓桌辯論 (2026-08-26)
 
 **集合巴菲特、蒙格、木頭姐、大賣空等 14 位投資大師的多維度選股與圓桌會議！**
@@ -1670,7 +1695,8 @@ pnpm run build:full
 - `/ip` - IP 位址查詢
 - `/dns` - DNS 查詢 (Cloudflare)
 - `/dns2` - DNS 查詢 (Netlify)
-- `/web` - 網路搜尋
+- `/web` - 即時網路搜尋與網頁解析 (2MD SERP Engine)
+- `/read` - 網頁/線上文件/PDF 轉 Markdown 閱讀 (2MD AnyDoc Engine)
 
 **AI 圖片生成**
 - `/img` - AI 圖片生成 (支援4種服務)
