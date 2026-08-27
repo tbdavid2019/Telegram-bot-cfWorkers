@@ -6,28 +6,100 @@
 import { ENV } from '../config/env.js';
 
 /**
+ * 提取 LLM 回應中的所有指令調用
+ * 支援 JSON 參數、巢狀括號 [TOC]、Markdown 連結與多行文本
+ * @param {string} text - LLM 回應文字
+ * @returns {Array<{command: string, args: string, fullMatch: string, start: number, end: number}>}
+ */
+export function extractCommandCalls(text) {
+    if (!text || typeof text !== 'string') {
+        return [];
+    }
+
+    const results = [];
+    const marker = '[CALL:';
+    let startIndex = 0;
+
+    while (startIndex < text.length) {
+        const callPos = text.indexOf(marker, startIndex);
+        if (callPos === -1) break;
+
+        const afterCall = callPos + marker.length;
+        // 匹配指令名稱 (例如: /wiki, /web, /box, /wt 等)
+        const cmdMatch = text.slice(afterCall).match(/^(\/[\w-]+)/);
+        if (!cmdMatch) {
+            startIndex = afterCall;
+            continue;
+        }
+
+        const command = cmdMatch[1];
+        const argsStart = afterCall + command.length;
+
+        // 尋找對應的閉合中括號 ']'，處理字串引號與巢狀括號
+        let depth = 1;
+        let inString = false;
+        let stringChar = '';
+        let isEscaped = false;
+        let endPos = -1;
+
+        for (let i = argsStart; i < text.length; i++) {
+            const char = text[i];
+
+            if (inString) {
+                if (isEscaped) {
+                    isEscaped = false;
+                } else if (char === '\\') {
+                    isEscaped = true;
+                } else if (char === stringChar) {
+                    inString = false;
+                }
+            } else {
+                if (char === '"' || char === "'" || char === '`') {
+                    inString = true;
+                    stringChar = char;
+                } else if (char === '[') {
+                    depth++;
+                } else if (char === ']') {
+                    depth--;
+                    if (depth === 0) {
+                        endPos = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (endPos !== -1) {
+            const fullMatch = text.slice(callPos, endPos + 1);
+            const args = text.slice(argsStart, endPos).trim();
+            results.push({
+                command,
+                args,
+                fullMatch,
+                start: callPos,
+                end: endPos + 1
+            });
+            startIndex = endPos + 1;
+        } else {
+            // 若未找到閉合括號，前進指標避免無窮迴圈
+            startIndex = afterCall;
+        }
+    }
+
+    return results;
+}
+
+/**
  * 解析 LLM 回應，提取指令調用
  * @param {string} answer - LLM 回應文字
  * @returns {Array<{command: string, args: string}>} 指令列表
  */
 export function parseCommandsFromLLMResponse(answer) {
-    if (!answer || typeof answer !== 'string') {
-        return [];
-    }
-
-    // 匹配 [CALL:/command args] 格式，支持 JSON 參數
-    const regex = /\[CALL:(\/\w+)(?:\s+([^\]]+))?\]/gs;
-    const commands = [];
-    let match;
-
-    while ((match = regex.exec(answer)) !== null) {
-        commands.push({
-            command: match[1],  // 例如: "/wt"
-            args: match[2] ? match[2].trim() : ''  // 例如: "台北"
-        });
-    }
-
-    return commands;
+    const calls = extractCommandCalls(answer);
+    return calls.map(c => ({
+        command: c.command,
+        args: c.args
+    }));
 }
 
 /**
@@ -40,8 +112,20 @@ export function removeCommandMarkers(answer) {
         return answer;
     }
 
-    // 移除所有 [CALL:...] 標記，支持 JSON 參數
-    return answer.replace(/\[CALL:\/\w+(?:\s+[^\]]+)?\]/gs, '').trim();
+    const calls = extractCommandCalls(answer);
+    if (calls.length === 0) {
+        // 備用正則清理殘留的簡單標記
+        return answer.replace(/\[CALL:\/\w+(?:\s+[^\]]+)?\]/gs, '').trim();
+    }
+
+    // 從後往前替換以保持索引正確
+    let cleaned = answer;
+    for (let i = calls.length - 1; i >= 0; i--) {
+        const { start, end } = calls[i];
+        cleaned = cleaned.slice(0, start) + cleaned.slice(end);
+    }
+
+    return cleaned.trim();
 }
 
 /**
@@ -61,8 +145,6 @@ export function generateInlineKeyboard(commands) {
 
         return [{
             text: buttonText,
-            // 使用 callback_data 而不是直接發送訊息
-            // 這樣可以讓我們在 callback 中處理
             callback_data: `cmd:${commandText}`
         }];
     });

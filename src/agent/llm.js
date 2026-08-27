@@ -189,6 +189,8 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     // 檢查是否有需要立即自主執行的工具指令（即時搜尋、網頁閱讀、股票行情、對沖基金、天氣、占卜、法律、網路工具、A2A 協作、家庭管理等）
     let toolCommands = [];
     const baseTools = [
+      '/wiki', '/wikiread',
+      '/box', '/boxlist', '/boxsearch', '/boxstats',
       '/web', '/read',
       '/wt', '/weatheralert',
       '/fund', '/stock', '/stock2',
@@ -424,6 +426,45 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             dataText += `📅 月份：${params.month}\n`;
             dataText += `📝 項目：${params.category}\n`;
             dataText += `💰 金額：${params.amount} 元\n`;
+
+          } else if (command === '/wiki') {
+            console.log('🤖 [Tool Calling] Executing Wiki publisher...');
+            const { publishWikiNote } = await import('../features/wiki.js');
+            let slug = '';
+            let content = '';
+            let options = {};
+
+            const trimmedArgs = (args || '').trim();
+            if (trimmedArgs.startsWith('{') && trimmedArgs.endsWith('}')) {
+              try {
+                const parsed = JSON.parse(trimmedArgs);
+                slug = parsed.slug || parsed.path || parsed.title || '';
+                content = parsed.content || parsed.text || parsed.markdown || '';
+                if (parsed.theme) options.theme = parsed.theme;
+                if (parsed.width) options.width = parsed.width;
+                if (parsed.append) options.append = parsed.append;
+              } catch (e) {
+                console.error('❌ [Tool Calling] Failed to parse JSON args for /wiki:', e);
+              }
+            }
+
+            if (!content) {
+              const firstSpace = trimmedArgs.indexOf(' ');
+              if (firstSpace !== -1) {
+                slug = trimmedArgs.slice(0, firstSpace).trim();
+                content = trimmedArgs.slice(firstSpace + 1).trim();
+              } else {
+                content = trimmedArgs;
+              }
+            }
+
+            const pubRes = await publishWikiNote(slug, content, options, context);
+            dataText = `✅ [David888 Wiki 長文發布成功]\n`;
+            dataText += `📌 頁面代稱: ${pubRes.path}\n`;
+            dataText += `🔗 公開閱讀連結 (Share URL): ${pubRes.shareUrl}\n`;
+            if (pubRes.presentUrl) dataText += `🎬 簡報播放連結: ${pubRes.presentUrl}\n`;
+            if (pubRes.bookUrl) dataText += `📖 電子書閱讀器: ${pubRes.bookUrl}\n\n`;
+            dataText += `⚠️ 核心規則：長文已成功上傳至 Wiki！請「絕對不要」在 Telegram 回覆中輸出整篇完整長文，只需向用戶提供精華重點摘要，並附上上述公開閱讀連結 (Share URL: ${pubRes.shareUrl}) 讓用戶點擊查閱！`;
 
           } else {
             console.log(`🤖 [Tool Calling] Executing generic command handler for: ${command} ${args || ''}`);

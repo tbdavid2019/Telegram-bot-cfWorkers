@@ -267,3 +267,22 @@ test('commandWikiRead reads and outputs markdown content', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('command-invoker correctly parses [CALL:/wiki {...}] containing [TOC] and nested brackets', async () => {
+  const { parseCommandsFromLLMResponse, removeCommandMarkers } = await import('../src/agent/command-invoker.js');
+  
+  const sampleLLMResponse = `[CALL:/wiki {"slug":"business-english-dialogue","title":"商務英語口說練習","content":"[TOC]\\n\\n# 商務英語\\n- [第一章](/share/ch1)\\n==重點高亮=="}]`;
+  
+  const commands = parseCommandsFromLLMResponse(sampleLLMResponse);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].command, '/wiki');
+  
+  const parsedArgs = JSON.parse(commands[0].args);
+  assert.equal(parsedArgs.slug, 'business-english-dialogue');
+  assert.ok(parsedArgs.content.includes('[TOC]'));
+  assert.ok(parsedArgs.content.includes('[第一章]'));
+
+  const cleaned = removeCommandMarkers(sampleLLMResponse);
+  assert.equal(cleaned, '');
+});
+
