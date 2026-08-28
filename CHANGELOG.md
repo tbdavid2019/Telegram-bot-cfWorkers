@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-08-28
+
+### Added
+- **多輪自主工具調用迴圈（Multi-turn ReAct Loop，最高支援 10 輪自主執行）**：
+  - 將 LLM 原生 Tool Calling 模式升級為多輪自主推理與工具鏈式調用循環（ReAct Loop）。
+  - **環境變數可配置**：新增 `MAX_REACT_ROUNDS`（預設 `10`），支援透過環境變數或 `/setenv MAX_REACT_ROUNDS 10` 動態調整最大自主探索輪數。
+  - **鏈式工具協同**：支援複雜任務跨工具多輪執行（例如：第 1 輪聯網搜尋 ➔ 第 2 輪讀取深入網址/查股票行情 ➔ 第 3 輪發布 Wiki 報告 ➔ 生成最終結構化解答）。
+  - **防死循環保護 (Deadlock & Loop Prevention)**：內建重複工具調用偵測，同一工具同一參數重複調用時主動熔斷並引導 LLM 基於現有資料作答；到達上限時優雅總結。
+  - **單元測試**：新增多輪 ReAct 跨工具連續調用單元測試，全專案 **68 項單元測試全數通過**。
+
 ## [1.9.0] - 2026-08-27
 
 ### Added

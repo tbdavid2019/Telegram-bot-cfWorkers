@@ -196,15 +196,13 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
   let answer = await llm(llmParams, context, safeStream);
 
-  // 🆕 處理 LLM 回應中的指令調用（Tool Calling 模式）
+  // 🆕 處理 LLM 回應中的指令調用（Tool Calling 模式 - 支援多輪 ReAct 自主循環，最高 MAX_REACT_ROUNDS 輪）
   if (isCommandDiscoveryEnabled && typeof answer === 'string') {
-    console.log('🤖 [Command Discovery] Checking LLM response for command markers...');
+    const { parseCommandsFromLLMResponse, removeCommandMarkers, processCommandInvocations } = await import('./command-invoker.js');
+    const maxRounds = Math.max(1, Number(context?.USER_CONFIG?.MAX_REACT_ROUNDS || ENV?.USER_CONFIG?.MAX_REACT_ROUNDS || ENV?.MAX_REACT_ROUNDS || 10));
+    let currentRound = 0;
+    const executedToolCounts = new Map();
 
-    const { parseCommandsFromLLMResponse } = await import('./command-invoker.js');
-    const commands = parseCommandsFromLLMResponse(answer);
-
-    // 檢查是否有需要立即自主執行的工具指令（即時搜尋、網頁閱讀、股票行情、對沖基金、天氣、占卜、法律、網路工具、A2A 協作、家庭管理等）
-    let toolCommands = [];
     const baseTools = [
       '/wiki', '/wikiread',
       '/box', '/boxlist', '/boxsearch', '/boxstats',
@@ -218,62 +216,76 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       '/gps', '/password',
       '/delegate'
     ];
-    const enableFamilySheets = Boolean(context?.USER_CONFIG?.ENABLE_FAMILY_SHEETS || ENV?.USER_CONFIG?.ENABLE_FAMILY_SHEETS);
-    console.log(`🤖 [Debug] Family Sheets Enabled: ${enableFamilySheets}`);
 
-    // 使用 Truthiness 檢查，避免 "true" !== true 的問題
-    if (enableFamilySheets) {
-      toolCommands = commands.filter(cmd =>
-        baseTools.includes(cmd.command) ||
-        cmd.command === '/budget' ||
-        cmd.command === '/schedule' ||
-        cmd.command === '/scheduleadd' ||
-        cmd.command === '/scheduledelete' ||
-        cmd.command === '/budgetwrite'
-      );
-    } else {
-      toolCommands = commands.filter(cmd => baseTools.includes(cmd.command));
+    while (currentRound < maxRounds) {
+      console.log(`🤖 [Tool Calling] ReAct Loop Round ${currentRound + 1}/${maxRounds}: Checking LLM response for command markers...`);
+      const commands = parseCommandsFromLLMResponse(answer);
 
-      // 找出被禁用的指令
-      const prohibitedCommands = commands.filter(cmd =>
-        cmd.command === '/budget' ||
-        cmd.command === '/schedule' ||
-        cmd.command === '/scheduleadd' ||
-        cmd.command === '/scheduledelete' ||
-        cmd.command === '/budgetwrite'
-      );
+      let toolCommands = [];
+      const enableFamilySheets = Boolean(context?.USER_CONFIG?.ENABLE_FAMILY_SHEETS || ENV?.USER_CONFIG?.ENABLE_FAMILY_SHEETS);
 
-      if (prohibitedCommands.length > 0) {
-        console.log(`🤖 [Tool Calling] Features disabled, stripping ${prohibitedCommands.length} prohibited commands`);
+      if (enableFamilySheets) {
+        toolCommands = commands.filter(cmd =>
+          baseTools.includes(cmd.command) ||
+          cmd.command === '/budget' ||
+          cmd.command === '/schedule' ||
+          cmd.command === '/scheduleadd' ||
+          cmd.command === '/scheduledelete' ||
+          cmd.command === '/budgetwrite'
+        );
+      } else {
+        toolCommands = commands.filter(cmd => baseTools.includes(cmd.command));
 
-        // 從 commands 列表中移除
-        const safeCommands = commands.filter(cmd =>
-          cmd.command !== '/budget' &&
-          cmd.command !== '/schedule' &&
-          cmd.command !== '/scheduleadd' &&
-          cmd.command !== '/scheduledelete' &&
-          cmd.command !== '/budgetwrite'
+        const prohibitedCommands = commands.filter(cmd =>
+          cmd.command === '/budget' ||
+          cmd.command === '/schedule' ||
+          cmd.command === '/scheduleadd' ||
+          cmd.command === '/scheduledelete' ||
+          cmd.command === '/budgetwrite'
         );
 
-        // 更新 commands 引用
-        commands.length = 0;
-        commands.push(...safeCommands);
+        if (prohibitedCommands.length > 0) {
+          console.log(`🤖 [Tool Calling] Features disabled, stripping ${prohibitedCommands.length} prohibited commands`);
+          const safeCommands = commands.filter(cmd =>
+            cmd.command !== '/budget' &&
+            cmd.command !== '/schedule' &&
+            cmd.command !== '/scheduleadd' &&
+            cmd.command !== '/scheduledelete' &&
+            cmd.command !== '/budgetwrite'
+          );
+          commands.length = 0;
+          commands.push(...safeCommands);
 
-        // 從 answer 中移除標記
-        for (const cmd of prohibitedCommands) {
-          const regex = new RegExp(`\\[CALL:${cmd.command}\\s*(.*?)\\]`, 'gs');
-          answer = answer.replace(regex, '');
+          for (const cmd of prohibitedCommands) {
+            const regex = new RegExp(`\\[CALL:${cmd.command}\\s*(.*?)\\]`, 'gs');
+            answer = answer.replace(regex, '');
+          }
         }
       }
-    }
 
-    if (toolCommands.length > 0) {
-      console.log(`🤖 [Tool Calling] Found ${toolCommands.length} tool commands, executing...`);
+      // 若沒有需要立即執行的工具指令，跳出 ReAct 循環
+      if (toolCommands.length === 0) {
+        console.log(`🤖 [Tool Calling] No further tool commands detected at round ${currentRound + 1}.`);
+        break;
+      }
 
-      // 直接調用資料獲取函數
+      console.log(`🤖 [Tool Calling] Round ${currentRound + 1}/${maxRounds}: Executing ${toolCommands.length} tool command(s)...`);
+
       const toolResults = [];
 
       for (const { command, args } of toolCommands) {
+        const callKey = `${command}:${args || ''}`;
+        const previousCount = executedToolCounts.get(callKey) || 0;
+        if (previousCount >= 2) {
+          console.warn(`⚠️ [Tool Calling] Loop prevention: ${callKey} already called ${previousCount} times.`);
+          toolResults.push({
+            command,
+            data: `⚠️ [重複調用提示] 工具 ${command} 先前已執行過，請避免重複調用，直接根據現有資料進行回答或選用其他工具。`
+          });
+          continue;
+        }
+        executedToolCounts.set(callKey, previousCount + 1);
+
         try {
           let dataText = '';
 
@@ -401,7 +413,6 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
               dataText += `👤 對象：${params.targetUser}\n`;
             }
 
-
           } else if (command === '/delegate') {
             console.log('🤖 [Tool Calling] Delegating to agent...');
             const { delegateToAgent } = await import('./a2a-client.js');
@@ -499,29 +510,42 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       ).join('\n\n');
 
       history.push({ role: "assistant", content: answer });
-      history.push({ role: "system", content: `[工具執行結果]\n${toolResultText}\n\n請根據上述資料回答用戶的問題。` });
+      history.push({
+        role: "system",
+        content: `[工具執行結果 (第 ${currentRound + 1} 輪)]\n${toolResultText}\n\n請根據上述資料繼續思考或直接回答用戶。如果需要更多資料可繼續調用相應指令，若資料已齊全請直接提供最終回答。`
+      });
 
-      // 再次調用 LLM，這次它可以看到工具結果
-      console.log('🤖 [Tool Calling] Calling LLM again with tool results...');
-      answer = await llm(llmParams, context, onStream);
-      const { removeCommandMarkers } = await import('./command-invoker.js');
-      answer = removeCommandMarkers(answer);
+      currentRound++;
 
-    } else {
-      // 沒有工具指令，使用原來的 Inline Keyboard 模式
-      try {
-        const { processCommandInvocations } = await import('./command-invoker.js');
-        const { cleanedAnswer, replyMarkup } = await processCommandInvocations(answer, context);
-
-        if (replyMarkup) {
-          context.CURRENT_CHAT_CONTEXT.reply_markup = replyMarkup;
-          console.log('🤖 [Command Discovery] Added inline keyboard with', replyMarkup.inline_keyboard.length, 'buttons');
-        }
-
-        answer = cleanedAnswer;
-      } catch (error) {
-        console.error('❌ [Command Discovery] Failed to process command invocations:', error);
+      if (currentRound < maxRounds) {
+        console.log(`🤖 [Tool Calling] Calling LLM again with tool results (Round ${currentRound + 1}/${maxRounds})...`);
+        answer = await llm(llmParams, context, safeStream);
+      } else {
+        console.log(`🤖 [Tool Calling] Reached max ReAct rounds limit (${maxRounds}). Requesting final response...`);
+        history.push({
+          role: "system",
+          content: `⚠️ 已達最大自主循環輪數上限 (${maxRounds} 輪)。請直接根據目前已知的所有資訊，給出最終完整的結構化回答，切勿再輸出任何 [CALL:...] 標記。`
+        });
+        answer = await llm(llmParams, context, onStream);
+        answer = removeCommandMarkers(answer);
+        break;
       }
+    }
+
+    // 處理最後可能殘留的指令調用（例如給出按鈕建議或清理標記）
+    try {
+      const { processCommandInvocations } = await import('./command-invoker.js');
+      const { cleanedAnswer, replyMarkup } = await processCommandInvocations(answer, context);
+
+      if (replyMarkup) {
+        context.CURRENT_CHAT_CONTEXT.reply_markup = replyMarkup;
+        console.log('🤖 [Command Discovery] Added inline keyboard with', replyMarkup.inline_keyboard.length, 'buttons');
+      }
+
+      answer = cleanedAnswer;
+    } catch (error) {
+      console.error('❌ [Command Discovery] Failed to process command invocations:', error);
+      answer = removeCommandMarkers(answer);
     }
   }
 

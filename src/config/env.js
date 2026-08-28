@@ -155,6 +155,8 @@ export class UserConfig {
   WIKI_DEFAULT_WIDTH = "100%";
   WIKI_API_PASSWORD = "";
 
+  // -- 多輪自主工具調用 (ReAct Loop) --
+  MAX_REACT_ROUNDS = 10; // 最大自主工具循環輪數 (預設 10 輪)
 }
 
 export class Environment {
@@ -237,6 +239,8 @@ export class Environment {
   ENABLE_LOCATION_SERVICE = false;
   // 开启 LLM 指令发现功能
   ENABLE_COMMAND_DISCOVERY = false;
+  // 多輪自主工具調用 (ReAct Loop) 最大輪數
+  MAX_REACT_ROUNDS = 10;
 
   // -- 模式开关 --
   //
@@ -273,6 +277,7 @@ const ENV_TYPES = {
   GOOGLE_MAPS_API_KEY: "string",
   ENABLE_LOCATION_SERVICE: "boolean",
   ENABLE_COMMAND_DISCOVERY: "boolean",
+  MAX_REACT_ROUNDS: "number",
   GPT_IMAGE_MODEL: "string",
   GPT_IMAGE_SIZE: "string",
   OPENAI_IMAGE_API_KEY: "array",

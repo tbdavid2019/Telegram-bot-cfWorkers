@@ -307,3 +307,139 @@ test('autonomous tool calling executes /tarot divination during LLM chat', async
     globalThis.fetch = originalFetch;
   }
 });
+
+test('multi-turn ReAct loop executes consecutive tools across multiple rounds', async () => {
+  const { chatWithLLM } = await import('../src/agent/llm.js');
+
+  let llmCallCount = 0;
+  let sentMessage = '';
+
+  const context = {
+    SHARE_CONTEXT: {
+      currentBotToken: 'fake_token',
+      chatHistoryKey: 'history:12345',
+      chatType: 'private',
+      speakerId: 12345
+    },
+    CURRENT_CHAT_CONTEXT: {
+      chat_id: 12345,
+      api_base: 'https://api.openai.com/v1',
+      model: 'test-model'
+    },
+    USER_CONFIG: {
+      SYSTEM_INIT_MESSAGE: 'You are an intelligent agent',
+      AI_PROVIDER: 'openai',
+      OPENAI_API_KEY: ['test-key'],
+      ENABLE_COMMAND_DISCOVERY: true,
+      MAX_REACT_ROUNDS: 10,
+      DEFAULT_LLM_PROFILE: 'test-profile',
+      LLM_PROFILES: {
+        'test-profile': {
+          provider: 'openai',
+          model: 'test-model',
+          apiBase: 'https://api.openai.com/v1',
+          apiKey: 'test-key'
+        }
+      }
+    },
+    env: {}
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts?.body || '{}');
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 12345 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    // 2MD web search endpoint
+    if (typeof url === 'string' && url.includes('2md.aiurl.tw')) {
+      return new Response(JSON.stringify({
+        code: 200,
+        text: 'SpaceX 正在籌劃星艦發射任務，估值已達 2000 億美元。'
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    // Stock quote endpoint
+    if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
+      return new Response(JSON.stringify({
+        chart: {
+          result: [{
+            meta: {
+              symbol: 'TSLA',
+              regularMarketPrice: 220.0,
+              previousClose: 215.0,
+              regularMarketDayHigh: 225.0,
+              regularMarketDayLow: 214.0,
+              regularMarketVolume: 45000000,
+              currency: 'USD'
+            },
+            indicators: {
+              quote: [{
+                close: [220.0],
+                high: [225.0],
+                low: [214.0],
+                open: [216.0],
+                volume: [45000000]
+              }]
+            }
+          }]
+        }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (typeof url === 'string' && url.includes('chat/completions')) {
+      llmCallCount++;
+      const reqBody = JSON.parse(opts.body);
+      if (llmCallCount === 1) {
+        // Round 1: Call /web tool
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '[CALL:/web SpaceX 最新動態]'
+            }
+          }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      } else if (llmCallCount === 2) {
+        // Round 2: LLM receives Round 1 output and decides to check TSLA stock
+        const systemMsg = reqBody.messages.find(m => m.role === 'system' && m.content.includes('工具執行結果 (第 1 輪)'));
+        assert.ok(systemMsg);
+        assert.match(systemMsg.content, /SpaceX 正在籌劃星艦發射任務/);
+
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '已查詢到 SpaceX 最新消息，接下來查詢關聯企業特斯拉股價：\n[CALL:/stock TSLA]'
+            }
+          }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      } else {
+        // Round 3: LLM receives Round 2 output and generates final response
+        const systemMsg2 = reqBody.messages.find(m => m.role === 'system' && m.content.includes('工具執行結果 (第 2 輪)'));
+        assert.ok(systemMsg2);
+        assert.match(systemMsg2.content, /TSLA/);
+
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '【綜合彙整】\n1. SpaceX 最新星艦發射進度順利，目前估值約 2000 億美元。\n2. 特斯拉 (TSLA) 最新股價為 220.00 美元。'
+            }
+          }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await chatWithLLM({ message: '請幫我查 SpaceX 最新消息並看一下特斯拉股價' }, context);
+    assert.equal(llmCallCount, 3);
+    assert.match(sentMessage, /SpaceX 最新星艦發射進度順利/);
+    assert.match(sentMessage, /特斯拉 \(TSLA\) 最新股價為 220\.00 美元/);
+    assert.doesNotMatch(sentMessage, /\[CALL:/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+

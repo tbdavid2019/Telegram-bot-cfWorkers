@@ -103,6 +103,10 @@ ENABLE_LONG_TERM_MEMORY = "false"
 MEMORY_STORAGE_MODE = "kv"
 MEMORY_AUTO_SAVE = "true"
 
+# 功能開關與自主 ReAct 工具循環設定
+ENABLE_COMMAND_DISCOVERY = "true"
+MAX_REACT_ROUNDS = "10"
+
 # LLM Profiles - 使用 apiKeyEnv 參照環境變數
 LLM_PROFILES = '''
 {

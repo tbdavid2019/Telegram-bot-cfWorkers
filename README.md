@@ -420,18 +420,26 @@ TTS_MODEL = "canopylabs/orpheus-v1-english"  # 實測可講中文!
 
 ### 啟用方式
 
-在 `wrangler.toml` 中設定：
+在 `wrangler.toml` 或 `/setenv` 中設定：
 
 ```toml
 [env.your_env.vars]
 ENABLE_COMMAND_DISCOVERY = "true"
+MAX_REACT_ROUNDS = 10  # 支援最高 10 輪自主工具調用迴圈 (ReAct Loop)
 ```
+
+### 多輪自主工具調用循環 (Multi-turn ReAct Loop)
+
+- **自動意圖識別**：LLM 根據用戶問題自動決定是否調用即時工具（`/web`, `/read`, `/stock`, `/fund`, `/wt`, `/tarot`, `/bazi`, `/wiki` 等）。
+- **多輪鏈式推理 (最高 10 輪)**：系統在背景攔截 `[CALL:...]` 工具標記，即時獲取真實客觀資料並反饋給 LLM，LLM 可在下一輪接續調用其他工具直至獲得所有資訊。
+- **防死循環熔斷**：同一工具重複呼叫自動阻斷，達輪數上限時自動優雅總結。
+- **Wiki 長文無感發布**：整理深度文檔或報導時自動調用 `/wiki` 上傳 David888 Wiki，並在 Telegram 回傳公開 Share URL 與閱讀連結。
 
 ### 技術架構
 
-- **指令發現** (`src/agent/command-discovery.js`) - 提取指令、檢查權限、生成系統提示詞
-- **指令調用** (`src/agent/command-invoker.js`) - 解析 LLM 回應、生成按鈕、處理點擊
-- **LLM 整合** (`src/agent/llm.js`) - 動態生成提示詞、添加按鈕到回應
+- **指令發現與提示詞** (`src/agent/command-discovery.js`) - 動態提取可用指令、注入 ReAct 自主聯網鐵律
+- **指令調用與標記解析** (`src/agent/command-invoker.js`) - 解析 `[CALL:...]` 巢狀結構與 JSON 參數
+- **ReAct 執行引擎** (`src/agent/llm.js`) - 多輪工具調用迴圈、狀態機管理與結果反饋
 
 ---
 
@@ -500,6 +508,7 @@ ENABLE_COMMAND_DISCOVERY = "true"
 | | `MEMORY_AUTO_SAVE` | 自動保存記憶 (true/false) |
 | **其他** | `LANGUAGE` | 語言設定 (zh-TW) |
 | | `ENABLE_COMMAND_DISCOVERY` | 啟用 LLM 指令發現 (true/false) |
+| | `MAX_REACT_ROUNDS` | 多輪自主工具調用 (ReAct Loop) 最大輪數（預設 10） |
 | | `ENABLE_LOCATION_SERVICE` | 啟用位置服務 (true/false) |
 | | `I_AM_A_GENEROUS_PERSON` | 略過白名單 |
 | | `CHAT_COMPLETE_API_TIMEOUT` | API 超時秒數 |
