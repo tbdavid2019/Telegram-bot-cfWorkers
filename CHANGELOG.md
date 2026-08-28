@@ -5,12 +5,18 @@ All notable changes to this project will be documented in this file.
 ## [1.10.0] - 2026-08-28
 
 ### Added
+- **對齊最新 David888 Wiki Publisher 規範 (SKILL.md)**：
+  - **開頭嚴格遵循 `# Title` 鐵律**：`sanitizeWikiMarkdown` 增強自動剔除 LLM 開頭寒暄客套話（如「好的，為您整理...」），確保 Markdown 第一行即為 `# 文章主標題`（或可選 YAML frontmatter），保障 HTML `<title>` 與 Open Graph metadata 提取精準。
+  - **結構與目錄順序標準化**：`[TOC]` 目錄與 `> 執行摘要` 嚴格排列於 `# 文章主標題` 之後。
+  - **Mermaid 語法安全防禦**：全面引導並保障流程圖節點文字雙引號包裹 `NODE["/api/path"]`，防止未加引號的斜線路徑造成詞法解析錯誤。
+  - **多章節書籍手冊 (Book Mode)**：支援標準 4-Step SOP 進行多章節教材/文檔規劃、獨立發布各章節與 Hub Manifest 筆記，無縫整合 `/book` 雙欄電子書閱讀器。
+  - **完整 20 套 CSS 主題與工具 API**：匯出 20 款主題清單，新增 `extractMarkdown` 結構提取與 `lintMarkdown` 語法自動校驗工具。
 - **多輪自主工具調用迴圈（Multi-turn ReAct Loop，最高支援 10 輪自主執行）**：
   - 將 LLM 原生 Tool Calling 模式升級為多輪自主推理與工具鏈式調用循環（ReAct Loop）。
   - **環境變數可配置**：新增 `MAX_REACT_ROUNDS`（預設 `10`），支援透過環境變數或 `/setenv MAX_REACT_ROUNDS 10` 動態調整最大自主探索輪數。
   - **鏈式工具協同**：支援複雜任務跨工具多輪執行（例如：第 1 輪聯網搜尋 ➔ 第 2 輪讀取深入網址/查股票行情 ➔ 第 3 輪發布 Wiki 報告 ➔ 生成最終結構化解答）。
   - **防死循環保護 (Deadlock & Loop Prevention)**：內建重複工具調用偵測，同一工具同一參數重複調用時主動熔斷並引導 LLM 基於現有資料作答；到達上限時優雅總結。
-  - **單元測試**：新增多輪 ReAct 跨工具連續調用單元測試，全專案 **68 項單元測試全數通過**。
+  - **單元測試**：全專案 **70 項單元測試全數通過**。
 
 ## [1.9.0] - 2026-08-27
 

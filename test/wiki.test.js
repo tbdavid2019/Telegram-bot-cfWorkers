@@ -303,6 +303,64 @@ test('sanitizeWikiMarkdown ensures # Title precedes [TOC] automatically', async 
   const case3 = `# 正確標題\n\n[TOC]\n\n## 內容`;
   const res3 = sanitizeWikiMarkdown(case3);
   assert.equal(res3, `# 正確標題\n\n[TOC]\n\n## 內容`);
+
+  // Case 4: Conversational preamble before # Title -> automatically stripped
+  const case4 = `好的，這是我為您撰寫的分析報告：\n\n# 全球 AI 趨勢分析報告\n\n> 執行摘要：評估 2026 年最新進展。\n\n[TOC]\n\n## 1. 前言\n內文...`;
+  const res4 = sanitizeWikiMarkdown(case4);
+  assert.ok(res4.startsWith('# 全球 AI 趨勢分析報告\n\n> 執行摘要：評估 2026 年最新進展。\n\n[TOC]'));
+  assert.ok(!res4.includes('好的，這是我為您撰寫的分析報告'));
+
+  // Case 5: Frontmatter preserved
+  const case5 = `---\ntransition: slide\ntheme: claude-canvas\n---\n\n# 簡報標題\n\n--- Slide 1`;
+  const res5 = sanitizeWikiMarkdown(case5);
+  assert.ok(res5.startsWith('---\ntransition: slide\ntheme: claude-canvas\n---\n\n# 簡報標題'));
+});
+
+test('WIKI_AVAILABLE_THEMES contains all 20 themes from SKILL.md', async () => {
+  const { WIKI_AVAILABLE_THEMES } = await import('../src/features/wiki.js');
+  assert.equal(WIKI_AVAILABLE_THEMES.length, 20);
+  assert.ok(WIKI_AVAILABLE_THEMES.includes('claude-canvas'));
+  assert.ok(WIKI_AVAILABLE_THEMES.includes('retro'));
+  assert.ok(WIKI_AVAILABLE_THEMES.includes('neo-brutalism'));
+  assert.ok(WIKI_AVAILABLE_THEMES.includes('x-ai'));
+});
+
+test('extractMarkdown and lintMarkdown call API endpoints correctly', async () => {
+  const { extractMarkdown, lintMarkdown } = await import('../src/features/wiki.js');
+  const originalFetch = globalThis.fetch;
+
+  let extractCalled = false;
+  let lintCalled = false;
+
+  globalThis.fetch = async (url, options) => {
+    if (url.includes('/api/markdown/extract')) {
+      extractCalled = true;
+      return new Response(JSON.stringify({
+        err: 0,
+        data: { title: 'Test Title', stats: { words: 100 } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.includes('/api/markdown/lint')) {
+      lintCalled = true;
+      return new Response(JSON.stringify({
+        err: 0,
+        data: { valid: true, issues: [], fixedMarkdown: '# Fixed' }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return originalFetch(url, options);
+  };
+
+  try {
+    const ext = await extractMarkdown('# Test Title\nParagraph');
+    assert.equal(extractCalled, true);
+    assert.equal(ext.title, 'Test Title');
+
+    const lnt = await lintMarkdown('# Fixed');
+    assert.equal(lintCalled, true);
+    assert.equal(lnt.valid, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 

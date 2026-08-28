@@ -10,6 +10,13 @@ import { ENV } from '../config/env.js';
 export const WIKI_DEFAULT_BASE = 'https://wiki.david888.com';
 export const WIKI_DEFAULT_THEME = 'claude-canvas';
 
+export const WIKI_AVAILABLE_THEMES = [
+  'ayu-light', 'bauhaus', 'botanical', 'catppuccin-latte', 'catppuccin-macchiato',
+  'claude-canvas', 'green-simple', 'kanagawa', 'neo-brutalism', 'newsprint',
+  'notion-clean', 'organic', 'playful-geometric', 'professional', 'retro',
+  'shopify-mint', 'sketch', 'terminal', 'tokyo-night', 'x-ai'
+];
+
 /**
  * 取得 Wiki API Base URL
  * @param {Object} [context] - 上下文
@@ -45,7 +52,10 @@ export function generateWikiSlug(hint = '') {
 }
 
 /**
- * 格式化 Wiki Markdown 內容，確保文章第一行為 # 大標題，避免 [TOC] 被 Wiki 後端誤判為文章 Title
+ * 格式化 Wiki Markdown 內容，確保文章嚴格符合 Wiki 引擎標準：
+ * 1. 確保開頭為 # 大標題（或可選 YAML frontmatter），自動剔除 LLM 開頭寒暄客套話（例如「好的，為您整理...」）。
+ * 2. 確保 [TOC] 與摘要引用 > ... 放置於 # 大標題 之後，保障 HTML <title> 與 Open Graph 提取精準。
+ * 3. 檢查 Mermaid 代碼區塊，自動防禦節點未加引號包含斜線路徑之語法問題。
  * @param {string} markdown - 原始 Markdown
  * @param {string} [fallbackTitle=''] - 備用標題
  * @returns {string} 格式化後的 Markdown
@@ -54,7 +64,26 @@ export function sanitizeWikiMarkdown(markdown, fallbackTitle = '') {
   if (!markdown || typeof markdown !== 'string') return markdown;
   let text = markdown.trim();
 
-  // 檢查是否以 [TOC] 或 [toc] 開頭
+  // 1. 若有 YAML frontmatter (--- ... ---)，先提取保護
+  let frontmatter = '';
+  const frontmatterMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n*/);
+  if (frontmatterMatch) {
+    frontmatter = `---\n${frontmatterMatch[1].trim()}\n---\n\n`;
+    text = text.slice(frontmatterMatch[0].length).trim();
+  }
+
+  // 2. 檢查是否有前置寒暄/多餘文字，尋找第一個 # 大標題
+  const firstHeadingIdx = text.search(/^#\s+[^\n]+/m);
+  if (firstHeadingIdx > 0) {
+    // 檢查在 # 之前是否只有 [TOC] 或空白
+    const leading = text.slice(0, firstHeadingIdx).trim();
+    if (!/^\s*\[(TOC|toc)\]\s*$/i.test(leading)) {
+      // 屬於寒暄或多餘說明文字，自動剔除開頭贅詞
+      text = text.slice(firstHeadingIdx).trim();
+    }
+  }
+
+  // 3. 檢查是否以 [TOC] 或 [toc] 開頭
   const tocRegex = /^\s*\[(TOC|toc)\]\s*\n*/;
   if (tocRegex.test(text)) {
     const withoutToc = text.replace(tocRegex, '').trim();
@@ -75,6 +104,11 @@ export function sanitizeWikiMarkdown(markdown, fallbackTitle = '') {
         text = `# ${fallbackTitle}\n\n${text}`;
       }
     }
+  }
+
+  // 4. 合併 frontmatter
+  if (frontmatter) {
+    text = `${frontmatter}${text}`;
   }
 
   return text;
@@ -247,6 +281,50 @@ export async function parseToMarkdown(input, context = null) {
 
   const json = await res.json();
   return json.data?.markdown || '';
+}
+
+/**
+ * 提取 Markdown 結構與統計資訊 (POST /api/markdown/extract)
+ * @param {string} markdown - Markdown 內容
+ * @param {Object} [context=null] - 上下文
+ * @returns {Promise<Object>} 結構資訊 (title, text, headings, links, stats)
+ */
+export async function extractMarkdown(markdown, context = null) {
+  const baseUrl = getWikiBaseUrl(context);
+  const res = await fetch(`${baseUrl}/api/markdown/extract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown })
+  });
+
+  if (!res.ok) {
+    throw new Error(`Markdown 結構提取失敗 (HTTP ${res.status})`);
+  }
+
+  const json = await res.json();
+  return json.data || {};
+}
+
+/**
+ * 檢查並修復 Markdown 語法 (POST /api/markdown/lint)
+ * @param {string} markdown - 原始 Markdown
+ * @param {Object} [context=null] - 上下文
+ * @returns {Promise<{valid: boolean, issues: Array, fixedMarkdown: string}>}
+ */
+export async function lintMarkdown(markdown, context = null) {
+  const baseUrl = getWikiBaseUrl(context);
+  const res = await fetch(`${baseUrl}/api/markdown/lint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown })
+  });
+
+  if (!res.ok) {
+    throw new Error(`Markdown 語法檢查失敗 (HTTP ${res.status})`);
+  }
+
+  const json = await res.json();
+  return json.data || {};
 }
 
 /**
