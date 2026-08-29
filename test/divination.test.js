@@ -201,6 +201,42 @@ test('commandBazi correctly parses date, time, sex, and formats response', async
   }
 });
 
+test('commandBazi parses a standalone Chinese shichen without inventing a clock time', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      sentMessage = JSON.parse(opts.body).text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/bazi2-question')) {
+      const reqBody = JSON.parse(opts.body);
+      assert.equal(reqBody.shichen, '申');
+      assert.equal(reqBody.time, undefined);
+      assert.equal(reqBody.allowUnknownHour, undefined);
+      return new Response(JSON.stringify({
+        success: true,
+        question: reqBody.question,
+        answer: '申時排盤完成。',
+        chart: { fourPillars: [] }
+      }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+
+  try {
+    await commandBazi({}, '/bazi', '1995-08-18 申時 女 今年工作運勢', context);
+    assert.match(sentMessage, /1995-08-18 申時（女命/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 // ===== 風水報告測試 =====
 test('commandFengshui correctly parses facing and formats response', async () => {
   let sentMessage = '';
@@ -303,7 +339,7 @@ test('commandYinyuan supports fortune mode, zodiac mode, and peach-blossom mode'
 
     // 2. Zodiac mode
     await commandYinyuan({}, '/yinyuan', '1995 1997 我們合不合適？', context);
-    assert.match(sentMessage, /生肖合婚：1995年\(豬\) ＆ 1997年\(牛\)/);
+    assert.match(sentMessage, /生肖(?:配對|合婚)：1995年\(豬\) ＆ 1997年\(牛\)/);
     assert.match(sentMessage, /契合分析：六合契合良好（評分：88分）/);
     assert.match(sentMessage, /這是合婚解讀內容/);
   } finally {
@@ -357,7 +393,7 @@ test('commandQimen automatically detects purpose and formats response correctly'
   }
 });
 
-test('commandMeiHua supports numbers method and text method', async () => {
+test('commandMeiHua supports number method (2 and 3 numbers) and text method', async () => {
   const { commandMeiHua } = await import('../src/features/divination.js');
   let sentMessage = '';
   const context = {
@@ -374,19 +410,34 @@ test('commandMeiHua supports numbers method and text method', async () => {
     }
     if (typeof url === 'string' && url.includes('api/meihua-question')) {
       const reqBody = JSON.parse(opts.body);
-      if (reqBody.method === 'numbers') {
-        assert.equal(reqBody.num1, 12);
-        assert.equal(reqBody.num2, 34);
-        assert.equal(reqBody.num3, 56);
-        return new Response(JSON.stringify({
-          success: true,
-          question: reqBody.question,
-          answer: '數字起卦得天火同人，志同道合。',
-          result: {
-            bengua: { name: '天火同人' },
-            biangua: { name: '乾為天' }
-          }
-        }), { status: 200 });
+      if (reqBody.method === 'number') {
+        if (reqBody.num3 !== undefined) {
+          assert.equal(reqBody.num1, 12);
+          assert.equal(reqBody.num2, 34);
+          assert.equal(reqBody.num3, 56);
+          return new Response(JSON.stringify({
+            success: true,
+            question: reqBody.question,
+            answer: '數字起卦得天火同人，志同道合。',
+            result: {
+              bengua: { name: '天火同人' },
+              biangua: { name: '乾為天' }
+            }
+          }), { status: 200 });
+        } else {
+          assert.equal(reqBody.num1, 12);
+          assert.equal(reqBody.num2, 34);
+          assert.equal(reqBody.num3, undefined);
+          return new Response(JSON.stringify({
+            success: true,
+            question: reqBody.question,
+            answer: '二數起卦得雷澤歸妹。',
+            result: {
+              bengua: { name: '雷澤歸妹' },
+              biangua: { name: '火澤睽' }
+            }
+          }), { status: 200 });
+        }
       } else if (reqBody.method === 'text') {
         assert.equal(reqBody.text, '平安');
         return new Response(JSON.stringify({
@@ -404,13 +455,19 @@ test('commandMeiHua supports numbers method and text method', async () => {
   };
 
   try {
-    // 1. Numbers method
+    // 1. Three Numbers method
     await commandMeiHua({}, '/mei', '12 34 56 是否適合換工作？', context);
     assert.match(sentMessage, /【🌸 梅花易數】/);
     assert.match(sentMessage, /本卦【天火同人】/);
     assert.match(sentMessage, /數字 \(12, 34, 56\)/);
 
-    // 2. Text method
+    // 2. Two Numbers method
+    await commandMeiHua({}, '/mei', '12 34 這次面試能否通過？', context);
+    assert.match(sentMessage, /【🌸 梅花易數】/);
+    assert.match(sentMessage, /本卦【雷澤歸妹】/);
+    assert.match(sentMessage, /數字 \(12, 34\)/);
+
+    // 3. Text method
     await commandMeiHua({}, '/mei', '字:平安 是否能順利過關？', context);
     assert.match(sentMessage, /本卦【地天泰】/);
     assert.match(sentMessage, /漢字 \(平安\)/);
@@ -436,25 +493,25 @@ test('commandFengshui supports shaqi mode and zeri mode', async () => {
     if (typeof url === 'string' && url.includes('api/fengshui-question')) {
       const reqBody = JSON.parse(opts.body);
       if (reqBody.mode === 'shaqi') {
-        assert.equal(reqBody.shaType, 'chuangtang');
+        assert.equal(reqBody.shaType, '穿堂煞');
         return new Response(JSON.stringify({
           success: true,
           question: reqBody.question,
           answer: '穿堂煞建議在玄關設置屏風或置放闊葉盆栽阻隔氣流直衝。',
           report: {
             mode: 'shaqi',
-            shaType: 'chuangtang'
+            shaType: '穿堂煞'
           }
         }), { status: 200 });
       } else if (reqBody.mode === 'zeri') {
-        assert.equal(reqBody.matter, 'movein');
+        assert.equal(reqBody.matter, '入宅/喬遷');
         return new Response(JSON.stringify({
           success: true,
           question: reqBody.question,
           answer: '2026年10月入宅吉日：10月8日辰時、10月18日巳時。',
           report: {
             mode: 'zeri',
-            matter: 'movein'
+            matter: '入宅/喬遷'
           }
         }), { status: 200 });
       }
@@ -465,12 +522,12 @@ test('commandFengshui supports shaqi mode and zeri mode', async () => {
   try {
     // 1. Shaqi mode
     await commandFengshui({}, '/fengshui', '客廳大門正對陽台穿堂煞如何化解？', context);
-    assert.match(sentMessage, /模式：形煞診斷與化解 \(chuangtang\)/);
+    assert.match(sentMessage, /模式：形煞診斷與化解 \(穿堂煞\)/);
     assert.match(sentMessage, /設置屏風/);
 
     // 2. Zeri mode
     await commandFengshui({}, '/fengshui', '2026年10月 入宅搬家吉日良辰', context);
-    assert.match(sentMessage, /模式：協紀辨方擇日 \(movein\)/);
+    assert.match(sentMessage, /模式：協紀辨方擇日 \(入宅\/喬遷\)/);
     assert.match(sentMessage, /10月8日辰時/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -592,14 +649,14 @@ test('commandBazi supports formerName, place, and name parameters', async () => 
 
   try {
     await commandBazi({}, '/bazi', '1988-11-20 男 農曆 姓名:張三 曾用名:張偉 出生地:台北 創業評估', context);
-    assert.match(sentMessage, /命主：張三 1988-11-20 12:00（男命・農曆）/);
+    assert.match(sentMessage, /命主：張三 1988-11-20 時辰不詳（男命・農曆）/);
     assert.match(sentMessage, /命主張三，八字身旺/);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('commandYinyuan supports red-thread mode with preferences and seekingSex', async () => {
+test('commandYinyuan supports red-thread mode with birthDate, preferences and seekingSex', async () => {
   let sentMessage = '';
   const context = {
     SHARE_CONTEXT: { currentBotToken: 'fake_token' },
@@ -616,6 +673,7 @@ test('commandYinyuan supports red-thread mode with preferences and seekingSex', 
     if (typeof url === 'string' && url.includes('api/yinyuan-question')) {
       const reqBody = JSON.parse(opts.body);
       assert.equal(reqBody.mode, 'red-thread');
+      assert.equal(reqBody.birthDate, '1995-08-18');
       assert.equal(reqBody.seekingSex, '女');
       assert.match(reqBody.preference, /孝順溫柔/);
       return new Response(JSON.stringify({
@@ -628,9 +686,70 @@ test('commandYinyuan supports red-thread mode with preferences and seekingSex', 
   };
 
   try {
-    await commandYinyuan({}, '/yinyuan', '紅線測算 找女生 喜歡孝順溫柔 正緣何時出現？', context);
+    await commandYinyuan({}, '/yinyuan', '紅線測算 1995-08-18 找女生 喜歡孝順溫柔 正緣何時出現？', context);
     assert.match(sentMessage, /【🏮 月老姻緣】/);
     assert.match(sentMessage, /紅線正緣畫像/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandYinyuan rejects red-thread mode when only a birth year is provided', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      sentMessage = JSON.parse(opts.body).text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    throw new Error(`red-thread API must not be called without a full date: ${url}`);
+  };
+
+  try {
+    await commandYinyuan({}, '/yinyuan', '紅線測算 1995 找女生', context);
+    assert.match(sentMessage, /缺少出生日期/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandYinyuan supports bazi-match mode with two birth dates', async () => {
+  let sentMessage = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api/yinyuan-question')) {
+      const reqBody = JSON.parse(opts.body);
+      assert.equal(reqBody.mode, 'bazi-match');
+      assert.equal(reqBody.firstDate, '1995-08-18');
+      assert.equal(reqBody.secondDate, '1998-03-25');
+      return new Response(JSON.stringify({
+        success: true,
+        question: reqBody.question,
+        answer: '八字合婚分析：日主天干相生，五行互補，契合度高。'
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandYinyuan({}, '/yinyuan', '八字合婚 男 1995-08-18 14:00 女 1998-03-25 09:30 我們合適嗎？', context);
+    assert.match(sentMessage, /【🏮 月老姻緣】/);
+    assert.match(sentMessage, /八字合婚分析/);
   } finally {
     globalThis.fetch = originalFetch;
   }

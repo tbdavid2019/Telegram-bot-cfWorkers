@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-08-29
+
+### Changed
+- **對齊 `qi.david888.com` 最新占卜 API 契約**：更新 `/qi`、`/mei`、`/tarot`、`/bazi`、`/fengshui` 與 `/yinyuan` 的參數與模式傳遞。
+- `/qi` 改用無 `Z` 的 UTC+8 民用時間格式；未指定時間時交由 API 使用目前時間。
+- `/mei` 改用 API 要求的 `number` 方法，支援二數、三數與漢字報字起卦。
+- `/tarot` 支援 decision 變體、UTC+8 時間能量因子與自訂 seed。
+- `/bazi` 支援未知時辰、十二時辰、農曆閏月、已故年份與出生地真太陽時參數；修正中文時辰辨識，避免送出多餘的 `12:00`。
+- `/fengshui` 使用 24 種形煞與擇日事項的中文 canonical enum。
+- `/yinyuan` 支援雙方出生日期的八字合婚，並要求紅線與紫微夫妻宮提供完整出生日期。
+- 更新 Telegram 指令說明與占卜回歸測試。
+
+### Fixed
+- 修正八字輸入單獨使用「申時」等中文時辰時無法正確傳遞 `shichen` 的問題。
+- 修正紅線模式只有出生年份時偽造生日的問題，改為回傳補充完整日期的引導。
+
+### Tests
+- 全專案 **73 項測試全數通過**，建置成功。
+
 ## [1.10.0] - 2026-08-28
 
 ### Added

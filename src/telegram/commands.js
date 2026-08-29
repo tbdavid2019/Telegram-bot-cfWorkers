@@ -186,7 +186,7 @@ export const commandHandlers = {
   "/mei": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandMeiHua,
-    description: "梅花易數占卜 - 使用: /mei [問題]"
+    description: "梅花易數占卜 - 使用: /mei [問題] 或 /mei [2~3個數字] [問題]"
   },
   "/tarot": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
@@ -196,17 +196,17 @@ export const commandHandlers = {
   "/bazi": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandBazi,
-    description: "生辰八字排盤 - 使用: /bazi [YYYY-MM-DD] [男/女] [問題]"
+    description: "生辰八字排盤 - 使用: /bazi [YYYY-MM-DD] [時間] [男/女] [問題]"
   },
   "/fengshui": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandFengshui,
-    description: "八宅風水與流年飛星 - 使用: /fengshui [座向] [問題]"
+    description: "八宅風水與形煞化解 - 使用: /fengshui [座向/形煞/擇日] [問題]"
   },
   "/yinyuan": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandYinyuan,
-    description: "月老姻緣與感情測算 - 使用: /yinyuan [問題] 或 /yinyuan [年份1] [年份2]"
+    description: "月老姻緣測算 - 使用: /yinyuan [問題/合婚/紅線/桃花]"
   },
   "/oracle": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
