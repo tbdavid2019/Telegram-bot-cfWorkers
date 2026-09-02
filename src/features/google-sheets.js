@@ -449,7 +449,7 @@ export async function readScheduleSheet(env) {
 async function updateSheet(env, range, values) {
     const token = await authenticateGoogleSheets(env);
     const sheetId = ENV.USER_CONFIG.FAMILY_SHEET_ID;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
 
     const response = await fetch(url, {
         method: 'PUT',
@@ -472,7 +472,7 @@ async function updateSheet(env, range, values) {
 async function appendSheet(env, range, values) {
     const token = await authenticateGoogleSheets(env);
     const sheetId = ENV.USER_CONFIG.FAMILY_SHEET_ID;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
 
     const response = await fetch(url, {
         method: 'POST',
@@ -498,12 +498,18 @@ async function findBudgetRow(env, targetMonth) {
     const rawData = await readSheet(env, '記帳!A:A');
     if (!rawData) return null;
 
+    const normalizedTarget = String(targetMonth).trim().replace(/[-\.]/g, '/');
     // A欄格式通常是 2025/11/01 或 2025/11
     // 我們做由新到舊的比對
     for (let i = 0; i < rawData.length; i++) {
         const cell = rawData[i][0];
-        if (cell && cell.includes(targetMonth)) {
-            return i + 1;
+        if (cell) {
+            const normalizedCell = String(cell).trim().replace(/[-\.]/g, '/');
+            if (normalizedCell === normalizedTarget || 
+                normalizedCell.startsWith(normalizedTarget + '/') || 
+                normalizedCell.startsWith(normalizedTarget + '-')) {
+                return i + 1;
+            }
         }
     }
     return null;

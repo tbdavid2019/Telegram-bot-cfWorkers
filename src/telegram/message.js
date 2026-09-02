@@ -40,6 +40,12 @@ export async function msgHandleCallbackQuery(message, context) {
 
   const callbackData = message.callback_query.data;
 
+  // 🆕 處理智慧續問系統的按鈕點擊（無狀態 Stateless，0 次 KV 消耗）
+  if (callbackData && callbackData.startsWith('ask:')) {
+    const { handleFollowUpCallback } = await import('../agent/command-invoker.js');
+    return await handleFollowUpCallback(message.callback_query, context);
+  }
+
   // 🆕 處理指令發現系統的按鈕點擊
   if (callbackData && callbackData.startsWith('cmd:')) {
     const { handleCommandCallback } = await import('../agent/command-invoker.js');
@@ -499,10 +505,10 @@ export async function handleMessage(token, body) {
     msgRecordStats,
     // 檢查環境是否準備好: DATABASE
     msgCheckEnvIsReady,
-    // 處理 Callback Query（Inline Keyboard 按鈕點擊）- 要在白名單檢查後
-    msgHandleCallbackQuery,
     // 過濾非白名單用戶, 提前過濾減少KV消耗
     msgFilterWhiteList,
+    // 處理 Callback Query（Inline Keyboard 按鈕點擊）- 在白名單檢查後
+    msgHandleCallbackQuery,
     // 過濾不支援的消息(拋出異常結束消息處理)
     msgFilterUnsupportedMessage,
     // 處理群消息，判斷是否需要響應此條消息

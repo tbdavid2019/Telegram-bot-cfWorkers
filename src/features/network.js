@@ -19,8 +19,10 @@ export async function commandIpLookup(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)('請提供IP地址。用法：/ip <IP地址>');
   }
 
-  const apiKey = '4a2ddcbdcb09b4';
-  const url = `https://ipinfo.io/${ipAddress}?token=${apiKey}`;
+  const apiKey = context?.USER_CONFIG?.IPINFO_API_KEY || context?.env?.IPINFO_API_KEY || '';
+  const url = apiKey 
+    ? `https://ipinfo.io/${encodeURIComponent(ipAddress)}?token=${encodeURIComponent(apiKey)}`
+    : `https://ipinfo.io/${encodeURIComponent(ipAddress)}/json`;
 
   try {
     const response = await fetch(url);
@@ -69,7 +71,7 @@ export async function commandDnsLookup(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)('請提供域名。用法：/dns <域名>');
   }
 
-  const url = `https://1.1.1.1/dns-query?name=${domainName}`;
+  const url = `https://1.1.1.1/dns-query?name=${encodeURIComponent(domainName)}`;
 
   try {
     const response = await fetch(url, {
@@ -120,8 +122,11 @@ export async function commandDnsLookup2(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)('請提供域名。用法：/dns2 <域名>');
   }
 
-  const apiKey = 'V_VX8n56j8XvMKGZJxXJU3tHZqjRl9QiPWUIvnPI';
-  const url = `https://api.netlify.com/api/v1/dns_zones?access_token=${apiKey}`;
+  const apiKey = context?.USER_CONFIG?.NETLIFY_API_KEY || context?.env?.NETLIFY_API_KEY || '';
+  if (!apiKey) {
+    return sendMessageToTelegramWithContext(context)('未配置 NETLIFY_API_KEY，請先在環境變數或設定中提供。');
+  }
+  const url = `https://api.netlify.com/api/v1/dns_zones?access_token=${encodeURIComponent(apiKey)}`;
 
   try {
     const response = await fetch(url, {
@@ -133,12 +138,12 @@ export async function commandDnsLookup2(message, command, subcommand, context) {
 
     const data = await response.json();
 
-    const zone = data.find(z => z.name === domainName);
+    const zone = Array.isArray(data) ? data.find(z => z.name === domainName) : null;
     if (!zone) {
       return sendMessageToTelegramWithContext(context)(`未找到域名 ${domainName} 的 DNS 記錄。`);
     }
 
-    const recordsUrl = `https://api.netlify.com/api/v1/dns_zones/${zone.id}/dns_records?access_token=${apiKey}`;
+    const recordsUrl = `https://api.netlify.com/api/v1/dns_zones/${encodeURIComponent(zone.id)}/dns_records?access_token=${encodeURIComponent(apiKey)}`;
     const recordsResponse = await fetch(recordsUrl);
     const records = await recordsResponse.json();
 

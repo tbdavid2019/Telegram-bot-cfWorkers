@@ -122,14 +122,26 @@ const transportHandler = new JsonRpcTransportHandler(botHandler);
  */
 export async function handleA2ARequest(request, env) {
   try {
+    const workerEnv = env || WORKER_ENV;
+    const a2aSecret = workerEnv?.A2A_SECRET || ENV.USER_CONFIG?.A2A_SECRET;
+
+    if (a2aSecret) {
+      const authHeader = request.headers.get('Authorization') || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
+      if (token !== a2aSecret) {
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32000, message: "Unauthorized: Invalid or missing A2A secret token" }
+        }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+
     const body = await request.json();
-    
-    // Auth Check (Basic Implementation)
-    // In production, you'd check a token in headers against ENV.A2A_SECRET
     
     const context = {
       user: { isAuthenticated: true, id: "a2a_peer" },
-      env: env || WORKER_ENV
+      env: workerEnv
     };
 
     const response = await transportHandler.handle(body, context);

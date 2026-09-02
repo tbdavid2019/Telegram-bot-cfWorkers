@@ -107,7 +107,7 @@ async function deleteCalendarEvent(env, eventId) {
     const token = await authenticateGoogleCalendar(env);
     const calendarId = ENV.USER_CONFIG.FAMILY_CALENDAR_ID;
 
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
 
     const response = await fetch(url, {
         method: 'DELETE',

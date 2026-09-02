@@ -40,3 +40,6 @@ keep_alive_bedrock.sh
 # Wrangler state
 .wrangler/
 **/.wrangler/
+
+# Sync conflicts
+*.sync-conflict-*

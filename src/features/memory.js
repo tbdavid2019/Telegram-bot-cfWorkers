@@ -129,7 +129,19 @@ export async function getGlobalMemory(env = null) {
   return content || DEFAULT_GLOBAL_MEMORY;
 }
 
+function sanitizeUserId(userId) {
+  if (userId === null || userId === undefined) {
+    throw new Error('userId is required');
+  }
+  const str = String(userId).trim();
+  if (!/^[a-zA-Z0-9_-]+$/.test(str) || str.includes('..')) {
+    throw new Error('Invalid userId format');
+  }
+  return str;
+}
+
 export async function getUserMemory(userId, env = null) {
+  const safeUserId = sanitizeUserId(userId);
   if (!ENV.USER_CONFIG.ENABLE_LONG_TERM_MEMORY) {
     return '';
   }
@@ -138,12 +150,12 @@ export async function getUserMemory(userId, env = null) {
   let content = null;
 
   if (mode === 'r2') {
-    content = await getFromR2(`memory/user_${userId}.md`, env);
+    content = await getFromR2(`memory/user_${safeUserId}.md`, env);
   } else {
-    content = await getFromKV(MEMORY_USER_PREFIX + userId);
+    content = await getFromKV(MEMORY_USER_PREFIX + safeUserId);
   }
 
-  return content || DEFAULT_USER_MEMORY_TEMPLATE(userId);
+  return content || DEFAULT_USER_MEMORY_TEMPLATE(safeUserId);
 }
 
 export async function saveGlobalMemory(content, env = null) {
@@ -161,6 +173,7 @@ export async function saveGlobalMemory(content, env = null) {
 }
 
 export async function saveUserMemory(userId, content, env = null) {
+  const safeUserId = sanitizeUserId(userId);
   if (!ENV.USER_CONFIG.ENABLE_LONG_TERM_MEMORY) {
     return false;
   }
@@ -168,13 +181,14 @@ export async function saveUserMemory(userId, content, env = null) {
   const mode = ENV.USER_CONFIG.MEMORY_STORAGE_MODE || 'kv';
 
   if (mode === 'r2') {
-    return await setToR2(`memory/user_${userId}.md`, content, env);
+    return await setToR2(`memory/user_${safeUserId}.md`, content, env);
   } else {
-    return await setToKV(MEMORY_USER_PREFIX + userId, content);
+    return await setToKV(MEMORY_USER_PREFIX + safeUserId, content);
   }
 }
 
 export async function clearUserMemory(userId, env = null) {
+  const safeUserId = sanitizeUserId(userId);
   if (!ENV.USER_CONFIG.ENABLE_LONG_TERM_MEMORY) {
     return false;
   }
@@ -182,9 +196,9 @@ export async function clearUserMemory(userId, env = null) {
   const mode = ENV.USER_CONFIG.MEMORY_STORAGE_MODE || 'kv';
 
   if (mode === 'r2') {
-    return await deleteFromR2(`memory/user_${userId}.md`, env);
+    return await deleteFromR2(`memory/user_${safeUserId}.md`, env);
   } else {
-    return await deleteFromKV(MEMORY_USER_PREFIX + userId);
+    return await deleteFromKV(MEMORY_USER_PREFIX + safeUserId);
   }
 }
 

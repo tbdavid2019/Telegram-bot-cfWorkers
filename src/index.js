@@ -4,7 +4,7 @@
  */
 
 // ===== 配置模組 =====
-import { ENV, initEnv, API_GUARD } from './config/env.js';
+import { ENV, initEnv, API_GUARD, WORKER_ENV } from './config/env.js';
 
 // ===== Telegram 模組 =====
 import {
@@ -247,6 +247,15 @@ async function defaultIndexAction() {
  * 綁定 Webhook - 自動為所有 Bot 設定 Webhook 和指令
  */
 async function bindWebHookAction(request) {
+  const initSecret = WORKER_ENV?.INIT_SECRET || ENV.INIT_SECRET || ENV.USER_CONFIG?.INIT_SECRET;
+  if (initSecret) {
+    const urlObj = new URL(request.url);
+    const authKey = request.headers.get('X-Init-Secret') || urlObj.searchParams.get('secret');
+    if (authKey !== initSecret) {
+      return new Response('Unauthorized: Invalid or missing initialization secret', { status: 401 });
+    }
+  }
+
   const form = await request.formData().catch(() => null);
   if (form?.get('confirm') !== 'update') {
     return new Response('Confirmation required', { status: 400 });
@@ -267,11 +276,11 @@ async function bindWebHookAction(request) {
 
   const HTML = renderHTML(`
     <h1>Telegram-Bot-Workers</h1>
-    <h2>${domain}</h2>
+    <h2>${escapeHTML(domain)}</h2>
     ${ENV.TELEGRAM_AVAILABLE_TOKENS.length === 0 ? buildKeyNotFoundHTML("TELEGRAM_AVAILABLE_TOKENS") : ""}
     ${Object.keys(result).map((id) => `
         <br/>
-        <h4>Bot ID: ${id}</h4>
+        <h4>Bot ID: ${escapeHTML(id)}</h4>
         <p style="color: ${result[id].webhook?.ok ? "green" : "red"}">Webhook: ${escapeHTML(JSON.stringify(result[id].webhook))}</p>
         <p style="color: ${result[id].command?.ok ? "green" : "red"}">Command: ${escapeHTML(JSON.stringify(result[id].command))}</p>
         `).join("")}
@@ -311,13 +320,13 @@ async function loadBotInfo() {
     <h1>Telegram-Bot-Workers</h1>
     <br/>
     <h4>Environment About Bot</h4>
-    <p><strong>GROUP_CHAT_BOT_ENABLE:</strong> ${ENV.GROUP_CHAT_BOT_ENABLE}</p>
-    <p><strong>GROUP_CHAT_BOT_SHARE_MODE:</strong> ${ENV.GROUP_CHAT_BOT_SHARE_MODE}</p>
-    <p><strong>TELEGRAM_BOT_NAME:</strong> ${ENV.TELEGRAM_BOT_NAME.join(",")}</p>
+    <p><strong>GROUP_CHAT_BOT_ENABLE:</strong> ${escapeHTML(ENV.GROUP_CHAT_BOT_ENABLE)}</p>
+    <p><strong>GROUP_CHAT_BOT_SHARE_MODE:</strong> ${escapeHTML(ENV.GROUP_CHAT_BOT_SHARE_MODE)}</p>
+    <p><strong>TELEGRAM_BOT_NAME:</strong> ${escapeHTML(ENV.TELEGRAM_BOT_NAME.join(","))}</p>
     ${Object.keys(result).map((id) => `
         <br/>
-        <h4>Bot ID: ${id}</h4>
-        <p style="color: ${result[id].ok ? "green" : "red"}">${JSON.stringify(result[id])}</p>
+        <h4>Bot ID: ${escapeHTML(id)}</h4>
+        <p style="color: ${result[id].ok ? "green" : "red"}">${escapeHTML(JSON.stringify(result[id]))}</p>
         `).join("")}
     ${footer}
   `);

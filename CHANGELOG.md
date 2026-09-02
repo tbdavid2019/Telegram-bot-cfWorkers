@@ -2,8 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-29
+## [1.11.0] - 2026-09-02
 
+### Added
+- **全面安全性強化與漏洞修復 (Security Hardening & Audit Fixes)**：
+  - **A2A 端點認證防護**：`/a2a` 端點實作 `A2A_SECRET` Bearer Token 驗證，阻斷未授權調用與 LLM 額度消耗。
+  - **中介層執行順序修正**：調整 `msgFilterWhiteList` 於 `msgHandleCallbackQuery` 之前執行，徹底杜絕非白名單用戶透過按鈕回調繞過白名單。
+  - **敏感金鑰防外洩強化**：擴展 `LOCK_USER_CONFIG_KEYS` 涵蓋所有第三方服務 base URL 與金鑰欄位，全面防止 `/setenv` SSRF 與金鑰導出。
+  - **清除硬編碼金鑰**：從 `network.js` 移除 Netlify 與 IPInfo 敏感 Token，改為動態讀取環境設定。
+  - **Telegram 訊息與 Web 介面防注入**：全面引入 `escapeHTML` 轉義 `/getid`、`/getgroupid`、`/system` 與 `/telegram/:token/bot` 中的使用者名稱與狀態資訊。
+  - **長期記憶路徑安全驗證**：新增 `sanitizeUserId` 阻斷 `userId` 路徑穿越漏洞。
+  - **Google 整合權限與編碼保護**：新增 `needAuth` 權限管制並對 API 請求參數進行 `encodeURIComponent` 編碼。
+- **AI 即時智慧續問按鈕 (Stateless AI Follow-up Suggestions)**：
+  - **自動生成專屬深入續問**：在 LLM 回答各類主題完畢後，即時根據上下文自動生成 2~4 個具延伸性的一鍵追問按鈕。
+  - **突破 Telegram 64-Byte Callback 限制（Stateless 零 KV 架構）**：採用 Telegram 原生 Payload 路由技術，0 次 KV 寫入，完全不消耗 Cloudflare KV 免費額度。
+- **單元測試**：新增 `test/security-fixes.test.js` 與 `test/followup-suggestions.test.js`，全專案 **83 項測試全數通過**。
+
+## [1.10.1] - 2026-08-29
 ### Changed
 - **對齊 `qi.david888.com` 最新占卜 API 契約**：更新 `/qi`、`/mei`、`/tarot`、`/bazi`、`/fengshui` 與 `/yinyuan` 的參數與模式傳遞。
 - `/qi` 改用無 `Z` 的 UTC+8 民用時間格式；未指定時間時交由 API 使用目前時間。

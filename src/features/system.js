@@ -4,6 +4,8 @@ import { loadChatLLM, loadImageGen, getActiveLLMProfile, getCurrentProfileName }
 import { loadHistory } from '../agent/llm.js';
 import { chatWithLLM } from '../agent/llm.js';
 import { getStats } from '../utils/stats.js';
+import { escapeHTML } from '../utils/utils.js';
+import { trimUserConfig } from '../telegram/context.js';
 
 // 從環境變數和配置引入
 import { ENV, DATABASE, CONST, CUSTOM_COMMAND, CUSTOM_COMMAND_DESCRIPTION } from '../config/env.js';
@@ -16,19 +18,6 @@ async function getCommandHandlers() {
     commandHandlers = module.commandHandlers;
   }
   return commandHandlers;
-}
-
-/**
- * 修剪使用者配置（移除空值）
- */
-function trimUserConfig(userConfig) {
-  const config = { ...userConfig };
-  for (const key in config) {
-    if (config[key] === null || config[key] === undefined || config[key] === "") {
-      delete config[key];
-    }
-  }
-  return config;
 }
 
 /**
@@ -344,25 +333,33 @@ export async function commandSystem(message, command, subcommand, context) {
   if (ENV.DEV_MODE) {
     const shareCtx = { ...context.SHARE_CONTEXT };
     shareCtx.currentBotToken = "******";
-    context.USER_CONFIG.OPENAI_API_KEY = ["******"];
-    context.USER_CONFIG.AZURE_API_KEY = "******";
-    context.USER_CONFIG.AZURE_COMPLETIONS_API = "******";
-    context.USER_CONFIG.AZURE_DALLE_API = "******";
-    context.USER_CONFIG.CLOUDFLARE_ACCOUNT_ID = "******";
-    context.USER_CONFIG.CLOUDFLARE_TOKEN = "******";
-    context.USER_CONFIG.GOOGLE_API_KEY = "******";
+    
+    // 複製並全面遮蔽敏感金鑰
+    const maskedUserConfig = { ...context.USER_CONFIG };
+    const sensitiveKeys = [
+      'OPENAI_API_KEY', 'OPENAI_API_KEY2', 'AZURE_API_KEY', 'AZURE_COMPLETIONS_API', 'AZURE_DALLE_API',
+      'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_TOKEN', 'GOOGLE_API_KEY', 'OPENROUTER_API_KEY',
+      'XIAOMI_API_KEY', 'BEDROCK_API_KEY', 'GROQ_API_KEY', 'ASR_API_KEY', 'TTS_API_KEY',
+      'OPENAI_IMAGE_API_KEY', 'GEMINI_IMAGE_API_KEY', 'BOX_API_TOKEN', 'WIKI_API_PASSWORD',
+      'GOOGLE_MAPS_API_KEY', 'GOOGLE_SHEETS_SERVICE_ACCOUNT', 'A2A_SECRET', 'INIT_SECRET'
+    ];
+    for (const key of sensitiveKeys) {
+      if (maskedUserConfig[key]) {
+        maskedUserConfig[key] = "******";
+      }
+    }
     // 隱藏 LLM_PROFILES 中的 API Keys
-    if (context.USER_CONFIG.LLM_PROFILES) {
+    if (maskedUserConfig.LLM_PROFILES) {
       const maskedProfiles = {};
-      for (const [name, profile] of Object.entries(context.USER_CONFIG.LLM_PROFILES)) {
+      for (const [name, profile] of Object.entries(maskedUserConfig.LLM_PROFILES)) {
         maskedProfiles[name] = { ...profile, apiKey: "******" };
       }
-      context.USER_CONFIG.LLM_PROFILES = maskedProfiles;
+      maskedUserConfig.LLM_PROFILES = maskedProfiles;
     }
-    const config = trimUserConfig(context.USER_CONFIG);
-    msg += `\n<b>USER_CONFIG:</b>\n<pre>${JSON.stringify(config, null, 2)}</pre>\n`;
-    msg += `<b>CHAT_CONTEXT:</b>\n<pre>${JSON.stringify(context.CURRENT_CHAT_CONTEXT, null, 2)}</pre>\n`;
-    msg += `<b>SHARE_CONTEXT:</b>\n<pre>${JSON.stringify(shareCtx, null, 2)}</pre>\n`;
+    const config = trimUserConfig(maskedUserConfig);
+    msg += `\n<b>USER_CONFIG:</b>\n<pre>${escapeHTML(JSON.stringify(config, null, 2))}</pre>\n`;
+    msg += `<b>CHAT_CONTEXT:</b>\n<pre>${escapeHTML(JSON.stringify(context.CURRENT_CHAT_CONTEXT, null, 2))}</pre>\n`;
+    msg += `<b>SHARE_CONTEXT:</b>\n<pre>${escapeHTML(JSON.stringify(shareCtx, null, 2))}</pre>\n`;
   }
 
   context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
@@ -407,8 +404,9 @@ export async function commandRegenerate(message, command, subcommand, context) {
  */
 export async function commandGetID(message, command, subcommand, context) {
   const userId = message.from.id;
-  const username = message.from.first_name + (message.from.last_name ? ` ${message.from.last_name}` : '');
-  let msg = `👤 <b>${username}</b>\n`;
+  const username = [message?.from?.first_name, message?.from?.last_name].filter(Boolean).join(' ');
+  const safeName = escapeHTML(username);
+  let msg = `👤 <b>${safeName}</b>\n`;
   msg += `/getid\n`;
   msg += `Your own ID is: <code>${userId}</code>`;
   context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
@@ -420,10 +418,11 @@ export async function commandGetID(message, command, subcommand, context) {
  */
 export async function commandGetGroupID(message, command, subcommand, context) {
   const chatType = message.chat.type;
+  const username = [message?.from?.first_name, message?.from?.last_name].filter(Boolean).join(' ');
+  const safeName = escapeHTML(username);
   if (chatType === 'private') {
     // 私聊時顯示說明
-    const username = message.from.first_name + (message.from.last_name ? ` ${message.from.last_name}` : '');
-    let msg = `👤 <b>${username}</b>\n`;
+    let msg = `👤 <b>${safeName}</b>\n`;
     msg += `/getgroupid\n`;
     msg += `In order to get the ID of a group or channel, you need to do one of the following:\n`;
     msg += `• Add me to a group or channel you want to get the ID of, and send /getgroupid in the group\n`;
@@ -432,12 +431,12 @@ export async function commandGetGroupID(message, command, subcommand, context) {
     return sendMessageToTelegramWithContext(context)(msg);
   } else {
     // 群組中顯示 ID
-    const username = message.from.first_name + (message.from.last_name ? ` ${message.from.last_name}` : '');
     const chatId = message.chat.id;
-    const chatTitle = message.chat.title;
-    let msg = `👥 <b>${username}</b>\n`;
+    const chatTitle = message.chat.title || '';
+    const safeTitle = escapeHTML(chatTitle);
+    let msg = `👥 <b>${safeName}</b>\n`;
     msg += `/getgroupid\n`;
-    msg += `Group Title: <b>${chatTitle}</b>\n`;
+    msg += `Group Title: <b>${safeTitle}</b>\n`;
     msg += `Group ID is: <code>${chatId}</code>`;
     context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
     return sendMessageToTelegramWithContext(context)(msg);

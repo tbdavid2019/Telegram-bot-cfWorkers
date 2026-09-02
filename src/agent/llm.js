@@ -182,7 +182,7 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
   if (typeof onStream === 'function') {
     safeStream = async (chunkText) => {
       if (!chunkText || typeof chunkText !== 'string') return;
-      if (chunkText.includes('[CALL:') || chunkText.startsWith('{') || chunkText.includes('"content":')) {
+      if (chunkText.includes('[CALL:') || chunkText.includes('[SUGGEST:') || chunkText.includes('[ASK:') || chunkText.startsWith('{') || chunkText.includes('"content":')) {
         const { removeCommandMarkers } = await import('./command-invoker.js');
         const cleaned = removeCommandMarkers(chunkText);
         if (!cleaned || cleaned.trim() === '') {
@@ -640,7 +640,7 @@ export async function chatWithLLM(params, context, modifier) {
           if (nextEnableTime && nextEnableTime > Date.now()) {
             return;
           }
-          if (text && typeof text === 'string' && (text.includes('[CALL:') || text.startsWith('{') || text.includes('"content":'))) {
+          if (text && typeof text === 'string' && (text.includes('[CALL:') || text.includes('[SUGGEST:') || text.includes('[ASK:') || text.startsWith('{') || text.includes('"content":'))) {
             const { removeCommandMarkers } = await import('./command-invoker.js');
             const cleaned = removeCommandMarkers(text);
             if (!cleaned || cleaned.trim() === '') {

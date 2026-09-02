@@ -323,6 +323,7 @@ export const commandHandlers = {
   "/setimg": {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandSetImageProvider,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "設定圖片生成服務 - 使用: /setimg [provider]"
   },
 
@@ -360,18 +361,21 @@ export const commandHandlers = {
   //   description: "查詢家庭行程"
   // },
   "/budgetwrite": {
-    scopes: ["all_private_chats"], // 僅限私聊或特定權限 (目前機制未細分所以這裡 scopes 其實不影響隱藏性，因為不在 sortList)
+    scopes: ["all_private_chats"],
     fn: commandWriteBudget,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "寫入家庭收支 (Internal)"
   },
   "/scheduleadd": {
     scopes: ["all_private_chats"],
     fn: commandCreateCalendar,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "新增家庭行程 (Internal)"
   },
   "/scheduledelete": {
     scopes: ["all_private_chats"],
     fn: commandDeleteCalendar,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "刪除家庭行程 (Internal - Calendar)"
   },
   "/delegate": {
@@ -383,6 +387,7 @@ export const commandHandlers = {
   "/soul": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandSoul,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "切換 Soul 人格 - 使用: /soul [URL|info|reset]"
   },
 
@@ -394,11 +399,13 @@ export const commandHandlers = {
   "/memoryclear": {
     scopes: ["all_private_chats"],
     fn: commandClearMemory,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "清除個人記憶"
   },
   "/memoryglobal": {
     scopes: ["all_private_chats", "all_chat_administrators"],
     fn: commandViewGlobalMemory,
+    needAuth: (chatType) => chatType === "private" ? null : ["administrator", "creator"],
     description: "查看全域知識庫"
   },
 
@@ -516,9 +523,14 @@ export async function executeCommand(command, message, subcommand, context) {
 
   // 檢查權限（如果需要）
   if (handler.needAuth) {
-    const authResult = await handler.needAuth(message, context);
-    if (!authResult) {
-      throw new Error('權限不足');
+    const chatType = context?.SHARE_CONTEXT?.chatType || 'private';
+    const roleList = handler.needAuth(chatType);
+    if (roleList) {
+      const speakerId = context?.SHARE_CONTEXT?.speakerId || message?.from?.id;
+      const chatRole = await getChatRoleWithContext(context)(speakerId);
+      if (chatRole === null || !roleList.includes(chatRole)) {
+        throw new Error(`權限不足，需要 ${roleList.join(' 或 ')}`);
+      }
     }
   }
 
