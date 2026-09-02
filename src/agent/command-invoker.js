@@ -135,6 +135,8 @@ export function truncateButtonText(text, maxLength = 32) {
     }
     return trimmed.slice(0, maxLength - 3) + '...';
 }
+
+/**
  * 解析 LLM 回應，提取指令調用
  * @param {string} answer - LLM 回應文字
  * @returns {Array<{command: string, args: string}>} 指令列表
