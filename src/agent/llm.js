@@ -555,6 +555,29 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
         content: `[工具執行結果 (第 ${currentRound + 1} 輪)]\n${toolResultText}\n\n${guidance}`
       });
 
+      // 🚀 核心效能優化：若本輪僅調用 /delegate，直接將對方的真實回覆作為最終答案，
+      // 避免二次調用本地 LLM 浪費 15~20 秒推理時間並導致 Cloudflare Workers 30 秒執行超時截斷
+      if (toolCommands.length === 1 && toolCommands[0].command === '/delegate') {
+        const delegateRes = toolResults[0];
+        if (delegateRes && !delegateRes.error && delegateRes.data) {
+          const raw = delegateRes.data;
+          const agentName = toolCommands[0].args.trim().split(' ')[0].replace(/^["'](.*)["']$/, '$1') || '協作代理人';
+
+          if (raw.includes('已即時回覆如下]\n')) {
+            const rawReply = raw.split('已即時回覆如下]\n')[1]?.split('\n\n⚠️【重要指示】')[0] || '';
+            if (rawReply.trim()) {
+              console.log(`🤖 [Tool Calling] Direct relay of /delegate response from ${agentName} (skipping redundant 2nd LLM round)`);
+              if (rawReply.trim().startsWith('⏳ 任務已成功投遞')) {
+                answer = rawReply.trim();
+              } else {
+                answer = `🌸 *【來自「${agentName}」的即時回覆】*：\n\n${rawReply.trim()}`;
+              }
+              break;
+            }
+          }
+        }
+      }
+
       currentRound++;
 
       if (currentRound < maxRounds) {

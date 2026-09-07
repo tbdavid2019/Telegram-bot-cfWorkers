@@ -4,7 +4,7 @@
  */
 
 // ===== 配置模組 =====
-import { ENV, initEnv, API_GUARD, WORKER_ENV } from './config/env.js';
+import { ENV, initEnv, API_GUARD, WORKER_ENV, setExecutionContext } from './config/env.js';
 
 // ===== Telegram 模組 =====
 import {
@@ -420,6 +420,9 @@ export default {
    */
   async fetch(request, env, ctx) {
     try {
+      // 設置執行上下文
+      if (ctx) setExecutionContext(ctx);
+
       // 初始化環境變數
       initEnv(env, i18n);
 
@@ -437,6 +440,7 @@ export default {
    */
   async scheduled(event, env, ctx) {
     try {
+      if (ctx) setExecutionContext(ctx);
       const { handleScheduled } = await import('./features/scheduler.js');
       await handleScheduled(event, env, ctx);
     } catch (e) {

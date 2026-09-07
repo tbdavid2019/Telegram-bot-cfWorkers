@@ -474,3 +474,8 @@ export function initEnv(env, i18n) {
     }
   }
 }
+
+export let EXECUTION_CTX = null;
+export function setExecutionContext(ctx) {
+  EXECUTION_CTX = ctx;
+}

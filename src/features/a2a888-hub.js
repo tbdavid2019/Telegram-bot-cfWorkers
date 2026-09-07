@@ -1,4 +1,4 @@
-import { ENV, WORKER_ENV, DATABASE } from '../config/env.js';
+import { ENV, WORKER_ENV, DATABASE, EXECUTION_CTX } from '../config/env.js';
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 import { loadChatLLM } from '../agent/agents.js';
 
@@ -306,12 +306,12 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     return `✅ 任務已成功投遞至 A2A888 Hub 給「${target.displayName}」\n• 狀態：${result.state || 'QUEUED'}\n• Task ID: ${taskId}`;
   }
 
-  // 等待對象透過 Inbox 回覆 (預設等待最高 16 秒，適應遠端 LLM 延遲並符合 Cloudflare Workers 連線限制)
-  const timeoutMs = options.timeoutMs || 16000;
+  // 等待對象透過 Inbox 回覆 (預設等待最高 22 秒，適應遠端 LLM 延遲並符合 Cloudflare Workers 連線限制)
+  const timeoutMs = options.timeoutMs || 22000;
   const startTime = Date.now();
   const pollIntervalMs = 1200;
 
-  console.log(`[A2A888 Hub] Waiting up to ${timeoutMs}ms for reply from ${target.displayName}...`);
+  console.log(`[A2A888 Hub] Waiting up to ${timeoutMs}ms for reply from ${target.displayName} (contextId: ${contextId})...`);
 
   while (Date.now() - startTime < timeoutMs) {
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
@@ -324,21 +324,16 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
         const inboxData = await inboxRes.json();
         const items = inboxData.items || [];
 
-        // 優先精確匹配 contextId 或包含 taskId
+        // 嚴格精確匹配 contextId 或包含 taskId，絕不誤認舊任務
         const replyItem = items.find(item =>
           item.state !== 'ACKNOWLEDGED' && (
             item.contextId === contextId ||
             (item.taskId && item.taskId.includes(taskId))
           )
-        ) || items.find(item =>
-          item.state !== 'ACKNOWLEDGED' && (
-            item.requesterAgentId === target.agentId &&
-            (item.taskId?.startsWith('reply') || item.taskId?.startsWith('task-reply'))
-          )
         );
 
         if (replyItem) {
-          console.log(`[A2A888 Hub] Found reply from ${replyItem.requesterAgentId} (seq: ${replyItem.sequence})`);
+          console.log(`[A2A888 Hub] Found exact reply from ${replyItem.requesterAgentId} (seq: ${replyItem.sequence}, ctx: ${replyItem.contextId})`);
 
           // ACK 該回覆任務
           const ackUrl = `${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox/${replyItem.sequence}/ack`;
@@ -354,6 +349,73 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     } catch (pollErr) {
       console.warn('[A2A888 Hub] Poll reply error:', pollErr.message);
     }
+  }
+
+  // 若同步等待逾時（例如對方回答超過 22 秒），排入背景 waitUntil 繼續追蹤 40 秒，避免請求被中斷
+  const bgWaitUntil = options.context?.executionCtx?.waitUntil ||
+                      options.context?.waitUntil ||
+                      (typeof EXECUTION_CTX !== 'undefined' && EXECUTION_CTX?.waitUntil ? EXECUTION_CTX.waitUntil.bind(EXECUTION_CTX) : null);
+
+  if (bgWaitUntil && (options.chatId && options.botToken)) {
+    bgWaitUntil((async () => {
+      console.log(`[A2A888 Hub Background] Polling in background for reply to ${contextId}...`);
+      const bgStartTime = Date.now();
+      const bgTimeoutMs = 40000;
+      while (Date.now() - bgStartTime < bgTimeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const inboxUrl = `${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox?afterSequence=0`;
+          const inboxRes = await fetch(inboxUrl, { method: 'GET', headers });
+          if (inboxRes.ok) {
+            const inboxData = await inboxRes.json();
+            const items = inboxData.items || [];
+            const replyItem = items.find(item =>
+              item.state !== 'ACKNOWLEDGED' && (
+                item.contextId === contextId ||
+                (item.taskId && item.taskId.includes(taskId))
+              )
+            );
+            if (replyItem) {
+              console.log(`[A2A888 Hub Background] Found delayed reply (seq: ${replyItem.sequence}), pushing to Telegram...`);
+              const tgUrl = `https://api.telegram.org/bot${options.botToken.trim()}/sendMessage`;
+              const pushResp = await fetch(tgUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: options.chatId,
+                  text: `🌸 *【來自「${target.displayName}」的即時回覆】*：\n\n${replyItem.message}`,
+                  parse_mode: 'Markdown'
+                })
+              }).catch(e => console.error('[A2A888 Hub Background] Telegram push error:', e.message));
+
+              if (pushResp && !pushResp.ok) {
+                await fetch(tgUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    chat_id: options.chatId,
+                    text: `🌸 【來自「${target.displayName}」的即時回覆】：\n\n${replyItem.message}`
+                  })
+                }).catch(() => {});
+              }
+
+              // ACK
+              await fetch(`${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox/${replyItem.sequence}/ack`, {
+                method: 'POST',
+                headers
+              }).catch(() => {});
+
+              if (kv) {
+                await kv.delete(`a2a_outbound:${contextId}`).catch(() => {});
+              }
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn('[A2A888 Hub Background] Error:', e.message);
+        }
+      }
+    })());
   }
 
   // 超時回退說明（異步推播承諾）
