@@ -306,8 +306,8 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     return `✅ 任務已成功投遞至 A2A888 Hub 給「${target.displayName}」\n• 狀態：${result.state || 'QUEUED'}\n• Task ID: ${taskId}`;
   }
 
-  // 等待對象透過 Inbox 回覆 (預設等待最高 35 秒，適應遠端 LLM 延遲，不消耗 CPU Time)
-  const timeoutMs = options.timeoutMs || 35000;
+  // 等待對象透過 Inbox 回覆 (預設等待最高 16 秒，適應遠端 LLM 延遲並符合 Cloudflare Workers 連線限制)
+  const timeoutMs = options.timeoutMs || 16000;
   const startTime = Date.now();
   const pollIntervalMs = 1200;
 
@@ -442,7 +442,7 @@ export async function processHubInbox(env, context = null) {
 
         if (targetChatId && botToken) {
           const tgUrl = `https://api.telegram.org/bot${botToken.trim()}/sendMessage`;
-          await fetch(tgUrl, {
+          const pushResp = await fetch(tgUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -451,6 +451,18 @@ export async function processHubInbox(env, context = null) {
               parse_mode: 'Markdown'
             })
           }).catch(e => console.error('[A2A888 Hub] Telegram push error:', e.message));
+
+          if (pushResp && !pushResp.ok) {
+            console.warn(`[A2A888 Hub] Telegram Markdown push failed (${pushResp.status}), retrying with plain text...`);
+            await fetch(tgUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: targetChatId,
+                text: `🌸 【來自「${senderDisplayName}」的協作回覆】：\n\n${item.message}`
+              })
+            }).catch(e => console.error('[A2A888 Hub] Telegram fallback push error:', e.message));
+          }
         }
 
         // ACK 該任務
@@ -755,7 +767,7 @@ export async function handleA2AHubCallback(request, env = null) {
 
       if (targetChatId && botToken) {
         const tgUrl = `https://api.telegram.org/bot${botToken.trim()}/sendMessage`;
-        await fetch(tgUrl, {
+        const pushResp = await fetch(tgUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -764,6 +776,18 @@ export async function handleA2AHubCallback(request, env = null) {
             parse_mode: 'Markdown'
           })
         }).catch(e => console.error('[A2A888 Callback] Telegram push error:', e.message));
+
+        if (pushResp && !pushResp.ok) {
+          console.warn(`[A2A888 Callback] Telegram Markdown push failed (${pushResp.status}), retrying with plain text...`);
+          await fetch(tgUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: targetChatId,
+              text: `🌸 【來自「${senderDisplayName}」的即時回覆】：\n\n${item.message}`
+            })
+          }).catch(e => console.error('[A2A888 Callback] Telegram fallback push error:', e.message));
+        }
       }
 
       if (item.sequence) {

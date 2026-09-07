@@ -271,6 +271,33 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
       console.log(`🤖 [Tool Calling] Round ${currentRound + 1}/${maxRounds}: Executing ${toolCommands.length} tool command(s)...`);
 
+      // 若有工具需要執行，且先前在 Telegram 有發送過訊息 (串流佔位)，立即更新 Telegram 訊息為乾淨的執行狀態
+      // 這能徹底清除第一輪流式中可能洩漏的未查證幻想草稿或「...」標記
+      if (context?.CURRENT_CHAT_CONTEXT?.message_id && !context?.captureToolOutput) {
+        let statusMsg = '🔄 正在處理中，請稍候...';
+        const delegateCmd = toolCommands.find(c => c.command === '/delegate');
+        const webCmd = toolCommands.find(c => c.command === '/web');
+        const stockCmd = toolCommands.find(c => c.command === '/stock' || c.command === '/stock2' || c.command === '/fund');
+        const wikiCmd = toolCommands.find(c => c.command === '/wiki');
+
+        if (delegateCmd) {
+          const targetName = (delegateCmd.args || '').trim().split(' ')[0].replace(/^["'](.*)["']$/, '$1') || '協作代理人';
+          statusMsg = `💬 正在為您連線「${targetName}」並轉達任務，請稍候...`;
+        } else if (webCmd) {
+          statusMsg = `🔍 正在即時聯網搜尋查證，請稍候...`;
+        } else if (stockCmd) {
+          statusMsg = `📈 正在查詢即時金融行情數據，請稍候...`;
+        } else if (wikiCmd) {
+          statusMsg = `📘 正在編寫長文並發布至 David888 Wiki，請稍候...`;
+        }
+
+        try {
+          await sendMessageToTelegramWithContext(context)(statusMsg);
+        } catch (e) {
+          console.warn('Failed to update status message on Telegram:', e.message);
+        }
+      }
+
       const toolResults = [];
 
       for (const { command, args } of toolCommands) {
