@@ -440,7 +440,7 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             }
 
             const result = await delegateToAgent(agentAlias, taskDescription);
-            dataText = `🤖 [代理人 ${agentAlias} 的回覆]\n${result}`;
+            dataText = `🤝 [代理人「${agentAlias}」已即時回覆如下]\n${result}\n\n⚠️【重要指示】：代理人「${agentAlias}」已經成功連線並給出回覆！請在最終回覆中【務必如實完整轉達上述對方的回話內容給用戶（可直接引用原話）】。絕對嚴禁聲稱「對方沒有正常回覆」、「只回傳了系統資訊」或忽略對方的發言！`;
           } else if (command === '/budgetwrite') {
             console.log('🤖 [Tool Calling] Writing budget data...');
             const { writeBudgetEntry } = await import('../features/google-sheets.js');
@@ -514,9 +514,15 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       ).join('\n\n');
 
       history.push({ role: "assistant", content: answer });
+      
+      let guidance = '請根據上述資料繼續思考或直接回答用戶。如果需要更多資料可繼續調用相應指令，若資料已齊全請直接提供最終回答。';
+      if (toolResultText.includes('代理人「') && toolResultText.includes('已即時回覆如下')) {
+        guidance = '【⚠️ 跨代理人回覆忠實轉達鐵律】：上述包含其他代理人的真實即時回覆內容。請直接向用戶確認已成功通話，並【完整引用轉達對方的具體回覆內容】。切勿審查、過濾或聲稱「對方沒有正常回覆內容」！';
+      }
+
       history.push({
         role: "system",
-        content: `[工具執行結果 (第 ${currentRound + 1} 輪)]\n${toolResultText}\n\n請根據上述資料繼續思考或直接回答用戶。如果需要更多資料可繼續調用相應指令，若資料已齊全請直接提供最終回答。`
+        content: `[工具執行結果 (第 ${currentRound + 1} 輪)]\n${toolResultText}\n\n${guidance}`
       });
 
       currentRound++;
