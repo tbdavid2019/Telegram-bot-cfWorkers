@@ -126,7 +126,7 @@ export async function generateCommandSystemPrompt(context) {
         '位置服務': ['/gps'],
         '圖片生成': ['/img', '/img2', '/setimg'],
         '系統功能': ['/help', '/new', '/system', '/model'],
-        '代理協作': ['/delegate', '/a2ahub']
+        '代理協作': ['/delegate']
     };
 
     // 根據環境變數決定是否加入家庭管理功能

@@ -169,9 +169,8 @@ test('A2A888 Hub: Security Fix - LOCK_USER_CONFIG_KEYS protects Hub credentials'
   }
 });
 
-test('A2A888 Hub: /a2ahub and /delegate commands are registered in commandHandlers', () => {
-  assert.ok(commandHandlers['/a2ahub'], 'Expected /a2ahub in commandHandlers');
+test('A2A888 Hub: /delegate is registered as internal tool calling handler', () => {
   assert.ok(commandHandlers['/delegate'], 'Expected /delegate in commandHandlers');
-  assert.equal(typeof commandHandlers['/a2ahub'].fn, 'function');
   assert.equal(typeof commandHandlers['/delegate'].fn, 'function');
+  assert.deepEqual(commandHandlers['/delegate'].scopes, [], 'Expected /delegate to be internal without public scopes');
 });
