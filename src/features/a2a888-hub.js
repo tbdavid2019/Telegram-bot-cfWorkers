@@ -254,6 +254,22 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
   const contextId = options.contextId || `ctx_${Date.now()}`;
   const idempotencyKey = options.idempotencyKey || `idem_${taskId}`;
 
+  // 儲存委派 Context 到 KV，供異步回覆時追蹤 Telegram 聊天室
+  const kv = env?.DATABASE || WORKER_ENV?.DATABASE || (typeof DATABASE !== 'undefined' ? DATABASE : null);
+  if (kv && (options.chatId || options.botToken)) {
+    try {
+      await kv.put(`a2a_outbound:${contextId}`, JSON.stringify({
+        chatId: options.chatId,
+        botToken: options.botToken,
+        targetName: target.displayName,
+        taskMessage,
+        createdAt: Date.now()
+      }), { expirationTtl: 7200 });
+    } catch (e) {
+      console.warn('[A2A888 Hub] Failed to save outbound context to KV:', e.message);
+    }
+  }
+
   const sendUrl = `${creds.hubUrl}/hub/v1/agents/${target.agentId}/tasks`;
   const headers = {
     'Content-Type': 'application/json',
@@ -290,8 +306,8 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     return `✅ 任務已成功投遞至 A2A888 Hub 給「${target.displayName}」\n• 狀態：${result.state || 'QUEUED'}\n• Task ID: ${taskId}`;
   }
 
-  // 等待對象透過 Inbox 回覆 (Polling loop up to timeoutMs)
-  const timeoutMs = options.timeoutMs || 10000;
+  // 等待對象透過 Inbox 回覆 (預設等待最高 25 秒，適應遠端 LLM 延遲)
+  const timeoutMs = options.timeoutMs || 25000;
   const startTime = Date.now();
   const pollIntervalMs = 1200;
 
@@ -308,12 +324,16 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
         const inboxData = await inboxRes.json();
         const items = inboxData.items || [];
 
-        // 尋找匹配 contextId 或對應 reply 的任務
+        // 優先精確匹配 contextId 或包含 taskId
         const replyItem = items.find(item =>
           item.state !== 'ACKNOWLEDGED' && (
             item.contextId === contextId ||
-            item.requesterAgentId === target.agentId ||
             (item.taskId && item.taskId.includes(taskId))
+          )
+        ) || items.find(item =>
+          item.state !== 'ACKNOWLEDGED' && (
+            item.requesterAgentId === target.agentId &&
+            (item.taskId?.startsWith('reply') || item.taskId?.startsWith('task-reply'))
           )
         );
 
@@ -324,6 +344,10 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
           const ackUrl = `${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox/${replyItem.sequence}/ack`;
           await fetch(ackUrl, { method: 'POST', headers }).catch(e => console.warn('ACK error:', e.message));
 
+          if (kv) {
+            await kv.delete(`a2a_outbound:${contextId}`).catch(() => {});
+          }
+
           return replyItem.message;
         }
       }
@@ -332,8 +356,8 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     }
   }
 
-  // 超時回退說明
-  return `✅ 任務已成功排入 A2A888 Hub 給「${target.displayName}」\n• 狀態：${result.state || 'QUEUED'}\n• Task ID: ${taskId}\n⚠️ 對方尚未在等待時間內即時回傳，後續可使用 /a2ahub poll 查看最新收件匣。`;
+  // 超時回退說明（異步推播承諾）
+  return `⏳ 任務已成功投遞給「${target.displayName}」。\n對方目前正由 LLM 運算處理中；一旦對方回傳結果，小江管家會自動在聊天室推播回覆給您！`;
 }
 
 /**
@@ -382,6 +406,71 @@ export async function processHubInbox(env, context = null) {
       }
 
       console.log(`[A2A888 Hub] Handling task ${item.taskId} from ${item.requesterAgentId}: ${item.message}`);
+
+      // 檢查是否為先前委派任務的異步回覆 (Outbound Reply)
+      const kv = env?.DATABASE || WORKER_ENV?.DATABASE || (typeof DATABASE !== 'undefined' ? DATABASE : null);
+      let outboundMeta = null;
+      if (kv && item.contextId) {
+        try {
+          const raw = await kv.get(`a2a_outbound:${item.contextId}`);
+          if (raw) outboundMeta = JSON.parse(raw);
+        } catch (e) {
+          console.warn('[A2A888 Hub] KV get error:', e.message);
+        }
+      }
+
+      const isReply = Boolean(
+        outboundMeta ||
+        (item.taskId && (item.taskId.startsWith('reply') || item.taskId.startsWith('task-reply')))
+      );
+
+      if (isReply) {
+        console.log(`[A2A888 Hub] Relaying async reply from ${item.requesterAgentId} to Telegram (seq: ${item.sequence})`);
+
+        const targetChatId = outboundMeta?.chatId || ENV.USER_CONFIG.FAMILY_GROUP_ID || (Array.isArray(ENV.CHAT_WHITE_LIST) ? ENV.CHAT_WHITE_LIST[0] : (ENV.CHAT_WHITE_LIST || '').split(',')[0]);
+        let botToken = outboundMeta?.botToken;
+        if (!botToken) {
+          botToken = Array.isArray(ENV.TELEGRAM_AVAILABLE_TOKENS) ? ENV.TELEGRAM_AVAILABLE_TOKENS[0] : (ENV.TELEGRAM_AVAILABLE_TOKENS || '').split(',')[0];
+        }
+
+        let senderDisplayName = outboundMeta?.targetName;
+        if (!senderDisplayName) {
+          const peers = getCachedHubPeers();
+          const match = peers.find(p => p.agentId === item.requesterAgentId);
+          senderDisplayName = match ? match.displayName : '協作代理人';
+        }
+
+        if (targetChatId && botToken) {
+          const tgUrl = `https://api.telegram.org/bot${botToken.trim()}/sendMessage`;
+          await fetch(tgUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: targetChatId,
+              text: `🌸 *【來自「${senderDisplayName}」的協作回覆】*：\n\n${item.message}`,
+              parse_mode: 'Markdown'
+            })
+          }).catch(e => console.error('[A2A888 Hub] Telegram push error:', e.message));
+        }
+
+        // ACK 該任務
+        await fetch(`${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox/${item.sequence}/ack`, {
+          method: 'POST',
+          headers
+        });
+
+        if (kv && item.contextId) {
+          await kv.delete(`a2a_outbound:${item.contextId}`).catch(() => {});
+        }
+
+        processed.push({
+          sequence: item.sequence,
+          type: 'reply',
+          from: item.requesterAgentId,
+          message: item.message
+        });
+        continue;
+      }
 
       // 建立 LLM 對話 Context
       const a2aContext = {

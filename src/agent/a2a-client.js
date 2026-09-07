@@ -5,7 +5,7 @@ import { ENV, WORKER_ENV } from '../config/env.js';
  * Handles outbound delegation to other agents
  */
 
-export async function delegateToAgent(agentAlias, taskDescription) {
+export async function delegateToAgent(agentAlias, taskDescription, options = {}) {
   console.log(`[A2A Client] Delegating task to ${agentAlias}: ${taskDescription}`);
 
   // 1. Resolve Peer Configuration
@@ -19,7 +19,7 @@ export async function delegateToAgent(agentAlias, taskDescription) {
       const hubConfig = getHubConfig(WORKER_ENV || ENV);
       if (hubConfig.sharedKey || hubConfig.agentId) {
         console.log(`[A2A Client] "${agentAlias}" not in local peers, attempting 888a2a-lite Hub delegation...`);
-        return await sendHubTask(WORKER_ENV || ENV, agentAlias, taskDescription, { waitForReply: true });
+        return await sendHubTask(WORKER_ENV || ENV, agentAlias, taskDescription, { waitForReply: true, ...options });
       }
     } catch (hubError) {
       console.warn(`[A2A Client] Hub delegation failed:`, hubError.message);

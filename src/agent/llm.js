@@ -439,7 +439,10 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
               taskDescription = '你好！請向用戶打個招呼並自我介紹一下。';
             }
 
-            const result = await delegateToAgent(agentAlias, taskDescription);
+            const result = await delegateToAgent(agentAlias, taskDescription, {
+              chatId: context.CURRENT_CHAT_CONTEXT?.chat_id,
+              botToken: context.SHARE_CONTEXT?.currentBotToken
+            });
             dataText = `🤝 [代理人「${agentAlias}」已即時回覆如下]\n${result}\n\n⚠️【重要指示】：代理人「${agentAlias}」已經成功連線並給出回覆！請在最終回覆中【務必如實完整轉達上述對方的回話內容給用戶（可直接引用原話）】。絕對嚴禁聲稱「對方沒有正常回覆」、「只回傳了系統資訊」或忽略對方的發言！`;
           } else if (command === '/budgetwrite') {
             console.log('🤖 [Tool Calling] Writing budget data...');
