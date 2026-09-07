@@ -23,6 +23,23 @@ export async function handleScheduled(event, env, ctx) {
 
     console.log(`⏱️ [Scheduler] Triggered at ${new Date().toISOString()}`);
 
+    // Check: 888a2a-lite Hub 收件匣輪詢與任務處理
+    const hasHubConfig = Boolean(
+        ENV.USER_CONFIG.A2A888_HUB_SHARED_KEY ||
+        ENV.USER_CONFIG.A2A888_AGENT_ID ||
+        env?.A2A888_HUB_SHARED_KEY ||
+        env?.A2A888_AGENT_ID
+    );
+    if (hasHubConfig) {
+        try {
+            const { processHubInbox } = await import('./a2a888-hub.js');
+            console.log('📬 [Scheduler] Checking 888a2a-lite Hub Inbox...');
+            await processHubInbox(env);
+        } catch (hubErr) {
+            console.warn('⚠️ [Scheduler] Hub inbox processing error:', hubErr.message);
+        }
+    }
+
     // 權限與開關檢查
     // 1. 必須啟用 Family Sheets (基礎依賴)
     if (ENV.USER_CONFIG.ENABLE_FAMILY_SHEETS !== true) {

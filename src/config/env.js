@@ -139,9 +139,13 @@ export class UserConfig {
   MEMORY_STORAGE_MODE = "kv"; // 儲存模式: kv 或 r2（預設 kv）
   MEMORY_AUTO_SAVE = true; // 自動保存記憶（對話結束後自動更新）
 
-  // -- A2A 協作協議 --
+  // -- A2A 協作協議與 888a2a-lite Hub --
   A2A_PEERS = {}; // A2A 鄰近節點設定
   A2A_AGENT_NAME = ""; // A2A 代理人名稱 (若未設定則使用 TELEGRAM_BOT_NAME)
+  A2A888_HUB_URL = "https://a2a.david888.com"; // 888a2a-lite Hub Base URL
+  A2A888_HUB_SHARED_KEY = ""; // 888a2a-lite Hub Pre-shared Key
+  A2A888_AGENT_ID = ""; // 註冊於 Hub 的 Agent ID
+  A2A888_AGENT_TOKEN = ""; // 註冊於 Hub 的 Agent Token
 
   // -- 888box 雲端資產管理與儲存 (3-Tier Fallback) --
   BOX_API_BASE = "https://box.david888.com";
@@ -215,6 +219,10 @@ export class Environment {
     "WIKI_API_BASE",
     "GOOGLE_API_BASE",
     "A2A_SECRET",
+    "A2A888_HUB_URL",
+    "A2A888_HUB_SHARED_KEY",
+    "A2A888_AGENT_ID",
+    "A2A888_AGENT_TOKEN",
     "INIT_SECRET",
     "TELEGRAM_AVAILABLE_TOKENS",
     "TELEGRAM_BOT_TOKEN",
@@ -350,6 +358,10 @@ const ENV_TYPES = {
   FAMILY_GROUP_ID: "string",
   A2A_PEERS: "object",
   A2A_AGENT_NAME: "string",
+  A2A888_HUB_URL: "string",
+  A2A888_HUB_SHARED_KEY: "string",
+  A2A888_AGENT_ID: "string",
+  A2A888_AGENT_TOKEN: "string",
   // 888box 雲端儲存
   BOX_API_BASE: "string",
   BOX_FALLBACK_BASES: "array",

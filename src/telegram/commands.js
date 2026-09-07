@@ -79,6 +79,7 @@ import {
   commandViewGlobalMemory
 } from '../features/memory-commands.js';
 import { commandSoul } from '../features/soul.js';
+import { commandA2AHub, commandDelegate } from '../features/a2a888-hub.js';
 
 /**
  * 指令排序列表 - 決定指令在 Telegram 選單中的顯示順序
@@ -113,6 +114,8 @@ export const commandSortList = [
   "/memoryclear",   // 清除個人記憶
   "/system",        // 查看系統狀態
   "/fund",          // AI 對沖基金投資分析
+  "/a2ahub",        // 888a2a Hub 狀態與名冊
+  "/delegate",      // 代理人協作指派
   "/stock2",        // 美國國際股市 (要加參數)
   "/stock",         // 台灣股市 (要加參數)
   "/wt",            // 台灣地區天氣 (要加參數)
@@ -380,8 +383,13 @@ export const commandHandlers = {
   },
   "/delegate": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
-    fn: async () => {}, // 內部 Tool Calling，實際在 llm.js 攔截處理
-    description: "傳遞任務或訊息給其他協作代理人 (Internal - Agent to Agent) - 格式: /delegate [Agent名稱] [任務內容]"
+    fn: commandDelegate,
+    description: "傳遞任務或訊息給其他協作代理人 (A2A) - 格式: /delegate [Agent名稱] [任務內容]"
+  },
+  "/a2ahub": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandA2AHub,
+    description: "888a2a-lite Hub 協作管理與狀態 - 使用: /a2ahub [peers|status|poll|send <對象> <訊息>]"
   },
 
   "/soul": {

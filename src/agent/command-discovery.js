@@ -126,7 +126,7 @@ export async function generateCommandSystemPrompt(context) {
         '位置服務': ['/gps'],
         '圖片生成': ['/img', '/img2', '/setimg'],
         '系統功能': ['/help', '/new', '/system', '/model'],
-        '代理協作': ['/delegate']
+        '代理協作': ['/delegate', '/a2ahub']
     };
 
     // 根據環境變數決定是否加入家庭管理功能
@@ -160,14 +160,28 @@ export async function generateCommandSystemPrompt(context) {
         prompt += '\n';
     }
 
-    // 加入可用的協作代理人 (A2A_PEERS)
+    // 加入可用的協作代理人 (A2A_PEERS 與 888a2a-lite Hub)
     const peers = ENV.USER_CONFIG.A2A_PEERS;
-    if (peers && typeof peers === 'object' && Object.keys(peers).length > 0) {
-        prompt += '## 可聯絡的協作代理人 (A2A Peers)\n';
+    const hasLocalPeers = peers && typeof peers === 'object' && Object.keys(peers).length > 0;
+    let hubPeers = [];
+    try {
+        const { getCachedHubPeers } = await import('../features/a2a888-hub.js');
+        hubPeers = getCachedHubPeers();
+    } catch (e) {}
+
+    if (hasLocalPeers || hubPeers.length > 0) {
+        prompt += '## 可聯絡的協作代理人 (A2A Peers & 888a2a Hub)\n';
         prompt += '你可以使用 /delegate 指令將任務指派給以下代理人（請直接使用名稱或別名作為參數）：\n';
-        for (const [key, peer] of Object.entries(peers)) {
-            const names = peer.names ? peer.names.join(', ') : key;
-            prompt += `- **${key}** (別名: ${names})\n`;
+        if (hasLocalPeers) {
+            for (const [key, peer] of Object.entries(peers)) {
+                const names = peer.names ? peer.names.join(', ') : key;
+                prompt += `- **${key}** (別名: ${names})\n`;
+            }
+        }
+        if (hubPeers.length > 0) {
+            for (const hp of hubPeers) {
+                prompt += `- **${hp.displayName}** (888a2a Hub，狀態: ${hp.state})\n`;
+            }
         }
         prompt += '\n';
     }

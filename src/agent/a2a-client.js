@@ -13,6 +13,19 @@ export async function delegateToAgent(agentAlias, taskDescription) {
   const peer = peers[agentAlias] || findPeerByName(peers, agentAlias);
 
   if (!peer) {
+    // 2. Fallback to 888a2a-lite Hub
+    try {
+      const { getHubConfig, sendHubTask } = await import('../features/a2a888-hub.js');
+      const hubConfig = getHubConfig(WORKER_ENV || ENV);
+      if (hubConfig.sharedKey || hubConfig.agentId) {
+        console.log(`[A2A Client] "${agentAlias}" not in local peers, attempting 888a2a-lite Hub delegation...`);
+        return await sendHubTask(WORKER_ENV || ENV, agentAlias, taskDescription, { waitForReply: true });
+      }
+    } catch (hubError) {
+      console.warn(`[A2A Client] Hub delegation failed:`, hubError.message);
+      throw new Error(`Agent "${agentAlias}" not found in local peer registry or 888a2a Hub: ${hubError.message}`);
+    }
+
     throw new Error(`Agent "${agentAlias}" not found in current peer registry. (Available keys: ${Object.keys(peers).join(', ')}, Raw: ${JSON.stringify(peers)})`);
   }
 

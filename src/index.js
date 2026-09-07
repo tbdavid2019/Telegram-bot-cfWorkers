@@ -86,6 +86,8 @@ const i18nData = {
         gps: '查询附近设施 - 使用: /gps',
         model: '查看或切换聊天模型',
         llmchange: '切换 LLM 模型（旧指令）',
+        a2ahub: '888a2a Hub 状态与名册 - 使用: /a2ahub [peers|status|poll|send]',
+        delegate: '代理人协作指派 - 使用: /delegate [代理人] [任务]',
         help: '显示此帮助信息',
         new: '开始新对话',
         start: '开始使用机器人',
@@ -141,6 +143,8 @@ const i18nData = {
         gps: '查詢附近設施 - 使用: /gps',
         model: '查看或切換聊天模型',
         llmchange: '切換 LLM 模型（舊指令）',
+        a2ahub: '888a2a Hub 狀態與名冊 - 使用: /a2ahub [peers|status|poll|send]',
+        delegate: '代理人協作指派 - 使用: /delegate [代理人] [任務]',
         help: '顯示此幫助訊息',
         new: '開始新對話',
         start: '開始使用機器人',
@@ -196,6 +200,8 @@ const i18nData = {
         gps: 'Find nearby places - Usage: /gps',
         model: 'Show or switch chat model',
         llmchange: 'Switch LLM model (legacy command)',
+        a2ahub: '888a2a Hub status & peers - Usage: /a2ahub [peers|status|poll|send]',
+        delegate: 'Delegate task to peer agent - Usage: /delegate [agent] [task]',
         help: 'Show this help message',
         new: 'Start new conversation',
         start: 'Start using the bot',
@@ -382,6 +388,14 @@ async function handleRequest(request) {
   // A2A 協議路由
   router.post('/a2a', handleA2ARequest);
   router.get('/.well-known/agent.json', handleAgentDiscovery);
+  router.all('/a2ahub/poll', async (req) => {
+    const { processHubInbox } = await import('./features/a2a888-hub.js');
+    const result = await processHubInbox(WORKER_ENV || ENV);
+    return new Response(JSON.stringify({ ok: true, result }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  });
 
   // 開發/除錯模式下的路由
   if (ENV.DEV_MODE || ENV.DEBUG_MODE) {
