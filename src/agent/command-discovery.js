@@ -4,7 +4,7 @@
  */
 
 import { commandHandlers } from '../telegram/commands.js';
-import { ENV, CONST } from '../config/env.js';
+import { ENV, CONST, WORKER_ENV } from '../config/env.js';
 import { getChatRoleWithContext } from '../telegram/telegram.js';
 
 /**
@@ -165,22 +165,32 @@ export async function generateCommandSystemPrompt(context) {
     const hasLocalPeers = peers && typeof peers === 'object' && Object.keys(peers).length > 0;
     let hubPeers = [];
     try {
-        const { getCachedHubPeers } = await import('../features/a2a888-hub.js');
-        hubPeers = getCachedHubPeers();
-    } catch (e) {}
+        const { listHubPeers, getHubConfig } = await import('../features/a2a888-hub.js');
+        const creds = getHubConfig(context?.env || WORKER_ENV);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
+        const allPeers = await Promise.race([
+            listHubPeers(context?.env || WORKER_ENV),
+            timeoutPromise
+        ]);
+        hubPeers = (allPeers || []).filter(p => p.agentId !== creds.agentId && p.displayName !== creds.agentName);
+    } catch (e) {
+        console.warn('Failed to list hub peers for prompt:', e.message);
+    }
 
     if (hasLocalPeers || hubPeers.length > 0) {
-        prompt += '## 可聯絡的協作代理人 (A2A Peers & 888a2a Hub)\n';
-        prompt += '你可以使用 /delegate 指令將任務指派給以下代理人（請直接使用名稱或別名作為參數）：\n';
+        prompt += '## 🌐 可聯絡的跨代理人網絡 (A2A Peers & 888a2a Hub)\n';
+        prompt += '系統已串接 A2A (Agent-to-Agent) 與 888a2a-lite 去中心化 Hub。你可以使用 /delegate 指令將任務指派給以下同伴代理人（直接使用名稱作為參數）：\n';
         if (hasLocalPeers) {
             for (const [key, peer] of Object.entries(peers)) {
                 const names = peer.names ? peer.names.join(', ') : key;
-                prompt += `- **${key}** (別名: ${names})\n`;
+                prompt += `- **${key}** (內部節點，別名: ${names})\n`;
             }
         }
         if (hubPeers.length > 0) {
             for (const hp of hubPeers) {
-                prompt += `- **${hp.displayName}** (888a2a Hub，狀態: ${hp.state})\n`;
+                const isOnline = hp.state === 'ONLINE';
+                const statusIcon = isOnline ? '🟢' : '⚪';
+                prompt += `- ${statusIcon} **${hp.displayName}** (888a2a Hub 代理人，狀態: ${hp.state})\n`;
             }
         }
         prompt += '\n';
@@ -226,7 +236,7 @@ export async function generateCommandSystemPrompt(context) {
     prompt += '  4. **多章節電子書模式 (Book Mode)**：撰寫多單元手冊時，可規劃發布各章節 note，再發布 Hub Manifest 筆記（內含各章節連結 `- [章節](/share/...)`），並回傳 `/book` 閱讀器。\n';
     prompt += '  5. **精華導讀與連結回傳**：Wiki 發布後系統回傳 `shareUrl`，請在 Telegram 僅呈現精華摘要與公開閱讀連結（Share URL、`/present` 簡報、`/book` 電子書），絕不可在 Telegram 重複印出萬字全文！\n';
     prompt += '- **📦 888box 雲端資產轉存**：用戶請你將影片源、圖片、音訊、文件轉存到 888box → `[CALL:/box <url> <標題>]`\n';
-    prompt += '- **👥 代理人協調**：用戶問「請 no.2 打個招呼」→ `[CALL:/delegate no.2 打個招呼]`\n';
+    prompt += '- **👥 跨代理人協同與通話 (A2A / 888a2a Hub)**：系統已完整串接 A2A 代理人網絡。當用戶要求或詢問與其他代理人（例如：**甜甜**、**甘露寺**、**蜜蜜**、**彌彌**、**no.1**、**no.2** 等在線代理人）講話、通話、打招呼、查詢問題或分派任務時（例如用戶說「你可以跟 甜甜 講話嗎」或「請甜甜打個招呼」），**你已具備完整跨代理人連線能力，請務必主動在回覆開頭輸出 `[CALL:/delegate <代理人名稱> <任務或對話內容>]`**（例如：`[CALL:/delegate 甜甜 你好！請向用戶打個招呼並自我介紹一下]` 或 `[CALL:/delegate 甘露寺 請問... ]`）。系統會在底層透過 A2A 協議直接將任務傳送給對方並獲取即時回覆！**絕對不要**回覆「請告訴我她是誰、我不知道她是誰、我無法聯繫」等推託字眼，你必須直接調用 `[CALL:/delegate ...]` 與對方交談！\n';
     prompt += '- **📅 家庭收支與日程**（若已啟用）：記帳 → `[CALL:/budgetwrite {"month": "2025/12", "category": "rent", "amount": 15000}]`；加行程 → `[CALL:/scheduleadd {"date": "2025/01/02", "time": "15:00", "targetUser": "爸爸", "event": "好市多"}]`\n\n';
     prompt += '**重要多輪引導與自主聯網規則**：\n';
     prompt += '1. **🌐 零幻覺與即時聯網自主查證（鐵律）**：你的靜態權重有截止時間，絕對不可憑空猜測任何即時市場狀態、公司上市現狀、即時股價、最新時事新聞或突發事件。**遇到此類問題，必須主動輸出 `[CALL:/web 關鍵字]` 查證**。\n';

@@ -435,6 +435,10 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             // 去除名稱前後可能的雙引號或單引號
             agentAlias = agentAlias.replace(/^["'](.*)["']$/, '$1');
 
+            if (!taskDescription) {
+              taskDescription = '你好！請向用戶打個招呼並自我介紹一下。';
+            }
+
             const result = await delegateToAgent(agentAlias, taskDescription);
             dataText = `🤖 [代理人 ${agentAlias} 的回覆]\n${result}`;
           } else if (command === '/budgetwrite') {
