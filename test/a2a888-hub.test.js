@@ -174,3 +174,63 @@ test('A2A888 Hub: /delegate is registered as internal tool calling handler', () 
   assert.equal(typeof commandHandlers['/delegate'].fn, 'function');
   assert.deepEqual(commandHandlers['/delegate'].scopes, [], 'Expected /delegate to be internal without public scopes');
 });
+
+test('A2A888 Hub: handleA2AHubCallback processes reply webhook and relays to Telegram', async () => {
+  const { handleA2AHubCallback } = await import('../src/features/a2a888-hub.js');
+  let telegramSent = false;
+  let telegramPayload = null;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('api.telegram.org')) {
+      telegramSent = true;
+      telegramPayload = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/ack')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+
+  try {
+    const mockEnv = {
+      A2A888_HUB_SHARED_KEY: 'test-key',
+      A2A888_AGENT_ID: 'agent-self',
+      A2A888_AGENT_TOKEN: 'token-self',
+      TELEGRAM_AVAILABLE_TOKENS: ['123:abc'],
+      CHAT_WHITE_LIST: ['650289664'],
+      DATABASE: {
+        get: async (k) => JSON.stringify({ chatId: 650289664, botToken: '123:abc', targetName: '甜甜' }),
+        put: async () => {},
+        delete: async () => {}
+      }
+    };
+
+    const req = new Request('https://worker.dev/a2ahub/callback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Hub-Key': 'test-key'
+      },
+      body: JSON.stringify({
+        taskId: 'reply-12345',
+        contextId: 'ctx_999',
+        requesterAgentId: 'agent-sweet',
+        message: '爸爸好！我是甜甜～',
+        sequence: 50
+      })
+    });
+
+    const res = await handleA2AHubCallback(req, mockEnv);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    assert.equal(telegramSent, true);
+    assert.equal(telegramPayload.chat_id, 650289664);
+    assert.ok(telegramPayload.text.includes('爸爸好！我是甜甜～'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+

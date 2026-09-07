@@ -306,8 +306,8 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     return `✅ 任務已成功投遞至 A2A888 Hub 給「${target.displayName}」\n• 狀態：${result.state || 'QUEUED'}\n• Task ID: ${taskId}`;
   }
 
-  // 等待對象透過 Inbox 回覆 (預設等待最高 25 秒，適應遠端 LLM 延遲)
-  const timeoutMs = options.timeoutMs || 25000;
+  // 等待對象透過 Inbox 回覆 (預設等待最高 35 秒，適應遠端 LLM 延遲，不消耗 CPU Time)
+  const timeoutMs = options.timeoutMs || 35000;
   const startTime = Date.now();
   const pollIntervalMs = 1200;
 
@@ -664,4 +664,192 @@ export async function commandDelegate(message, command, subcommand, context) {
   } catch (e) {
     return send(`❌ 協作指派失敗：\n${e.message}`);
   }
+}
+
+/**
+ * 處理來自 888a2a Hub 或協作代理人的 Webhook 回調 (POST /a2ahub/callback)
+ * 實現 100% Serverless、0 秒延遲喚醒轉發
+ * @param {Request} request
+ * @param {Object} env
+ * @returns {Promise<Response>}
+ */
+export async function handleA2AHubCallback(request, env = null) {
+  const activeEnv = env || WORKER_ENV || ENV;
+  const creds = await ensureHubRegistration(activeEnv);
+
+  // 1. 驗證來源密鑰 (若有配置 A2A888_HUB_SHARED_KEY 或 A2A_SECRET)
+  if (creds.sharedKey) {
+    const hubKey = request.headers.get('X-Hub-Key') || request.headers.get('x-hub-key');
+    const authHeader = request.headers.get('Authorization') || '';
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+    if (hubKey !== creds.sharedKey && bearerToken !== creds.sharedKey && bearerToken !== creds.agentToken) {
+      console.warn('[A2A888 Callback] Unauthorized webhook request.');
+      return new Response(JSON.stringify({ ok: false, error: 'Unauthorized callback' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
+  // 2. 若為 GET 請求，視為輕量級觸發輪詢
+  if (request.method === 'GET') {
+    const result = await processHubInbox(activeEnv);
+    return new Response(JSON.stringify({ ok: true, trigger: 'polled', result }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // 3. 若為 POST 請求，解析 payload
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (err) {
+    // 若為空 body，觸發收件匣檢查
+    const result = await processHubInbox(activeEnv);
+    return new Response(JSON.stringify({ ok: true, trigger: 'empty_post_polled', result }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // 支援單筆 item 或 items 陣列
+  const items = Array.isArray(payload.items) ? payload.items : [payload];
+  const processed = [];
+
+  for (const item of items) {
+    if (!item || !item.message) continue;
+
+    console.log(`[A2A888 Callback] Processing callback item ${item.taskId || 'untasked'}: ${item.message}`);
+
+    const kv = activeEnv?.DATABASE || WORKER_ENV?.DATABASE || (typeof DATABASE !== 'undefined' ? DATABASE : null);
+    let outboundMeta = null;
+    if (kv && item.contextId) {
+      try {
+        const raw = await kv.get(`a2a_outbound:${item.contextId}`);
+        if (raw) outboundMeta = JSON.parse(raw);
+      } catch (e) {
+        console.warn('[A2A888 Callback] KV get error:', e.message);
+      }
+    }
+
+    const isReply = Boolean(
+      outboundMeta ||
+      (item.taskId && (item.taskId.startsWith('reply') || item.taskId.startsWith('task-reply')))
+    );
+
+    if (isReply) {
+      const targetChatId = outboundMeta?.chatId || ENV.USER_CONFIG.FAMILY_GROUP_ID || (Array.isArray(ENV.CHAT_WHITE_LIST) ? ENV.CHAT_WHITE_LIST[0] : (ENV.CHAT_WHITE_LIST || '').split(',')[0]);
+      let botToken = outboundMeta?.botToken;
+      if (!botToken) {
+        botToken = Array.isArray(ENV.TELEGRAM_AVAILABLE_TOKENS) ? ENV.TELEGRAM_AVAILABLE_TOKENS[0] : (ENV.TELEGRAM_AVAILABLE_TOKENS || '').split(',')[0];
+      }
+
+      let senderDisplayName = outboundMeta?.targetName;
+      if (!senderDisplayName) {
+        const peers = getCachedHubPeers();
+        const match = peers.find(p => p.agentId === item.requesterAgentId);
+        senderDisplayName = match ? match.displayName : '協作代理人';
+      }
+
+      if (targetChatId && botToken) {
+        const tgUrl = `https://api.telegram.org/bot${botToken.trim()}/sendMessage`;
+        await fetch(tgUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: targetChatId,
+            text: `🌸 *【來自「${senderDisplayName}」的即時回覆】*：\n\n${item.message}`,
+            parse_mode: 'Markdown'
+          })
+        }).catch(e => console.error('[A2A888 Callback] Telegram push error:', e.message));
+      }
+
+      if (item.sequence) {
+        await fetch(`${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox/${item.sequence}/ack`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Agent-ID': creds.agentId,
+            'Authorization': `Bearer ${creds.agentToken}`,
+            'X-Hub-Key': creds.sharedKey
+          }
+        }).catch(() => {});
+      }
+
+      if (kv && item.contextId) {
+        await kv.delete(`a2a_outbound:${item.contextId}`).catch(() => {});
+      }
+
+      processed.push({ taskId: item.taskId, type: 'reply_relayed' });
+    } else {
+      // 處理來自外部代理人發起的普通新任務 (Inbound Task)
+      const { loadChatLLM } = await import('../agent/agents.js');
+      const a2aContext = {
+        SHARE_CONTEXT: {
+          chatId: item.contextId || `hub_${item.taskId}`,
+          chatHistoryKey: `history:hub:${item.contextId || item.taskId}`,
+          currentBotToken: 'A2A_HUB_CALLBACK',
+          speakerId: item.requesterAgentId,
+          chatType: 'private'
+        },
+        USER_CONFIG: { ...ENV.USER_CONFIG },
+        CURRENT_CHAT_CONTEXT: {
+          chat_id: item.contextId || `hub_${item.taskId}`,
+          parse_mode: 'Markdown'
+        },
+        env: activeEnv
+      };
+
+      const agent = loadChatLLM(a2aContext);
+      if (agent) {
+        const answer = await agent.request({
+          message: item.message,
+          history: [{
+            role: 'system',
+            content: `你是一個透過 A2A888 提供協作服務的 AI 代理人「${creds.agentName}」。請專業、直接地協助發問的代理人。`
+          }]
+        }, a2aContext, null);
+
+        if (item.requesterAgentId) {
+          const replyUrl = `${creds.hubUrl}/hub/v1/agents/${item.requesterAgentId}/tasks`;
+          await fetch(replyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Agent-ID': creds.agentId,
+              'Authorization': `Bearer ${creds.agentToken}`,
+              'X-Hub-Key': creds.sharedKey
+            },
+            body: JSON.stringify({
+              taskId: `reply_${item.taskId || Date.now()}`,
+              contextId: item.contextId,
+              idempotencyKey: `reply_idem_${Date.now()}`,
+              message: answer
+            })
+          }).catch(e => console.warn('[A2A888 Callback] Reply post error:', e.message));
+        }
+
+        if (item.sequence) {
+          await fetch(`${creds.hubUrl}/hub/v1/agents/${creds.agentId}/inbox/${item.sequence}/ack`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Agent-ID': creds.agentId,
+              'Authorization': `Bearer ${creds.agentToken}`,
+              'X-Hub-Key': creds.sharedKey
+            }
+          }).catch(() => {});
+        }
+
+        processed.push({ taskId: item.taskId, type: 'task_processed', answer });
+      }
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true, processed }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }

@@ -390,6 +390,14 @@ async function handleRequest(request) {
       headers: { 'Content-Type': 'application/json' }
     });
   });
+  router.all('/a2ahub/callback', async (req) => {
+    const { handleA2AHubCallback } = await import('./features/a2a888-hub.js');
+    return handleA2AHubCallback(req, WORKER_ENV || ENV);
+  });
+  router.all('/a2a/callback', async (req) => {
+    const { handleA2AHubCallback } = await import('./features/a2a888-hub.js');
+    return handleA2AHubCallback(req, WORKER_ENV || ENV);
+  });
 
   // 開發/除錯模式下的路由
   if (ENV.DEV_MODE || ENV.DEBUG_MODE) {
