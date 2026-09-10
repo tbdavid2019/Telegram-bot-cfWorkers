@@ -6,6 +6,7 @@
 
 import { sendMessageToTelegramWithContext, sendChatActionToTelegramWithContext } from '../telegram/telegram.js';
 import { ENV } from '../config/env.js';
+import { getZonedDateString, resolveUserTimeZone } from '../utils/timezone.js';
 
 export const WIKI_DEFAULT_BASE = 'https://wiki.david888.com';
 export const WIKI_DEFAULT_THEME = 'claude-canvas';
@@ -33,7 +34,8 @@ export function getWikiBaseUrl(context = null) {
  * @returns {string} 乾淨的 Slug
  */
 export function generateWikiSlug(hint = '') {
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const timeZone = resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE);
+  const dateStr = getZonedDateString(new Date(), timeZone).replace(/-/g, '');
   const rand = Math.random().toString(36).substring(2, 7);
   
   if (!hint || hint.trim() === '') {

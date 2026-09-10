@@ -291,7 +291,7 @@ export async function commandSystem(message, command, subcommand, context) {
 
   // 取得使用統計
   const botId = context.SHARE_CONTEXT.currentBotId;
-  const stats = await getStats(botId);
+  const stats = await getStats(botId, context);
 
   const agent = {
     MODEL_PROVIDER: chatAgent,

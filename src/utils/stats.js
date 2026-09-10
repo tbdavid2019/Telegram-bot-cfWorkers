@@ -3,7 +3,8 @@
  * 記錄 Bot 使用情況
  */
 
-import { DATABASE } from '../config/env.js';
+import { DATABASE, ENV } from '../config/env.js';
+import { getZonedDateString, resolveUserTimeZone } from './timezone.js';
 
 // KV Keys
 const STATS_USERS_KEY = 'stats:users';           // Set of user IDs
@@ -29,8 +30,9 @@ export async function recordUserActivity(context) {
     const groupsKey = `${STATS_GROUPS_KEY}:${botId}`;
     const totalKey = `${STATS_TOTAL_MESSAGES_KEY}:${botId}`;
     
-    // 取得今日日期 (YYYY-MM-DD)
-    const today = new Date().toISOString().split('T')[0];
+    // 取得今日日期 (依使用者時區精準判定午夜邊界，避免 00:00~08:00 歸屬昨日)
+    const timeZone = resolveUserTimeZone(context?.USER_CONFIG?.USER_TIMEZONE || ENV.USER_CONFIG?.USER_TIMEZONE);
+    const today = getZonedDateString(new Date(), timeZone);
     const dailyKey = `${STATS_DAILY_KEY_PREFIX}${botId}:${today}`;
     
     // 並行執行多個 KV 操作
@@ -49,8 +51,8 @@ export async function recordUserActivity(context) {
     // 3. 增加總訊息數
     promises.push(incrementCounter(totalKey));
     
-    // 4. 增加今日訊息數
-    promises.push(incrementCounter(dailyKey, 86400)); // 24小時後過期
+    // 4. 增加今日訊息數 (設定 48 小時過期，防止因滾動 24h 過早被 purge 並保留歷史跨日比對能力)
+    promises.push(incrementCounter(dailyKey, 172800));
     
     await Promise.all(promises);
   } catch (e) {
@@ -62,15 +64,17 @@ export async function recordUserActivity(context) {
 /**
  * 取得統計資料
  * @param {string} botId - Bot ID
+ * @param {Object} [context] - 上下文對象
  * @returns {Object} 統計資料
  */
-export async function getStats(botId) {
+export async function getStats(botId, context = null) {
   try {
     const usersKey = `${STATS_USERS_KEY}:${botId}`;
     const groupsKey = `${STATS_GROUPS_KEY}:${botId}`;
     const totalKey = `${STATS_TOTAL_MESSAGES_KEY}:${botId}`;
     
-    const today = new Date().toISOString().split('T')[0];
+    const timeZone = resolveUserTimeZone(context?.USER_CONFIG?.USER_TIMEZONE || ENV.USER_CONFIG?.USER_TIMEZONE);
+    const today = getZonedDateString(new Date(), timeZone);
     const dailyKey = `${STATS_DAILY_KEY_PREFIX}${botId}:${today}`;
     
     // 並行取得所有統計資料

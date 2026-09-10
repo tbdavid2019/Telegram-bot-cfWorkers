@@ -6,6 +6,7 @@
 import { commandHandlers } from '../telegram/commands.js';
 import { ENV, CONST, WORKER_ENV } from '../config/env.js';
 import { getChatRoleWithContext } from '../telegram/telegram.js';
+import { resolveUserTimeZone } from '../utils/timezone.js';
 
 /**
  * 檢查用戶對特定指令的權限
@@ -205,7 +206,7 @@ export async function generateCommandSystemPrompt(context) {
         weekday: 'long',
         hour: '2-digit',
         minute: '2-digit',
-        timeZone: 'Asia/Taipei'
+        timeZone: resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE)
     });
     prompt += `\n**當前時間**：${currentDateTime}\n\n`;
 

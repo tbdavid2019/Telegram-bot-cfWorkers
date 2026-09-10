@@ -128,8 +128,9 @@ function formatWeatherInfo(data) {
   `;
 
   const forecastInfo = forecasts.map((day, index) => {
-    const date = new Date(day.date);
-    const dayName = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][date.getDay()];
+    const [y, m, d] = day.date.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    const dayName = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][date.getUTCDay()];
     return `
 ${index === 0 ? '今天' : index === 1 ? '明天' : dayName} (${day.date}):
 天氣狀況：${day.hourly[4].lang_zh[0].value}

@@ -306,8 +306,9 @@ export async function sendHubTask(env, targetIdentifier, taskMessage, options = 
     return `✅ 任務已成功投遞至 A2A888 Hub 給「${target.displayName}」\n• 狀態：${result.state || 'QUEUED'}\n• Task ID: ${taskId}`;
   }
 
-  // 等待對象透過 Inbox 回覆 (預設等待最高 22 秒，適應遠端 LLM 延遲並符合 Cloudflare Workers 連線限制)
-  const timeoutMs = options.timeoutMs || 22000;
+  // 等待對象透過 Inbox 回覆 (預設同步等待最多 10 秒，避免突破 Cloudflare Workers 30 秒 Webhook 連線硬限制)
+  // 若超過 10 秒則轉由背景 waitUntil 繼續追蹤並自動推播
+  const timeoutMs = options.timeoutMs || 10000;
   const startTime = Date.now();
   const pollIntervalMs = 1200;
 

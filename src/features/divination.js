@@ -5,6 +5,8 @@
  */
 
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { ENV } from '../config/env.js';
+import { resolveUserTimeZone, getZonedDateParts } from '../utils/timezone.js';
 
 /**
  * 根據問題關鍵詞智能推導占問目的 (purpose)
@@ -211,7 +213,8 @@ export async function commandTarot(message, command, subcommand, context) {
   }
 
   if (!time_factor) {
-    const nowHour = (new Date().getUTCHours() + 8) % 24;
+    const timeZone = resolveUserTimeZone(context?.USER_CONFIG?.USER_TIMEZONE || ENV?.USER_CONFIG?.USER_TIMEZONE);
+    const nowHour = getZonedDateParts(new Date(), timeZone).hour;
     if (nowHour >= 5 && nowHour < 12) time_factor = 'morning';
     else if (nowHour >= 12 && nowHour < 18) time_factor = 'afternoon';
     else time_factor = 'night';
@@ -723,7 +726,7 @@ export async function commandFengshui(message, command, subcommand, context) {
     zeriYear,
     zeriMonth,
     month: zeriMonth,
-    year: zeriYear || new Date().getFullYear(),
+    year: zeriYear || getZonedDateParts(new Date(), resolveUserTimeZone(context?.USER_CONFIG?.USER_TIMEZONE || ENV?.USER_CONFIG?.USER_TIMEZONE)).year,
     purpose: detectPurpose(input),
     lang: 'zh-tw'
   };

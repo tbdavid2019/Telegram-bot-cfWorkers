@@ -37,6 +37,12 @@ async function sendMessage(message, token, context) {
 }
 
 export async function sendMessageToTelegram(message, token, context) {
+  if (message === undefined || message === null) {
+    message = "";
+  } else if (typeof message !== "string") {
+    message = String(message);
+  }
+
   const chatContext = context;
   const originMessage = message;
   const limit = 4096;

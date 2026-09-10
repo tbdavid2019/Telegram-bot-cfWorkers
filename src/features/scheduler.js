@@ -80,8 +80,10 @@ export async function handleScheduled(event, env, ctx) {
     const tasks = [];
 
     // Check 1: 每日匯總 (Daily Summary)
-    // 預設 6 點，或使用設定值
-    const summaryTime = ENV.USER_CONFIG.DAILY_SUMMARY_TIME || 6;
+    // 支援午夜 0 點 (Hour 0) 觸發，防範 0 || 6 之 JavaScript falsy 陷阱
+    const summaryTime = Number.isInteger(ENV.USER_CONFIG.DAILY_SUMMARY_TIME)
+        ? ENV.USER_CONFIG.DAILY_SUMMARY_TIME
+        : (ENV.USER_CONFIG.DAILY_SUMMARY_TIME ?? 6);
     if (currentHour === summaryTime) {
         console.log(`📅 [Scheduler] Running Daily Summary for hour ${summaryTime}...`);
         tasks.push(runDailySummary(env, botToken, now, timeZone));

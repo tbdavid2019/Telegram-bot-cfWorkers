@@ -6,6 +6,8 @@ import {
     getZonedDayRangeUtc,
     getZonedDayRangeUtcByOffset,
     getZonedWeekRangeUtc,
+    getZonedDateParts,
+    addDaysToLocalDateParts,
     zonedTimeToUtc
 } from '../utils/timezone.js';
 
@@ -122,23 +124,60 @@ async function deleteCalendarEvent(env, eventId) {
 // === 輔助函式 ===
 
 /**
- * 解析自然語言時間 (簡單版)
+ * 解析自然語言時間與日期範圍 (嚴格遵循午夜邊界：結束日涵蓋至 23:59:59)
  */
-function parseNaturalTime(text) {
+export function parseNaturalTime(text = '') {
+    const raw = String(text || '').trim();
     const nowUtc = new Date();
     const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
+    const { year: currentYear } = getZonedDateParts(nowUtc, timeZone);
     const todayRange = getZonedDayRangeUtc(nowUtc, timeZone);
 
-    // 「今天」
-    if (text.includes('今天') || text.includes('今日')) {
+    // 1. 檢查自訂日期區間，如 "9/1 ~ 9/9", "9/1-9/9", "9月1日到9月9日", "2026/09/01 ~ 2026/09/09"
+    // 【核心邏輯】：當用戶說「9/1 ~ 9/9」，人類直覺必定包含 9/9 整天（直到 23:59:59）。
+    // Google Calendar API 的 timeMax 為開區間 (event.start < timeMax)，
+    // 因此結束點必須取次日 00:00:00 (即 9/10 00:00:00)，確保 9/9 23:59:59 的事件完整涵蓋！
+    const rangeMatch = raw.match(/(?:(\d{4})[-/.年])?(\d{1,2})[-/.月](\d{1,2})日?\s*(?:[~到至\-–—]+)\s*(?:(\d{4})[-/.年])?(\d{1,2})[-/.月](\d{1,2})日?/);
+    if (rangeMatch) {
+        const startYear = parseInt(rangeMatch[1]) || currentYear;
+        const startMonth = parseInt(rangeMatch[2]);
+        const startDay = parseInt(rangeMatch[3]);
+
+        const endYear = parseInt(rangeMatch[4]) || startYear;
+        const endMonth = parseInt(rangeMatch[5]);
+        const endDay = parseInt(rangeMatch[6]);
+
+        const startUtc = zonedTimeToUtc(startYear, startMonth, startDay, 0, 0, 0, timeZone);
+        const nextDayParts = addDaysToLocalDateParts(endYear, endMonth, endDay, 1);
+        const endUtc = zonedTimeToUtc(nextDayParts.year, nextDayParts.month, nextDayParts.day, 0, 0, 0, timeZone);
+
+        return { start: startUtc, end: endUtc };
+    }
+
+    // 2. 檢查單一指定日期，如 "9/9", "9月9日", "2026-09-09" (涵蓋該日 00:00:00 ~ 23:59:59)
+    const singleMatch = raw.match(/^(?:(\d{4})[-/.年])?(\d{1,2})[-/.月](\d{1,2})日?$/);
+    if (singleMatch) {
+        const y = parseInt(singleMatch[1]) || currentYear;
+        const m = parseInt(singleMatch[2]);
+        const d = parseInt(singleMatch[3]);
+
+        const startUtc = zonedTimeToUtc(y, m, d, 0, 0, 0, timeZone);
+        const nextDayParts = addDaysToLocalDateParts(y, m, d, 1);
+        const endUtc = zonedTimeToUtc(nextDayParts.year, nextDayParts.month, nextDayParts.day, 0, 0, 0, timeZone);
+
+        return { start: startUtc, end: endUtc };
+    }
+
+    // 「今天」/「今日」 (00:00:00 ~ 23:59:59)
+    if (raw.includes('今天') || raw.includes('今日')) {
         return {
             start: todayRange.startUtc,
             end: todayRange.endUtc
         };
     }
 
-    // 「明天」
-    if (text.includes('明天') || text.includes('明日')) {
+    // 「明天」/「明日」 (00:00:00 ~ 23:59:59)
+    if (raw.includes('明天') || raw.includes('明日')) {
         const tomorrowRange = getZonedDayRangeUtcByOffset(nowUtc, timeZone, 1);
         return {
             start: tomorrowRange.startUtc,
@@ -146,15 +185,24 @@ function parseNaturalTime(text) {
         };
     }
 
-    // 「本週」
-    if (text.includes('本週') || text.includes('這週')) {
+    // 「後天」 (00:00:00 ~ 23:59:59)
+    if (raw.includes('後天')) {
+        const afterTomorrowRange = getZonedDayRangeUtcByOffset(nowUtc, timeZone, 2);
+        return {
+            start: afterTomorrowRange.startUtc,
+            end: afterTomorrowRange.endUtc
+        };
+    }
+
+    // 「本週」/「這週」
+    if (raw.includes('本週') || raw.includes('這週')) {
         const weekRange = getZonedWeekRangeUtc(nowUtc, timeZone);
         return { start: weekRange.startUtc, end: weekRange.endUtc };
     }
 
-    // 預設：今天到未來 7 天
+    // 預設：今天到未來 7 天 (包含第 7 天當天至 23:59:59，故結束點應取 endUtc)
     const futureRange = getZonedDayRangeUtcByOffset(nowUtc, timeZone, 7);
-    return { start: todayRange.startUtc, end: futureRange.startUtc };
+    return { start: todayRange.startUtc, end: futureRange.endUtc };
 }
 
 /**
@@ -185,11 +233,13 @@ export async function commandQueryCalendar(message, command, subcommand, context
 
         let response = `📅 **家庭行程**\n\n`;
         for (const event of events) {
-            const start = event.start.dateTime || event.start.date;
-            const startDate = new Date(start);
             const timeStr = event.start.dateTime
-                ? startDate.toLocaleString('zh-TW', { timeZone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : startDate.toLocaleDateString('zh-TW', { timeZone, month: 'numeric', day: 'numeric' });
+                ? new Date(event.start.dateTime).toLocaleString('zh-TW', { timeZone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : (() => {
+                    // 全天活動 (start.date 通常為 "YYYY-MM-DD")，直接解析月日，避免西半球時區偏移至前一日
+                    const parts = (event.start.date || '').split('-').map(Number);
+                    return parts.length >= 3 ? `${parts[1]}月${parts[2]}日 (全天)` : `${event.start.date} (全天)`;
+                })();
 
             response += `**${timeStr}**\n`;
             response += `📌 ${event.summary || '(無標題)'}\n`;

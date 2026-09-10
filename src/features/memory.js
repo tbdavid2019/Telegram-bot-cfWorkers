@@ -1,12 +1,13 @@
 import { ENV, DATABASE, WORKER_ENV } from '../config/env.js';
+import { getZonedDateString, resolveUserTimeZone } from '../utils/timezone.js';
 
 const MEMORY_GLOBAL_KEY = 'memory:global';
 const MEMORY_USER_PREFIX = 'memory:user:';
 
-const DEFAULT_GLOBAL_MEMORY = `# 全域知識庫
+const getDefaultGlobalMemory = () => `# 全域知識庫
 
 ## 最後更新
-${new Date().toISOString().split('T')[0]}
+${getZonedDateString(new Date(), resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE))}
 
 ## 家庭資訊
 （尚無記錄）
@@ -21,7 +22,7 @@ ${new Date().toISOString().split('T')[0]}
 const DEFAULT_USER_MEMORY_TEMPLATE = (userId) => `# 用戶記憶 - User ${userId}
 
 ## 最後更新
-${new Date().toISOString().split('T')[0]}
+${getZonedDateString(new Date(), resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE))}
 
 ## 身份與角色
 （尚無記錄）
@@ -126,7 +127,7 @@ export async function getGlobalMemory(env = null) {
     content = await getFromKV(MEMORY_GLOBAL_KEY);
   }
 
-  return content || DEFAULT_GLOBAL_MEMORY;
+  return content || getDefaultGlobalMemory();
 }
 
 function sanitizeUserId(userId) {
@@ -229,7 +230,8 @@ export async function updateMemoryFromConversation(userId, userMessage, assistan
     return false;
   }
 
-  const timestamp = new Date().toISOString().split('T')[0];
+  const timeZone = resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE);
+  const timestamp = getZonedDateString(new Date(), timeZone);
   
   const updateSection = `
 

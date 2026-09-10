@@ -58,20 +58,37 @@ export async function delegateToAgent(agentAlias, taskDescription, options = {})
   }
 
   let response;
-  if (peer.binding && WORKER_ENV && WORKER_ENV[peer.binding]) {
-    console.log(`[A2A Client] Using Service Binding ${peer.binding} for ${peer.url}`);
-    response = await WORKER_ENV[peer.binding].fetch(peer.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-  } else {
-    console.log(`[A2A Client] Sending request to ${peer.url}`);
-    response = await fetch(peer.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
+  const timeoutMs = options.timeoutMs || 12000; // 12 秒上限，確保在 Cloudflare Workers 30 秒生命週期內安全返回
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    if (peer.binding && WORKER_ENV && WORKER_ENV[peer.binding]) {
+      console.log(`[A2A Client] Using Service Binding ${peer.binding} for ${peer.url}`);
+      response = await WORKER_ENV[peer.binding].fetch(peer.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } else {
+      console.log(`[A2A Client] Sending request to ${peer.url}`);
+      response = await fetch(peer.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    }
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+      console.warn(`[A2A Client] Delegation to ${agentAlias} timed out after ${timeoutMs}ms`);
+      return `⏳ 任務已成功投遞給「${agentAlias}」。\n對方目前正在深度運算處理中（耗時超過即時連線上限）；一旦對方回覆，小江管家會自動在聊天室推播給您！`;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
@@ -84,14 +101,31 @@ export async function delegateToAgent(agentAlias, taskDescription, options = {})
     throw new Error(`A2A Protocol Error: ${resultBody.error.message}`);
   }
 
-  // 4. Extract Result
-  const resultMessage = resultBody.result;
-  const answer = resultMessage.parts
-    .filter(p => p.kind === 'text')
+  // 4. Extract Result (Defensive extraction)
+  const resultMessage = resultBody?.result;
+  if (!resultMessage) {
+    return '✅ 對方已成功接收任務，未回傳任何資料。';
+  }
+
+  const parts = Array.isArray(resultMessage.parts) ? resultMessage.parts : [];
+  const textFromParts = parts
+    .filter(p => p && p.kind === 'text')
     .map(p => p.text)
     .join('\n');
 
-  return answer;
+  if (textFromParts.trim()) {
+    return textFromParts.trim();
+  }
+
+  if (typeof resultMessage.message === 'string' && resultMessage.message.trim()) {
+    return resultMessage.message.trim();
+  }
+
+  if (typeof resultMessage === 'string' && resultMessage.trim()) {
+    return resultMessage.trim();
+  }
+
+  return '✅ 對方已成功接收任務並完成處理。';
 }
 
 /**

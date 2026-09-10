@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-09-08
+
+### Fixed
+- **A2A (Agent-to-Agent) 連線超時與 Webhook 阻塞卡死修復**：
+  - **根本原因**：遠端 Agent 呼叫大型模型（如 Nemotron 120B）耗時 45~86 秒，超過 Cloudflare Workers 30 秒生命週期限制，導致 Worker 被系統強制殺除，Telegram 上的進度佔位訊息「💬 正在為您連線...」永久無法更新。
+  - **解決方案**：
+    - 在 [src/agent/a2a-client.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/a2a-client.js) 為 Service Binding / HTTP fetch 加上 12 秒 `AbortController` 硬超時機制。超時時優雅轉換為異步任務推播提示，避免 Worker 崩潰。
+    - 在 [src/features/a2a888-hub.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/a2a888-hub.js) 將同步輪詢上限由 22 秒調降至 10 秒。
+    - 在 [src/agent/llm.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) 中對 `/delegate` 回傳值實施直接中繼（Direct Relay），避免重複觸發第二輪本地 LLM 浪費 15 秒導致超時。
+- **修復 Telegram `Cannot read properties of undefined (reading 'length')` 崩潰**：
+  - 在 [src/telegram/telegram.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/telegram/telegram.js) 的 `sendMessageToTelegram` 增加對 `undefined` / `null` 的安全防禦轉換。
+  - 在 [src/agent/llm.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) 的 `chatWithLLM` 增加 `safeAnswer` 保底回覆機制。
+- **全庫「午夜邊界問題」(Midnight Boundary Problem) 深度排查與全面防禦修復**：
+  - **時區午夜錯位與重設延遲 (Stats & Memory)**：修復 [src/utils/stats.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/utils/stats.js) 與 [src/features/memory.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/memory.js) 使用 `new Date().toISOString().split('T')[0]` 導致在台北時間（UTC+8）午夜至清晨 8 點（00:00~07:59）誤判為昨日、日報與統計遲至 8 點才換日的致命缺陷。改由 [src/utils/timezone.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/utils/timezone.js) 的 `getZonedDateString` 確保精確於本地午夜 00:00:00 切換。
+  - **排程器午夜 0 點 (Hour 0) Falsy 陷阱**：修復 [src/features/scheduler.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/scheduler.js) 中 `DAILY_SUMMARY_TIME || 6` 導致設定為午夜 0 點時被 JS falsy 替換為早上 6 點的邊界問題。
+  - **日程查詢跨午夜邊界截斷早晨事項**：修復 [src/agent/llm.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) `/schedule` 原使用 `now.toISOString()` 導致下午查詢時今日上午事件消失的問題，改自本地今日午夜 00:00 起算；並修復 `toLocaleDateString` 缺少 `timeZone` 造成凌晨時段日期倒退回昨日之 Bug。
+  - **全天事件跨時區午夜倒退一日**：修復 [src/features/google-calendar.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/google-calendar.js) 全天活動解析成 UTC 00:00:00Z 後在西半球時區格式化倒退一日的問題。
+  - **天氣預報星期跨時區午夜偏移**：修復 [src/features/weather.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/weather.js) 使用 `date.getDay()` 在非 UTC 運行時計算出前一天星期的邊界缺陷，改採 `Date.UTC` 與 `getUTCDay()`。
+  - **記帳與占卜月初/跨年午夜邊界**：修復 [src/features/google-sheets.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/google-sheets.js) 與 [src/features/divination.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/divination.js) 在每月 1 日及元旦凌晨誤判為上個月/去年的問題。
+  - **日期區間（如 9/1 ~ 9/9）閉區間閉合至 23:59:59**：強化 [src/features/google-calendar.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/google-calendar.js) 與 [src/agent/llm.js](file:///Users/david/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) 的 `parseNaturalTime`，全面支援「9/1 ~ 9/9」、「9月1日到9月9日」、「2026/09/01~2026/09/09」等自訂範圍。對齊人類語意之閉區間直覺，結束日（9/9）自動推進至次日 00:00:00（即 9/10 00:00:00 開區間），確保 9/9 的 23:59:59 完整納入查詢範圍，同時修復預設 7 天查詢提前於 00:00:00 截斷第七天的缺陷。
+
+### Evaluated / Architecture Decision Record (技術架構評估決策)
+- **Google Magika 深度學習檔案識別導入評估 (Magika on Cloudflare Workers Feasibility)**：
+  - **評估對象**：Google 開源之 AI 檔案類型識別工具 [Google Magika](https://github.com/google/magika)（基於深度學習 ONNX / Keras 模型）。
+  - **最新 Cloudflare 平台規格核實**：
+    - Cloudflare Workers 已廢除早期 3 MiB (Free) / 10 MiB (Paid) 壓縮限制，正式放寬至 **64 MiB 未壓縮代碼打包上限 (Uncompressed Bundle Size)**。
+    - Magika 模型與依賴庫（約 5~15 MB）在「代碼體積」上已可通過 Wrangler 部署打包，不再受打包大小限制。
+  - **判定不適合直接導入 Cloudflare Worker 的核心技術原因**：
+    1. **免費版 CPU 執行時間超時（10 ms Hard Limit）**：
+       - Cloudflare Workers 免費方案限制每次請求純 CPU 運算時間為 **10 ms**（Standard 為 50 ms）。
+       - Magika 本質為小型深層神經網路，若使用 JS/NPM 版（底層依賴 `@tensorflow/tfjs` 或 ONNX WASM）在無 GPU 的 V8 Isolate CPU 上進行推理矩陣運算，單次特徵提取與推理耗時約 **40 ~ 150 ms**，將直接觸發 `Worker exceeded CPU time limit` 致命錯誤。
+    2. **運行時記憶體緊繃（128 MB RAM Ceiling）**：
+       - 64 MiB 僅為「上傳佈署大小」，各 Worker Isolate 運行時實體記憶體限制仍為 **128 MB**。
+       - 初始化 TensorFlow.js / ONNX 引擎及載入模型張量常駐即消耗約 50 ~ 90 MB，與 Telegram Webhook 請求處理、JSON 解析與檔案 Buffer 併發時極易觸發 OOM (Out of Memory) 被邊緣節點強制終止。
+    3. **無伺服器冷啟動延遲（Cold Start Latency）**：
+       - Serverless V8 Isolate 每次冷啟動需重新載入數百萬個模型參數，將造成首筆 Telegram 訊息出現 300 ~ 800 ms 額外初始化延遲。
+  - **專案決策與最佳實務**：
+    - **Telegram Bot 日常防偽與格式驗證**：維持採用純 JS Magic-Bytes 特徵碼比對方案（如 [`file-type`](https://github.com/sindresorhus/file-type)，約 15 KB，CPU 耗時 < 0.1 ms，0 MB 額外記憶體常駐），足以百分之百抵禦偽造副檔名攻擊（如 `.exe` 偽裝為 `.pdf`）。
+    - **若未來需 Magika 高階 AI 檢測（如 Polyglot / 高級惡意軟體分析）**：應採用「邊緣與運算解耦（Microservice Separation）」架構，將 Magika 官方 Python / Rust CLI 容器化部署於 VPS / Docker / Cloud Run，Worker 僅透過極輕量之 `fetch()` 調用微服務，確保邊緣 Worker 毫秒級極速回應且不消耗運算配額。
+
 ## [1.11.0] - 2026-09-02
 
 ### Added

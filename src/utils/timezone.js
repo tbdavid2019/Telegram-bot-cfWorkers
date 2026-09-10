@@ -3,7 +3,7 @@ const DEFAULT_TIME_ZONE = "Asia/Taipei";
 function buildZonedDateParts(date, timeZone) {
   const dtf = new Intl.DateTimeFormat("en-US", {
     timeZone,
-    hour12: false,
+    hourCycle: "h23",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -22,7 +22,7 @@ function buildZonedDateParts(date, timeZone) {
     year: Number(map.year),
     month: Number(map.month),
     day: Number(map.day),
-    hour: Number(map.hour),
+    hour: Number(map.hour) % 24,
     minute: Number(map.minute),
     second: Number(map.second)
   };
@@ -52,7 +52,7 @@ function zonedTimeToUtcInternal(year, month, day, hour, minute, second, timeZone
   return new Date(utc);
 }
 
-function addDaysToLocalDateParts(year, month, day, days) {
+export function addDaysToLocalDateParts(year, month, day, days) {
   const base = new Date(Date.UTC(year, month - 1, day));
   base.setUTCDate(base.getUTCDate() + days);
   return {
@@ -103,6 +103,11 @@ export function getZonedWeekRangeUtc(dateUtc, timeZone) {
 
 export function getZonedDateParts(dateUtc, timeZone) {
   return buildZonedDateParts(dateUtc, timeZone);
+}
+
+export function getZonedDateString(dateUtc = new Date(), timeZone = DEFAULT_TIME_ZONE) {
+  const parts = buildZonedDateParts(dateUtc, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
 export function zonedTimeToUtc(year, month, day, hour, minute, second, timeZone) {

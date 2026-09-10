@@ -4,7 +4,7 @@ import { loadChatLLM } from './agents.js';
 
 // 從環境變數引入
 import { ENV, DATABASE } from '../config/env.js';
-import { resolveUserTimeZone, zonedTimeToUtc } from '../utils/timezone.js';
+import { resolveUserTimeZone, zonedTimeToUtc, getZonedDateString, getZonedDayRangeUtc } from '../utils/timezone.js';
 
 /**
  * Token 計數器（簡單版本，以字元數計算）
@@ -16,7 +16,8 @@ function tokensCounter() {
 }
 
 function buildMemoryUpdatePrompt(userId, userMessage, assistantResponse, currentUserMemory, currentGlobalMemory) {
-  const today = new Date().toISOString().split('T')[0];
+  const timeZone = resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE);
+  const today = getZonedDateString(new Date(), timeZone);
   return `You are a memory editor for a Telegram bot.
 Update both user memory and global memory based on the latest conversation.
 
@@ -351,28 +352,41 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
 
           } else if (command === '/schedule') {
             console.log('🤖 [Tool Calling] Fetching schedule data...');
-            const { listCalendarEvents } = await import('../features/google-calendar.js');
+            const { listCalendarEvents, parseNaturalTime } = await import('../features/google-calendar.js');
 
-            // 設定時間範圍：從今天開始，查詢未來30天
             const now = new Date();
-            const timeMin = now.toISOString();
-            const futureDate = new Date(now);
-            futureDate.setDate(futureDate.getDate() + 30);
-            const timeMax = futureDate.toISOString();
+            const timeZone = resolveUserTimeZone(ENV.USER_CONFIG.USER_TIMEZONE);
+            let timeMin, timeMax;
+            let rangeDesc = '未來30天';
+
+            if (args && args.trim()) {
+              const range = parseNaturalTime(args.trim());
+              timeMin = range.start.toISOString();
+              timeMax = range.end.toISOString();
+              rangeDesc = args.trim();
+            } else {
+              // 預設從今日午夜 00:00:00 開始，查詢未來30天，避免下午查詢截斷早晨事項
+              const todayRange = getZonedDayRangeUtc(now, timeZone);
+              timeMin = todayRange.startUtc.toISOString();
+              const futureDate = new Date(todayRange.startUtc);
+              futureDate.setDate(futureDate.getDate() + 30);
+              timeMax = futureDate.toISOString();
+            }
 
             const events = await listCalendarEvents(context.env, timeMin, timeMax);
 
-            // 加入當前時間資訊
+            // 加入當前時間資訊 (明確指定時區，避免午夜 00:00~08:00 顯示昨日)
             const currentDate = now.toLocaleDateString('zh-TW', {
               year: 'numeric',
               month: 'long',
               day: 'numeric',
-              weekday: 'long'
+              weekday: 'long',
+              timeZone
             });
 
             dataText = `📅 家庭行程\n`;
             dataText += `📆 當前時間：${currentDate}\n`;
-            dataText += `🔍 查詢範圍：未來30天 (共 ${events.length} 筆)\n\n`;
+            dataText += `🔍 查詢範圍：${rangeDesc} (共 ${events.length} 筆)\n\n`;
 
             for (const event of events) {
               dataText += `${event.start} - ${event.summary}\n`;
@@ -388,8 +402,10 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
             const params = JSON.parse(args);
             console.log('🤖 [Tool Calling] Params:', JSON.stringify(params));
 
-            // 手動解析日期
-            const [year, month, day] = params.date.split('/').map(Number);
+            // 手動解析日期 (相容 YYYY/MM/DD 與 YYYY-MM-DD)
+            const [year, month, day] = params.date.includes('/')
+              ? params.date.split('/').map(Number)
+              : params.date.split('-').map(Number);
 
             // 構建全天活動格式（使用 date 而不是 dateTime）
             const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -559,15 +575,16 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       // 避免二次調用本地 LLM 浪費 15~20 秒推理時間並導致 Cloudflare Workers 30 秒執行超時截斷
       if (toolCommands.length === 1 && toolCommands[0].command === '/delegate') {
         const delegateRes = toolResults[0];
+        const agentName = toolCommands[0].args.trim().split(' ')[0].replace(/^["'](.*)["']$/, '$1') || '協作代理人';
+
         if (delegateRes && !delegateRes.error && delegateRes.data) {
           const raw = delegateRes.data;
-          const agentName = toolCommands[0].args.trim().split(' ')[0].replace(/^["'](.*)["']$/, '$1') || '協作代理人';
 
           if (raw.includes('已即時回覆如下]\n')) {
             const rawReply = raw.split('已即時回覆如下]\n')[1]?.split('\n\n⚠️【重要指示】')[0] || '';
             if (rawReply.trim()) {
               console.log(`🤖 [Tool Calling] Direct relay of /delegate response from ${agentName} (skipping redundant 2nd LLM round)`);
-              if (rawReply.trim().startsWith('⏳ 任務已成功投遞')) {
+              if (rawReply.trim().startsWith('⏳ 任務已成功投遞') || rawReply.trim().startsWith('✅ 對方已成功接收')) {
                 answer = rawReply.trim();
               } else {
                 answer = `🌸 *【來自「${agentName}」的即時回覆】*：\n\n${rawReply.trim()}`;
@@ -575,6 +592,10 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
               break;
             }
           }
+        } else if (delegateRes && delegateRes.error) {
+          console.warn(`🤖 [Tool Calling] Direct relay of /delegate error for ${agentName}: ${delegateRes.error}`);
+          answer = `❌ 連線「${agentName}」失敗：${delegateRes.error}`;
+          break;
         }
       }
 
@@ -738,9 +759,10 @@ export async function chatWithLLM(params, context, modifier) {
     context.CURRENT_CHAT_CONTEXT.parse_mode = parseMode;
 
     // ASR UX優化: 如果有語音轉錄且設定為顯示，整合到 LLM 回覆中
-    let finalAnswer = answer;
+    const safeAnswer = (answer && typeof answer === 'string') ? answer : (answer != null ? String(answer) : '（無回覆內容）');
+    let finalAnswer = safeAnswer;
     if (context.voiceTranscription && ENV.USER_CONFIG.SHOW_TRANSCRIPTION) {
-      finalAnswer = `🎤 ${context.voiceTranscription}\n\n${answer}`;
+      finalAnswer = `🎤 ${context.voiceTranscription}\n\n${safeAnswer}`;
     }
 
     // 發送最終文字回覆 (包含 Stream 模式的最後一次更新)

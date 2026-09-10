@@ -1,5 +1,6 @@
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
 import { ENV } from '../config/env.js';
+import { resolveUserTimeZone, getZonedDateParts } from '../utils/timezone.js';
 
 // 全域快取
 let GOOGLE_SHEETS_ACCESS_TOKEN = null;
@@ -271,11 +272,10 @@ function parseAmount(str) {
 function processBudgetQuery(data, query) {
     const q = (query || '').toLowerCase();
 
-    // 1. 解析時間範圍
+    // 1. 解析時間範圍 (依使用者時區解析當前年月，避免月末/月初/元旦午夜邊界計算飄移)
     let targetMonths = [];
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
+    const timeZone = resolveUserTimeZone(ENV.USER_CONFIG?.USER_TIMEZONE);
+    const { year: currentYear, month: currentMonth } = getZonedDateParts(new Date(), timeZone);
 
     // 檢查是否有範圍查詢
     // 支持格式: "9月到11月", "9-11月", "2025年9月到11月"
