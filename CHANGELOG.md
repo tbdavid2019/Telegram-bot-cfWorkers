@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-11-03
+## [1.12.0] - 2026-11-03
 
 ### Security
 - **Dependabot 21 項安全漏洞全面修復 (Dependency Security Upgrades)**：
@@ -32,7 +32,7 @@ All notable changes to this project will be documented in this file.
     - 各環境變數數量大幅降低（`aws`: 61 $\rightarrow$ 35, `chatgpt`: 67 $\rightarrow$ 36, `gemini`: 36 $\rightarrow$ 19, `tgbot4`: 35 $\rightarrow$ 19），精簡幅度達 43%~47%，徹底擺脫 64 個上限限制。
     - 四大 Worker 環境（`tgbotaws`, `tgbotchatgpt`, `tgbotgemini`, `tgbot444`）全數部署上線，且正式線上健康檢查均為 HTTP 200 正常運作。
 
-## [Unreleased] - 2026-09-08
+## [1.11.1] - 2026-09-08
 
 ### Fixed
 - **A2A (Agent-to-Agent) 連線超時與 Webhook 阻塞卡死修復**：
