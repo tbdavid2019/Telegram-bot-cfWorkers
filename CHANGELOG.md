@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-11-03
+
+### Security
+- **Dependabot 21 項安全漏洞全面修復 (Dependency Security Upgrades)**：
+  - **`undici` 升級至 `7.30.1`**：修復 CVE-2026-109829 相關之 Cache Poisoning, TLS certificate validation bypass, DoS 與 Cross-User Information Disclosure 等多項高/中危險性漏洞。
+  - **`sharp` 升級至 `0.35.5`**：修復底層 librsvg 與 libheif 依賴之重大安全性漏洞（CVE-2026-96889, GHSA-g89c-p67h-r497, GHSA-2jg2-4ch7-h545）。
+  - **`uuid` 升級至 `11.1.1`**：修復 v3/v5/v6 在提供緩衝區時缺少 bounds check 導致的緩衝區越界漏洞。
+  - **`esbuild` 升級至 `0.25.12`**：修復開發伺服器預設 CORS 設定導致跨站讀取回應內容的漏洞（GHSA-67mh-4wv8-2f99）。
+  - **驗證**：通過 `pnpm audit`（0 漏洞）與 98 項自動化單元測試全數通過，GitHub Dependabot 全部 21 項安全警報全數自動結案標記為 Fixed。
+
+### Refactored & Changed
+- **Cloudflare Workers 環境變數大掃除與上限危機解除 (Configuration Overhaul & Variable Cleanup)**：
+  - **背景**：Cloudflare Workers Free 計畫限制單一 Worker 最多 64 個環境變數（code: 10055）。因歷史累積變數達 67 個，導致 `tgbotchatgpt` 部署遭遇上限中斷。
+  - **清除歷史殘留與無用敏感 Token**：
+    - 徹底移除 `CLOUDFLARE_ACCOUNT_ID` 與 `CLOUDFLARE_TOKEN`：全專案已完全改用原生 `env.AI` binding 存取 Workers AI，移除舊版 REST API 殘留之明文 Token，大幅提升設定安全性。
+    - 移除全專案無任何 Adapter 支援的 `XIAOMI_API_KEY`。
+    - 移除未使用的 `BEDROCK_API_KEY`（Bedrock 已統一走 OpenAI 相容協定並讀取 `OPENAI_API_KEY`）。
+    - 移除全環境設為空字串的 `TTS_API_KEY = ""`（代碼本身在為空時會自動 fallback 使用 `GROQ_API_KEY`）。
+    - 移除與代碼預設值完全相同的 `A2A888_HUB_URL`（代碼預設即為 `https://a2a.david888.com`）。
+  - **精簡與程式碼預設值完全重複之靜態變數**：
+    - 核心參數：`MAX_REACT_ROUNDS` (10), `LANGUAGE` (zh-TW), `CHAT_COMPLETE_API_TIMEOUT`, `GROUP_CHAT_BOT_ENABLE`, `GROUP_CHAT_BOT_SHARE_MODE`。
+    - 語音 ASR / TTS：`ASR_API_BASE`, `ASR_MODEL`, `ASR_LANGUAGE`, `TTS_API_BASE`, `TTS_MODEL`, `TTS_VOICE`, `SHOW_TRANSCRIPTION`。
+    - Workers AI & 記憶：`WORKERS_CHAT_MODEL`, `WORKERS_AI_EXTRA_PARAMS`, `WORKERS_IMAGE_MODEL`, `MEMORY_AUTO_SAVE`。
+    - 圖片生成：移除 Gemini 生圖模式下無效的 DALL-E 參數（`DALL_E_MODEL`, `DALL_E_IMAGE_STYLE`, `OPENAI_IMAGE_API_BASE`）。
+  - **設定修正 (Bug Fix)**：
+    - 修復 `tgbotchatgpt` 的 `LLM_PROFILES` 中 `openai` 模型的 `apiKeyEnv` 原誤指未宣告之 `OPENAI_API_KEY2`，已修正指向其真實存在的 `OPENAI_API_KEY`。
+  - **效益與部署成果**：
+    - 各環境變數數量大幅降低（`aws`: 61 $\rightarrow$ 35, `chatgpt`: 67 $\rightarrow$ 36, `gemini`: 36 $\rightarrow$ 19, `tgbot4`: 35 $\rightarrow$ 19），精簡幅度達 43%~47%，徹底擺脫 64 個上限限制。
+    - 四大 Worker 環境（`tgbotaws`, `tgbotchatgpt`, `tgbotgemini`, `tgbot444`）全數部署上線，且正式線上健康檢查均為 HTTP 200 正常運作。
+
 ## [Unreleased] - 2026-09-08
 
 ### Fixed
