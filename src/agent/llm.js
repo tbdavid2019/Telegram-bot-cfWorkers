@@ -210,6 +210,8 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     const maxRounds = Math.max(1, Number(context?.USER_CONFIG?.MAX_REACT_ROUNDS || ENV?.USER_CONFIG?.MAX_REACT_ROUNDS || ENV?.MAX_REACT_ROUNDS || 10));
     let currentRound = 0;
     const executedToolCounts = new Map();
+    const reactStartTime = Date.now();
+    const MAX_REACT_WALL_TIME_MS = 22000; // 保留 8 秒執行最終結構化回應與 Telegram 發送，杜絕 Cloudflare 30s 逾時強制殺除
 
     const baseTools = [
       '/wiki', '/wikiread',
@@ -607,6 +609,17 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       }
 
       currentRound++;
+
+      if (Date.now() - reactStartTime > MAX_REACT_WALL_TIME_MS) {
+        console.warn(`⏱️ [Tool Calling] Reached max ReAct wall-clock time limit (${MAX_REACT_WALL_TIME_MS}ms). Requesting final response...`);
+        history.push({
+          role: "system",
+          content: `⚠️ 已達單次執行時間預算上限。請直接根據目前已知的所有資訊，給出最終完整的結構化回答，切勿再輸出任何 [CALL:...] 標記。`
+        });
+        answer = await llm(llmParams, context, onStream);
+        answer = removeCommandMarkers(answer);
+        break;
+      }
 
       if (currentRound < maxRounds) {
         console.log(`🤖 [Tool Calling] Calling LLM again with tool results (Round ${currentRound + 1}/${maxRounds})...`);

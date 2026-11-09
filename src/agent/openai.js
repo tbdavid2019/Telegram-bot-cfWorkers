@@ -146,9 +146,12 @@ export async function renderOpenAIMessage(item) {
 
 // ========== Chat Completions ==========
 
-export async function requestCompletionsFromOpenAI(params, context, onStream, profileOverride = null) {
+export async function requestCompletionsFromOpenAI(params, context, onStream, profileOverride = null, visitedProfiles = new Set()) {
   const { message, images, prompt, history } = params;
   const profile = profileOverride || getActiveLLMProfile(context);
+  const profileKey = profileOverride?._key || profile?.name || 'current';
+  visitedProfiles.add(profileKey);
+
   const apiBase = (profile && profile.apiBase) ? profile.apiBase : getOpenAIApiBase(context);
   const apiKey = (profile ? getProfileApiKey(profile, context) : null) || openAIKeyFromContext(context);
   const model = (!profileOverride && context?.USER_CONFIG?.CURRENT_LLM_MODEL)
@@ -176,12 +179,15 @@ export async function requestCompletionsFromOpenAI(params, context, onStream, pr
   try {
     return await requestChatCompletions(url, header, body, context, onStream);
   } catch (error) {
-    if (profile?.fallbackProfile) {
+    const fallbackKey = profile?.fallbackProfile;
+    if (fallbackKey && !visitedProfiles.has(fallbackKey)) {
       const allProfiles = getAllLLMProfiles(context);
-      const fallbackProf = allProfiles[profile.fallbackProfile];
+      const fallbackProf = allProfiles[fallbackKey];
       if (fallbackProf && fallbackProf !== profile) {
-        console.warn(`[LLM Fallback] Profile "${profile.name || 'Primary'}" failed (${error.message}). Falling back to "${fallbackProf.name || profile.fallbackProfile}"...`);
-        return requestCompletionsFromOpenAI(params, context, onStream, fallbackProf);
+        visitedProfiles.add(fallbackKey);
+        const wrappedFallback = { ...fallbackProf, _key: fallbackKey };
+        console.warn(`[LLM Fallback] Profile "${profile.name || 'Primary'}" failed (${error.message}). Falling back to "${fallbackProf.name || fallbackKey}"...`);
+        return requestCompletionsFromOpenAI(params, context, onStream, wrappedFallback, visitedProfiles);
       }
     }
     throw error;

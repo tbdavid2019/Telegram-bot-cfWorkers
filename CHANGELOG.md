@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [1.13.0] - 2026-11-09
 
 ### Fixed
+- **雙獨立 Code Review (Codex + OpenCode) 交叉審查 4 項重要缺陷全面修復**：
+  - **`removeCommandMarkers` 正則表達式末尾錨定修復**：清理未閉合 `[SUGGEST:...` 與 `[CALL:...` 標記時加入 `$` 結尾錨定，徹底杜絕正文中合法的 Markdown 連結 `[標題](url)` 或中括號 `arr[0]` 遭跨行貪婪誤刪。
+  - **`fallbackProfile` 備援遞迴循環參照防禦**：在 [src/agent/openai.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/openai.js) 的 `requestCompletionsFromOpenAI` 引入 `visitedProfiles` 集合，防止 Profile 間出現環狀備援（A -> B -> A）時引發無限遞迴爆棧（Stack Overflow）崩潰。
+  - **`sendMessageToTelegram` 純文字降級守衛**：在 [src/telegram/telegram.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/telegram/telegram.js) 限制僅在原請求帶有富文本格式且收到 HTTP 400 實體解析錯誤時才降級重發，避免在遇到 Telegram 429（頻率限制）或 403（封鎖）時盲目重複發送造成冷卻期延長。
+  - **ReAct 多輪工具循環 Wall-Clock 超時熔斷防護**：在 [src/agent/llm.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) 設置 22 秒 Wall-Clock 執行時間預算，保留足夠緩衝進行 Final Answer 生成與 Telegram 發送，杜絕 Cloudflare 30 秒生命週期強制殺進程。
 - **Cloudflare Workers 30 秒逾時中斷與串流 `[SUGGEST:` 殘留全面修復 (ReAct Timeout & Stream Cleanup)**：
   - **根本原因**：
     1. `aiurl` 上的 `antigravity/gemini-3.8-flash` 預設開啟深度思考模式，每輪思考生成多達 855 個 reasoning tokens，耗時長達 12.6 秒。在多輪工具調用（如查詢天氣 `/wt`、股票等）時，兩輪推理累計耗時突破 30 秒，直接觸發 Cloudflare Workers 30 秒強制殺除（Telegram Webhook 記錄 `Read timeout expired`）。

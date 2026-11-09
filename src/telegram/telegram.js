@@ -46,6 +46,7 @@ export async function sendMessageToTelegram(message, token, context) {
   const chatContext = { ...(context || {}) };
   const originMessage = message;
   const limit = 4096;
+  const originalParseMode = chatContext.parse_mode;
   
   // 若為 Markdown 或 MarkdownV2，自動轉換為 Telegram 支援度最佳之 HTML 格式
   if (chatContext.parse_mode === "Markdown" || chatContext.parse_mode === "MarkdownV2") {
@@ -59,12 +60,14 @@ export async function sendMessageToTelegram(message, token, context) {
     const resp = await sendMessage(message, token, chatContext);
     if (resp.status === 200) {
       return resp;
-    } else {
-      console.warn(`[Telegram] Send rich-text message failed (HTTP ${resp.status}), retrying with plain text`);
+    } else if (originalParseMode && resp.status === 400) {
+      // 僅在有指定富文本格式且遭遇 400 實體解析錯誤時，才降級為純文字重試
+      console.warn(`[Telegram] Send rich-text message failed (HTTP 400), retrying with plain text`);
       message = originMessage;
       chatContext.parse_mode = null;
       return await sendMessage(message, token, chatContext);
     }
+    return resp;
   }
   
   message = originMessage;

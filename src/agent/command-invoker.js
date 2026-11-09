@@ -163,18 +163,22 @@ export function removeCommandMarkers(answer) {
     const calls = extractCommandCalls(answer);
     let cleaned = answer;
     if (calls.length === 0) {
-        cleaned = answer.replace(/\[CALL:\/\w+(?:\s+[^\]]*)?\]?/gis, '');
+        cleaned = answer.replace(/\[CALL:\/\w+(?:\s+[^\]]+)?\]/gs, '');
     } else {
         for (let i = calls.length - 1; i >= 0; i--) {
             const { start, end } = calls[i];
             cleaned = cleaned.slice(0, start) + cleaned.slice(end);
         }
-        // 清理串流末尾殘留未閉合之 [CALL:... 片段
-        cleaned = cleaned.replace(/\[CALL:\/\w+(?:\s+[^\]]*)?$/gis, '');
     }
 
-    // 2. 移除 [SUGGEST:...] 與 [ASK:...] 標記（包含閉合標記與串流中尚未閉合之尾部片段）
-    cleaned = cleaned.replace(/\[(?:SUGGEST|ASK):[^\]]*\]?/gis, '');
+    // 清理串流末尾殘留未閉合之 [CALL:... 片段（錨定在結尾 $，避免貪婪誤刪）
+    cleaned = cleaned.replace(/\[CALL:\/\w+(?:\s+[^\]]*)?$/gis, '');
+
+    // 2. 移除完整的 [SUGGEST:...] 與 [ASK:...] 標記
+    cleaned = cleaned.replace(/\[(?:SUGGEST|ASK):\s*[^\]]+\]/gis, '');
+
+    // 3. 僅清理位於全文最末尾的未閉合殘留片段（錨定在結尾 $，避免正文中的合法中括號被誤刪）
+    cleaned = cleaned.replace(/\[(?:SUGGEST|ASK):[^\]]*$/gis, '');
 
     return cleaned.trim();
 }
