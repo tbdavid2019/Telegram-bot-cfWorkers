@@ -100,7 +100,7 @@ function currentImageModel(agentName, context) {
       }
       return context.USER_CONFIG.DALL_E_MODEL || "dall-e-3";
     case "gemini":
-      return context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-2.0-flash-exp";
+      return context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview";
     default:
       return "unknown";
   }
@@ -339,7 +339,7 @@ export async function commandSystem(message, command, subcommand, context) {
     const sensitiveKeys = [
       'OPENAI_API_KEY', 'OPENAI_API_KEY2', 'AZURE_API_KEY', 'AZURE_COMPLETIONS_API', 'AZURE_DALLE_API',
       'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_TOKEN', 'GOOGLE_API_KEY', 'OPENROUTER_API_KEY',
-      'XIAOMI_API_KEY', 'BEDROCK_API_KEY', 'GROQ_API_KEY', 'ASR_API_KEY', 'TTS_API_KEY',
+      'AIURL_API_KEY', 'XIAOMI_API_KEY', 'BEDROCK_API_KEY', 'GROQ_API_KEY', 'ASR_API_KEY', 'TTS_API_KEY',
       'OPENAI_IMAGE_API_KEY', 'GEMINI_IMAGE_API_KEY', 'BOX_API_TOKEN', 'WIKI_API_PASSWORD',
       'GOOGLE_MAPS_API_KEY', 'GOOGLE_SHEETS_SERVICE_ACCOUNT', 'A2A_SECRET', 'INIT_SECRET'
     ];

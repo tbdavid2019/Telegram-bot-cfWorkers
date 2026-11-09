@@ -4,7 +4,7 @@
  */
 
 import { ENV, DATABASE } from '../config/env.js';
-import { escape } from '../utils/md2tgmd.js';
+import { escape, markdownToTelegramHtml, balanceTelegramHtmlTags } from '../utils/md2tgmd.js';
 
 // ========== 基礎訊息發送 ==========
 
@@ -43,12 +43,16 @@ export async function sendMessageToTelegram(message, token, context) {
     message = String(message);
   }
 
-  const chatContext = context;
+  const chatContext = { ...(context || {}) };
   const originMessage = message;
   const limit = 4096;
   
-  if (chatContext.parse_mode === "MarkdownV2") {
-    message = escape(message);
+  // 若為 Markdown 或 MarkdownV2，自動轉換為 Telegram 支援度最佳之 HTML 格式
+  if (chatContext.parse_mode === "Markdown" || chatContext.parse_mode === "MarkdownV2") {
+    message = markdownToTelegramHtml(message);
+    chatContext.parse_mode = "HTML";
+  } else if (chatContext.parse_mode === "HTML") {
+    message = balanceTelegramHtmlTags(message);
   }
   
   if (message.length <= limit) {
@@ -56,6 +60,7 @@ export async function sendMessageToTelegram(message, token, context) {
     if (resp.status === 200) {
       return resp;
     } else {
+      console.warn(`[Telegram] Send rich-text message failed (HTTP ${resp.status}), retrying with plain text`);
       message = originMessage;
       chatContext.parse_mode = null;
       return await sendMessage(message, token, chatContext);
@@ -119,6 +124,16 @@ export async function sendPhotoToTelegram(photo, token, context) {
   let body;
   const headers = {};
   
+  const photoContext = { ...(context || {}) };
+  if (photoContext.caption) {
+    if (photoContext.parse_mode === "Markdown" || photoContext.parse_mode === "MarkdownV2") {
+      photoContext.caption = markdownToTelegramHtml(photoContext.caption);
+      photoContext.parse_mode = "HTML";
+    } else if (photoContext.parse_mode === "HTML") {
+      photoContext.caption = balanceTelegramHtmlTags(photoContext.caption);
+    }
+  }
+  
   // 處理 base64 data URL
   if (typeof photo === "string" && photo.startsWith("data:image/")) {
     try {
@@ -139,18 +154,18 @@ export async function sendPhotoToTelegram(photo, token, context) {
       // 使用 FormData 發送
       body = new FormData();
       body.append("photo", blob, "generated_image.png");
-      for (const key of Object.keys(context)) {
-        if (context[key] !== undefined && context[key] !== null) {
-          body.append(key, `${context[key]}`);
+      for (const key of Object.keys(photoContext)) {
+        if (photoContext[key] !== undefined && photoContext[key] !== null) {
+          body.append(key, `${photoContext[key]}`);
         }
       }
     } catch (e) {
       console.error("Error processing base64 image:", e);
       // 如果處理失敗，嘗試直接發送原始字符串
       body = { photo };
-      for (const key of Object.keys(context)) {
-        if (context[key] !== undefined && context[key] !== null) {
-          body[key] = context[key];
+      for (const key of Object.keys(photoContext)) {
+        if (photoContext[key] !== undefined && photoContext[key] !== null) {
+          body[key] = photoContext[key];
         }
       }
       body = JSON.stringify(body);
@@ -159,9 +174,9 @@ export async function sendPhotoToTelegram(photo, token, context) {
   } else if (typeof photo === "string") {
     // 處理普通 URL
     body = { photo };
-    for (const key of Object.keys(context)) {
-      if (context[key] !== undefined && context[key] !== null) {
-        body[key] = context[key];
+    for (const key of Object.keys(photoContext)) {
+      if (photoContext[key] !== undefined && photoContext[key] !== null) {
+        body[key] = photoContext[key];
       }
     }
     body = JSON.stringify(body);
@@ -170,9 +185,9 @@ export async function sendPhotoToTelegram(photo, token, context) {
     // 處理 Blob 或其他類型
     body = new FormData();
     body.append("photo", photo, "photo.png");
-    for (const key of Object.keys(context)) {
-      if (context[key] !== undefined && context[key] !== null) {
-        body.append(key, `${context[key]}`);
+    for (const key of Object.keys(photoContext)) {
+      if (photoContext[key] !== undefined && photoContext[key] !== null) {
+        body.append(key, `${photoContext[key]}`);
       }
     }
   }

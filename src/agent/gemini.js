@@ -115,7 +115,7 @@ export async function requestCompletionsFromGeminiAI(params, context, onStream) 
 
 export async function requestImageFromGemini(prompt, context, options = {}) {
   try {
-    const model = context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image-preview";
+    const model = context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview";
     const imageUrls = Array.isArray(options.images) ? options.images : [];
     
     // 使用 streaming API

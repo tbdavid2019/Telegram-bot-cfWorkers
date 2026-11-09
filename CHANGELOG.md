@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0] - 2026-11-09
+
+### Fixed
+- **Telegram Markdown / HTML 富文本渲染引擎重構 (Telegram Rich-Text Rendering & Fallback Overhaul)**：
+  - **根本原因**：Telegram 原生 `Markdown` (v1) 為舊版語法，不支援 CommonMark 雙星號粗體 `**text**`，且對包含冒號空格 `**標題: **` 或清單符號緊貼粗體 `* **市值: **` 會直接觸發 `400 Bad Request: can't parse entities`。舊代碼在實體解析失敗時，會靜默降級將 `parse_mode` 設為 null，以純文字重發，導致 Telegram 訊息顯示為未渲染的原始星號 `**`。
+  - **解決方案**：
+    - 重構 [src/utils/md2tgmd.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/utils/md2tgmd.js)：提供 `markdownToTelegramHtml` 與 `balanceTelegramHtmlTags`，在完整保護程式碼區塊（Code Blocks）與行內代碼（Inline Code）的同時，將 CommonMark 標題、粗體、斜體、刪除線、引用、超連結安全轉換為 Telegram 相容性最高、容錯性最好的 HTML 格式 (`<b>`, `<i>`, `<s>`, `<blockquote>`, `<code>`, `<pre>`, `<a href="...">`)。
+    - 解決清單與粗體語法衝突：自動將行首 `* ` / `- ` / `+ ` 轉換為圓點符號 `• `，徹底阻絕連續星號碰撞導致的 Telegram 語法報錯。
+    - 引入 HTML 標籤自動平衡器：自動補齊串流截斷或異常時未閉合之標籤，避免 Telegram 報錯。
+    - 在 [src/telegram/telegram.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/telegram/telegram.js) 的 `sendMessageToTelegram` 與 `sendPhotoToTelegram` 中，若指定 `Markdown` / `MarkdownV2`，自動轉換並以 `parse_mode: "HTML"` 發送；若 Telegram API 仍回傳非 200，依然具備優雅降級為純文字之雙重安全機制。
+- **KV 舊設定覆蓋部署預設值修復 (`DEFAULT_LLM_PROFILE` KV Locking)**：
+  - **根本原因**：先前使用者與對話在 KV 中儲存過 `CURRENT_LLM_PROFILE` 或舊版 `DEFAULT_LLM_PROFILE`，因 `DEFAULT_LLM_PROFILE` 未被納入 `LOCK_USER_CONFIG_KEYS`，導致部署新代碼後 Worker 仍被 KV 中的舊狀態永久鎖定在 `openai` (Codex)。
+  - **解決方案**：在 [src/config/env.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/config/env.js) 將 `DEFAULT_LLM_PROFILE` 加入 `LOCK_USER_CONFIG_KEYS`，並重構 [src/agent/profiles.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/profiles.js) 的 `getCurrentProfileName`，優先以 Worker 環境變數為準，徹底杜絕 KV 歷史殘留劫持。
+- **底層相容端點身分洩漏修復 (Bot Persona Injection)**：
+  - 在 [src/agent/llm.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) 注入動態 Assistant Persona（依據 `A2A_AGENT_NAME` 或 Bot 名稱），確保機器人始終以「Telegram 智慧助理」身分提供親切專業的繁體中文服務，不再自稱 OpenAI/Codex 等第三方介面名稱。
+
+### Changed & Refactored
+- **多階層零成本 `aiurl` 主力路由與原廠備援架構 (Zero-Cost `aiurl` Multi-Tier Fallback Architecture)**：
+  - 全面將主力 LLM 模型切換至高性價比之 OpenAI 相容端點 `https://llm.aiurl.tw/v1`：
+    - `gemini`：主力使用 `antigravity/gemini-3.8-flash`（aiurl），遇異常自動無縫 fallback 至 Google 原廠 `gemini-3.5-flash` (`backup`)。
+    - `openai`：主力使用 `gpt-5.6-luna`（aiurl），遇異常自動 fallback 至 OpenAI 原廠 `chat-latest` (`openai-backup`)。
+    - `groq`：主力使用 `openai/gpt-oss-120b`（aiurl），遇異常自動 fallback 至 Groq 原廠 (`groq-backup`)。
+  - 在 [src/agent/request.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/request.js)、[src/agent/gemini.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/gemini.js) 與 [src/agent/openai.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/openai.js) 實現自動級聯 Fallback 機制，當主力端點發生異常時自動嘗試備援設定檔。
+- **過時模型全面盤點汰除與新模型升級 (Model Inventory Overhaul)**：
+  - 徹底移除原廠已廢棄之過時模型：`gpt-5.4`、`gpt-5.1`、`gemini-2.5-flash-image-preview`、`dall-e-3`。
+  - 移除已棄用之第三方端點設定與憑證：`https://nen.com.tw/v1`、`https://bedrock.glsoft.ai/api/v1`。
+  - 全庫生圖預設模型升級至最新版 `gemini-3-pro-image-preview`。
+  - OpenRouter 預設模型更新為最新可用端點 `openrouter/free`。
+- **測試覆蓋擴充**：
+  - 新增 [test/telegram-markdown.test.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/test/telegram-markdown.test.js) 針對雙星號冒號空格、清單分離、變數名稱底線、標題引用、尖括號轉義、程式碼區塊及未閉合標籤進行 15 項自動化測試。
+  - 全專案 116 項單元測試全數通過（100% Pass）。
+
+### Security
+- **金鑰隱私安全防護保證**：
+  - 嚴格落實金鑰隔離原則：所有真實 API Keys、Tokens 僅保留在本地未追蹤（`.gitignore`）之 `wrangler.toml` 與 `.dev.vars`，絕不上傳至 Git 儲存庫。
+  - 提交之 [wrangler.toml.example](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/wrangler.toml.example) 僅包含安全之佔位字串（`sk-YOUR-KEY-HERE` 等）。
+
 ## [1.12.0] - 2026-11-03
 
 ### Security

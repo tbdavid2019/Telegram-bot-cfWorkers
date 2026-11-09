@@ -170,6 +170,16 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
     console.error('❌ [Soul] Failed to load soul:', error);
   }
 
+  // 🤖 注入明確的機器人身分，避免底層模型（如 Codex/GPT-5/Gemini）洩漏原生介面身分
+  const botName = context.USER_CONFIG?.A2A_AGENT_NAME 
+    || context.SHARE_CONTEXT?.currentBotName 
+    || ENV.A2A_AGENT_NAME 
+    || 'Telegram 智慧助理';
+
+  if (!basePrompt || basePrompt === 'You are a helpful assistant' || basePrompt === '你是一個得力的助手') {
+    basePrompt = `你是 Telegram AI 智慧助理「${botName}」，以繁體中文提供親切、專業、精準的協助。請始終保持「${botName}」的身分回應，切勿自稱第三方底層介面名稱（如 Codex/OpenAI 等）。`;
+  }
+
   const llmParams = {
     ...params,
     history,

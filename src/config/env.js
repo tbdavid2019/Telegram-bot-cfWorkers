@@ -22,15 +22,15 @@ export class UserConfig {
   //
   // OpenAI API Key
   OPENAI_API_KEY = [];
-  // OpenAI的模型名稱
-  OPENAI_CHAT_MODEL = "gpt-4o";
+  // OpenAI的模型名稱 (預設使用 chat-latest 動態指向最新模型)
+  OPENAI_CHAT_MODEL = "chat-latest";
   // OpenAI API BASE ``
   OPENAI_API_BASE = "https://api.openai.com/v1";
   // OpenAI API Extra Params
   OPENAI_API_EXTRA_PARAMS = {};
   // -- DALLE 配置 --
   // DALL-E的模型名称
-  DALL_E_MODEL = "dall-e-3";
+  DALL_E_MODEL = "gpt-image-1-mini";
   // DALL-E图片尺寸
   DALL_E_IMAGE_SIZE = "1024x1024";
   // DALL-E图片质量
@@ -48,7 +48,7 @@ export class UserConfig {
   OPENAI_IMAGE_API_BASE = "";
   // -- Gemini 圖片生成配置 --
   // Gemini 圖片生成模型
-  GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image-preview";
+  GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview";
   // Gemini 圖片生成 API Key (Google 原生 API Key)
   GEMINI_IMAGE_API_KEY = [];
   // Gemini 圖片生成 API BASE (不再需要，直接使用 Google API)
@@ -81,7 +81,7 @@ export class UserConfig {
   // Google Gemini API
   GOOGLE_COMPLETIONS_API = "https://generativelanguage.googleapis.com/v1beta/models/";
   // Google Gemini Model
-  GOOGLE_COMPLETIONS_MODEL = "gemini-2.5-flash";
+  GOOGLE_COMPLETIONS_MODEL = "gemini-3.5-flash";
   // Google Maps API Key
   GOOGLE_MAPS_API_KEY = null;
   // -- LLM Profiles 配置 --
@@ -98,6 +98,8 @@ export class UserConfig {
   // -- LLM API Keys (從環境變數讀取) --
   // OpenRouter API Key
   OPENROUTER_API_KEY = null;
+  // AIURL / OpenAI-compatible API Key
+  AIURL_API_KEY = null;
   // Bedrock API Key (自訂服務)
   BEDROCK_API_KEY = null;
   // Groq API Key
@@ -209,6 +211,7 @@ export class Environment {
     "GOOGLE_COMPLETIONS_API",
     "AZURE_COMPLETIONS_API",
     "AZURE_DALLE_API",
+    "DEFAULT_LLM_PROFILE",
     "LLM_PROFILES",
     "OPENAI_IMAGE_API_BASE",
     "GEMINI_IMAGE_API_BASE",
@@ -230,6 +233,7 @@ export class Environment {
     "OPENAI_API_KEY2",
     "GOOGLE_API_KEY",
     "OPENROUTER_API_KEY",
+    "AIURL_API_KEY",
     "XIAOMI_API_KEY",
     "BEDROCK_API_KEY",
     "GROQ_API_KEY",
@@ -326,6 +330,7 @@ const ENV_TYPES = {
   CURRENT_LLM_PROFILE: "string",
   CURRENT_LLM_MODEL: "string",
   OPENROUTER_API_KEY: "string",
+  AIURL_API_KEY: "string",
   BEDROCK_API_KEY: "string",
   XIAOMI_API_KEY: "string",
   GROQ_API_KEY: "string",

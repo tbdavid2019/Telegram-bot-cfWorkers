@@ -28,8 +28,7 @@ function removeDefineKeys(userConfig, keys) {
 
 /** Apply a profile selection and remove the old independent provider/model overrides. */
 export function applyModelProfile(userConfig, requestedName) {
-  const names = Object.keys(userConfig.LLM_PROFILES || {});
-  const name = names.find((candidate) => candidate.toLowerCase() === String(requestedName).toLowerCase());
+  const name = resolveLLMProfileName({ USER_CONFIG: userConfig }, requestedName);
   if (!name) return null;
 
   userConfig.CURRENT_LLM_PROFILE = name;
@@ -131,10 +130,10 @@ export async function commandModel(message, command, subcommand, context) {
   }
 
   try {
-    const selected = await selectProfile(context, action);
+    const selected = await selectProfile(context, input);
     if (!selected) {
       return sendMessageToTelegramWithContext(context)(
-        `❌ 找不到 Profile: \`${action}\`\n\n使用 /model list 查看可用模型。`
+        `❌ 找不到 Profile: \`${input}\`\n\n使用 /model list 查看可用模型。`
       );
     }
     return sendCurrentModel(context, '✅ 已切換模型\n\n');

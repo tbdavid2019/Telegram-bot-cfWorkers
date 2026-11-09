@@ -8,7 +8,7 @@ import { ENV } from '../config/env.js';
 import { requestChatCompletions } from './request.js';
 import { imageToBase64String, renderBase64DataURI } from '../utils/image.js';
 import { getProfileApiKey } from './agents.js';
-import { getActiveLLMProfile } from './profiles.js';
+import { getActiveLLMProfile, getAllLLMProfiles } from './profiles.js';
 
 // ========== API Key 管理 ==========
 
@@ -146,28 +146,46 @@ export async function renderOpenAIMessage(item) {
 
 // ========== Chat Completions ==========
 
-export async function requestCompletionsFromOpenAI(params, context, onStream) {
+export async function requestCompletionsFromOpenAI(params, context, onStream, profileOverride = null) {
   const { message, images, prompt, history } = params;
-  const url = `${getOpenAIApiBase(context)}/chat/completions`;
+  const profile = profileOverride || getActiveLLMProfile(context);
+  const apiBase = (profile && profile.apiBase) ? profile.apiBase : getOpenAIApiBase(context);
+  const apiKey = (profile ? getProfileApiKey(profile, context) : null) || openAIKeyFromContext(context);
+  const model = (!profileOverride && context?.USER_CONFIG?.CURRENT_LLM_MODEL)
+    ? context.USER_CONFIG.CURRENT_LLM_MODEL
+    : (profile?.model || getOpenAIChatModel(context));
+
+  const url = `${apiBase}/chat/completions`;
   const header = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${openAIKeyFromContext(context)}`
+    "Authorization": `Bearer ${apiKey}`
   };
   
   const messages = [...(history || []), { role: "user", content: message, images }];
   if (prompt) {
-    messages.unshift({ role: context.USER_CONFIG.SYSTEM_INIT_MESSAGE_ROLE, content: prompt });
+    messages.unshift({ role: context?.USER_CONFIG?.SYSTEM_INIT_MESSAGE_ROLE || 'system', content: prompt });
   }
   
-  const profile = getActiveLLMProfile(context);
   const body = {
-    model: getOpenAIChatModel(context),
-    ...(profile?.options || context.USER_CONFIG.OPENAI_API_EXTRA_PARAMS),
+    model,
+    ...(profile?.options || context?.USER_CONFIG?.OPENAI_API_EXTRA_PARAMS),
     messages: await Promise.all(messages.map(renderOpenAIMessage)),
     stream: onStream != null
   };
   
-  return requestChatCompletions(url, header, body, context, onStream);
+  try {
+    return await requestChatCompletions(url, header, body, context, onStream);
+  } catch (error) {
+    if (profile?.fallbackProfile) {
+      const allProfiles = getAllLLMProfiles(context);
+      const fallbackProf = allProfiles[profile.fallbackProfile];
+      if (fallbackProf && fallbackProf !== profile) {
+        console.warn(`[LLM Fallback] Profile "${profile.name || 'Primary'}" failed (${error.message}). Falling back to "${fallbackProf.name || profile.fallbackProfile}"...`);
+        return requestCompletionsFromOpenAI(params, context, onStream, fallbackProf);
+      }
+    }
+    throw error;
+  }
 }
 
 // ========== 圖片生成 ==========

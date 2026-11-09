@@ -12,10 +12,12 @@ export function fixOpenAICompatibleOptions(options) {
     return new Stream(r, c);
   };
   options.contentExtractor = options.contentExtractor || function(d) {
-    return d?.choices?.[0]?.delta?.content;
+    const delta = d?.choices?.[0]?.delta;
+    return delta?.content ?? delta?.reasoning_content ?? delta?.reasoning;
   };
   options.fullContentExtractor = options.fullContentExtractor || function(d) {
-    return d.choices?.[0]?.message.content;
+    const msg = d?.choices?.[0]?.message;
+    return msg?.content || msg?.reasoning_content || msg?.reasoning;
   };
   options.errorExtractor = options.errorExtractor || function(d) {
     return d.error?.message;

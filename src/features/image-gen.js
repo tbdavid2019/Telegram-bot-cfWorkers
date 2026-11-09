@@ -85,7 +85,7 @@ function currentImageModel(agentName, context) {
       }
       return context.USER_CONFIG.DALL_E_MODEL || "dall-e-3";
     case "gemini":
-      return context.USER_CONFIG.GOOGLE_COMPLETIONS_MODEL || "gemini-2.0-flash-exp";
+      return context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview";
     case "workers":
       return "@cf/black-forest-labs/flux-1-schnell";
     default:
