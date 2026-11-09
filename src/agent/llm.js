@@ -188,20 +188,17 @@ export async function requestCompletionsFromLLM(params, context, llm, modifier, 
       (memoryPrompt ? '\n\n' + memoryPrompt : '')
   };
 
-  // 建立 safeStream，避免第一輪中 LLM 生成 [CALL:...] 時流式洩漏給用戶
+  // 建立 safeStream，避免第一輪中 LLM 生成 [CALL:...] 或 [SUGGEST:...] 時流式洩漏給用戶
   let safeStream = null;
   if (typeof onStream === 'function') {
     safeStream = async (chunkText) => {
       if (!chunkText || typeof chunkText !== 'string') return;
-      if (chunkText.includes('[CALL:') || chunkText.includes('[SUGGEST:') || chunkText.includes('[ASK:') || chunkText.startsWith('{') || chunkText.includes('"content":')) {
-        const { removeCommandMarkers } = await import('./command-invoker.js');
-        const cleaned = removeCommandMarkers(chunkText);
-        if (!cleaned || cleaned.trim() === '') {
-          return;
-        }
-        return onStream(cleaned);
+      const { removeCommandMarkers } = await import('./command-invoker.js');
+      const cleaned = removeCommandMarkers(chunkText);
+      if (!cleaned || cleaned.trim() === '') {
+        return;
       }
-      return onStream(chunkText);
+      return onStream(cleaned);
     };
   }
 
@@ -728,13 +725,12 @@ export async function chatWithLLM(params, context, modifier) {
     let nextEnableTime = null;
 
     if (ENV.STREAM_MODE) {
-      context.CURRENT_CHAT_CONTEXT.parse_mode = null;
       onStream = async (text) => {
         try {
           if (nextEnableTime && nextEnableTime > Date.now()) {
             return;
           }
-          if (text && typeof text === 'string' && (text.includes('[CALL:') || text.includes('[SUGGEST:') || text.includes('[ASK:') || text.startsWith('{') || text.includes('"content":'))) {
+          if (text && typeof text === 'string') {
             const { removeCommandMarkers } = await import('./command-invoker.js');
             const cleaned = removeCommandMarkers(text);
             if (!cleaned || cleaned.trim() === '') {

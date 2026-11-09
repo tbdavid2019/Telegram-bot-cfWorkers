@@ -115,7 +115,10 @@ LLM_PROFILES = '''
     "apiKeyEnv": "AIURL_API_KEY",
     "model": "antigravity/gemini-3.8-flash",
     "aliases": ["aiurl", "gemini38", "gemini-3.8", "gemini 3.8", "flash"],
-    "fallbackProfile": "backup"
+    "fallbackProfile": "backup",
+    "options": {
+      "reasoning_effort": "low"
+    }
   },
   "backup": {
     "name": "Google Gemini Flash (原廠備用)",
@@ -269,7 +272,10 @@ LLM_PROFILES = '''
     "apiKeyEnv": "AIURL_API_KEY",
     "model": "antigravity/gemini-3.8-flash",
     "aliases": ["aiurl", "gemini38", "gemini-3.8", "gemini 3.8", "flash"],
-    "fallbackProfile": "backup"
+    "fallbackProfile": "backup",
+    "options": {
+      "reasoning_effort": "low"
+    }
   },
   "backup": {
     "name": "Google Gemini Flash (原廠備用)",

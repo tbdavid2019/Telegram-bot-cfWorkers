@@ -159,20 +159,22 @@ export function removeCommandMarkers(answer) {
         return answer;
     }
 
-    // 先移除 [CALL:...] 標記
+    // 1. 先用 extractCommandCalls 準確移除完整 [CALL:...] 標記（支援包含 JSON 嵌套括號之複雜工具調用）
     const calls = extractCommandCalls(answer);
     let cleaned = answer;
     if (calls.length === 0) {
-        cleaned = answer.replace(/\[CALL:\/\w+(?:\s+[^\]]+)?\]/gs, '');
+        cleaned = answer.replace(/\[CALL:\/\w+(?:\s+[^\]]*)?\]?/gis, '');
     } else {
         for (let i = calls.length - 1; i >= 0; i--) {
             const { start, end } = calls[i];
             cleaned = cleaned.slice(0, start) + cleaned.slice(end);
         }
+        // 清理串流末尾殘留未閉合之 [CALL:... 片段
+        cleaned = cleaned.replace(/\[CALL:\/\w+(?:\s+[^\]]*)?$/gis, '');
     }
 
-    // 再移除 [SUGGEST:...] 與 [ASK:...] 標記
-    cleaned = cleaned.replace(/\[(?:SUGGEST|ASK):\s*[^\]]+\]/gis, '');
+    // 2. 移除 [SUGGEST:...] 與 [ASK:...] 標記（包含閉合標記與串流中尚未閉合之尾部片段）
+    cleaned = cleaned.replace(/\[(?:SUGGEST|ASK):[^\]]*\]?/gis, '');
 
     return cleaned.trim();
 }

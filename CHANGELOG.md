@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [1.13.0] - 2026-11-09
 
 ### Fixed
+- **Cloudflare Workers 30 秒逾時中斷與串流 `[SUGGEST:` 殘留全面修復 (ReAct Timeout & Stream Cleanup)**：
+  - **根本原因**：
+    1. `aiurl` 上的 `antigravity/gemini-3.8-flash` 預設開啟深度思考模式，每輪思考生成多達 855 個 reasoning tokens，耗時長達 12.6 秒。在多輪工具調用（如查詢天氣 `/wt`、股票等）時，兩輪推理累計耗時突破 30 秒，直接觸發 Cloudflare Workers 30 秒強制殺除（Telegram Webhook 記錄 `Read timeout expired`）。
+    2. 當 Worker 在串流末端剛輸出 `[SUGGEST:` 時被強制終止，舊版 `removeCommandMarkers` 因依賴閉合中括號 `]` 而未能過濾未閉合片段，導致 Telegram 訊息永久停留在未完工的純文字草稿狀態（未渲染 HTML、未生成按鈕且露出 `[SUGGEST:`）。
+  - **解決方案**：
+    - 在 [wrangler.toml.example](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/wrangler.toml.example) 與部署配置中為 `gemini` 設定 `"options": { "reasoning_effort": "low" }`，將推理時間由 12.6 秒縮減至 1.9 秒（加速 85%），徹底解除 30 秒超時危機。
+    - 重構 [src/agent/command-invoker.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/command-invoker.js) 的 `removeCommandMarkers`，全面涵蓋未閉合之 `[SUGGEST:...` 與 `[CALL:...` 片段，杜絕任何標記洩漏。
+    - 在 [src/agent/llm.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/llm.js) 的 `onStream` 同步套用 HTML 富文本轉換，並在 [src/config/env.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/config/env.js) 設定 `TELEGRAM_MIN_STREAM_INTERVAL = 1000` 預設防禦 Telegram 429 頻率限制。
 - **Telegram Markdown / HTML 富文本渲染引擎重構 (Telegram Rich-Text Rendering & Fallback Overhaul)**：
   - **根本原因**：Telegram 原生 `Markdown` (v1) 為舊版語法，不支援 CommonMark 雙星號粗體 `**text**`，且對包含冒號空格 `**標題: **` 或清單符號緊貼粗體 `* **市值: **` 會直接觸發 `400 Bad Request: can't parse entities`。舊代碼在實體解析失敗時，會靜默降級將 `parse_mode` 設為 null，以純文字重發，導致 Telegram 訊息顯示為未渲染的原始星號 `**`。
   - **解決方案**：
