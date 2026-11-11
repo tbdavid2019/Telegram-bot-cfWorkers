@@ -5,6 +5,7 @@
 
 import { ENV, DATABASE } from '../config/env.js';
 import { escape, markdownToTelegramHtml, balanceTelegramHtmlTags } from '../utils/md2tgmd.js';
+import { splitRichTextIntoLegacyChunks, tableToLegacyHtml } from './rich.js';
 
 // ========== 基礎訊息發送 ==========
 
@@ -98,6 +99,155 @@ export function sendMessageToTelegramWithContext(context) {
       message, 
       context.SHARE_CONTEXT.currentBotToken, 
       context.CURRENT_CHAT_CONTEXT
+    );
+  };
+}
+
+// ========== Telegram Bot API 10.3 富文本原生訊息 ==========
+
+export async function sendRichMessage(richMessagePayload, token, context, fallbackText) {
+  const chatContext = { ...(context || {}) };
+  
+  // 正規化 blocks 陣列
+  let blocks = [];
+  if (Array.isArray(richMessagePayload)) {
+    blocks = richMessagePayload;
+  } else if (richMessagePayload && Array.isArray(richMessagePayload.blocks)) {
+    blocks = richMessagePayload.blocks;
+  }
+
+  const body = {
+    chat_id: chatContext.chat_id,
+    rich_message: { blocks },
+    rich_blocks: JSON.stringify(blocks)
+  };
+
+  if (chatContext.reply_markup) {
+    body.reply_markup = chatContext.reply_markup;
+  }
+  if (chatContext.message_id) {
+    body.message_id = chatContext.message_id;
+  }
+  if (fallbackText !== undefined && fallbackText !== null) {
+    const textStr = String(fallbackText);
+    // 頂層 text 長度限制在 4096 以內，避免被 Telegram API 400 拒絕
+    body.text = textStr.length > 4096 ? textStr.slice(0, 4093) + '…' : textStr;
+  }
+
+  for (const key of Object.keys(chatContext)) {
+    if (
+      key !== 'chat_id' &&
+      key !== 'reply_markup' &&
+      key !== 'message_id' &&
+      key !== 'text' &&
+      chatContext[key] !== undefined &&
+      chatContext[key] !== null
+    ) {
+      body[key] = chatContext[key];
+    }
+  }
+
+  return await fetch(
+    `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendRichMessage`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }
+  );
+}
+
+export async function sendRichMessageToTelegram(richMessagePayload, token, context, fallbackText) {
+  const chatContext = { ...(context || {}) };
+  let resp;
+  let needFallback = false;
+
+  try {
+    resp = await sendRichMessage(richMessagePayload, token, chatContext, fallbackText);
+    if (!resp) {
+      needFallback = true;
+    } else if (resp.status === 200) {
+      // 檢查 response body 中是否包含 Telegram API 的 ok: false
+      const cloneResp = resp.clone();
+      try {
+        const data = await cloneResp.json();
+        if (data && data.ok === false) {
+          needFallback = true;
+        }
+      } catch {
+        // 非 json 回應，視為正常
+      }
+    } else if (resp.status === 400 || resp.status === 404 || resp.status === 405 || resp.status === 501 || resp.status >= 500) {
+      // 400 (Bad Request), 404 (舊端點不存在), 405/501 (不支援), 5xx (伺服器錯誤) -> 自動降級
+      needFallback = true;
+    }
+    // 401, 403, 429 等明確錯誤不盲目降級，直接回傳
+  } catch (err) {
+    console.warn('[Telegram] sendRichMessage network exception, falling back:', err?.message);
+    needFallback = true;
+  }
+
+  if (needFallback) {
+    console.warn(`[Telegram] Send rich message failed or unsupported, gracefully falling back to legacy sendMessage`);
+    let text = fallbackText !== undefined && fallbackText !== null ? String(fallbackText) : '';
+    
+    // 若無提供 fallbackText，嘗試從 blocks 表格自動生成
+    if (!text && richMessagePayload) {
+      const blocks = Array.isArray(richMessagePayload) ? richMessagePayload : (richMessagePayload.blocks || []);
+      const tableBlocks = blocks.filter((b) => b && b.type === 'table');
+      if (tableBlocks.length > 0) {
+        text = tableBlocks.map((tb) => tableToLegacyHtml(tb)).join('\n\n');
+        chatContext.parse_mode = 'HTML';
+      }
+    }
+
+    if (!text) {
+      text = '⚠️ 目前訊息無法以富文本格式顯示。';
+    }
+    
+    if (text.length > 4000) {
+      const chunks = splitRichTextIntoLegacyChunks(text, 4000);
+      let lastResp = null;
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkContext = { ...chatContext };
+        if (i > 0) {
+          chunkContext.message_id = null;
+          chunkContext.reply_to_message_id = null;
+          chunkContext.allow_sending_without_reply = true;
+        }
+        lastResp = await sendMessageToTelegram(chunks[i], token, chunkContext);
+        if (!lastResp || !lastResp.ok) {
+          // 若有任何 chunk 發送失敗，立即回傳該失敗回應，避免後續成功覆蓋失敗狀態
+          return lastResp;
+        }
+      }
+      return lastResp;
+    }
+    return await sendMessageToTelegram(text, token, chatContext);
+  }
+
+  return resp;
+}
+
+export function sendRichMessageWithContext(context) {
+  return async (richMessagePayload, fallbackText) => {
+    if (context?.captureToolOutput && typeof context.captureToolOutput === 'function') {
+      const output = fallbackText !== undefined && fallbackText !== null
+        ? String(fallbackText)
+        : (typeof richMessagePayload === 'string' ? richMessagePayload : JSON.stringify(richMessagePayload));
+      context.captureToolOutput(output);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    return sendRichMessageToTelegram(
+      richMessagePayload,
+      context.SHARE_CONTEXT.currentBotToken,
+      context.CURRENT_CHAT_CONTEXT,
+      fallbackText
     );
   };
 }
@@ -337,7 +487,67 @@ export function sendChatActionToTelegramWithContext(context) {
   };
 }
 
-// ========== Callback Query ==========
+// ========== Callback Query & Inline Keyboard ==========
+
+/**
+ * 建立相容 Telegram 10.3 的 Inline Keyboard 按鈕
+ * 支援 DisabledButton 規範（"disabled": {}，並嚴格省略 callback_data, url 等所有 action 欄位）
+ */
+export function buildInlineButton({ text, callback_data, disabled, url, ...rest }) {
+  if (disabled) {
+    // 嚴格白名單：DisabledButton 僅保留 text 與外觀屬性，徹底剝離所有 action 屬性
+    const cleanRest = { ...rest };
+    delete cleanRest.callback_data;
+    delete cleanRest.url;
+    delete cleanRest.web_app;
+    delete cleanRest.login_url;
+    delete cleanRest.switch_inline_query;
+    delete cleanRest.switch_inline_query_current_chat;
+    delete cleanRest.callback_game;
+
+    return {
+      text: String(text || ''),
+      disabled: typeof disabled === 'object' && disabled !== null ? disabled : {},
+      ...cleanRest
+    };
+  }
+  return {
+    text: String(text || ''),
+    ...(callback_data ? { callback_data } : {}),
+    ...(url ? { url } : {}),
+    ...rest
+  };
+}
+
+/**
+ * 建立相容 Telegram 10.3 的 Inline Keyboard 物件
+ * 自動將具有 disabled 的按鈕轉為 Telegram 10.3 disabled: {} 規範並移除所有 action 欄位
+ */
+export function buildInlineKeyboard(rows = []) {
+  return {
+    inline_keyboard: rows.map((row) =>
+      row.map((btn) => {
+        if (btn && btn.disabled) {
+          const {
+            callback_data,
+            url,
+            web_app,
+            login_url,
+            switch_inline_query,
+            switch_inline_query_current_chat,
+            callback_game,
+            ...restBtn
+          } = btn;
+          return {
+            ...restBtn,
+            disabled: typeof btn.disabled === 'object' && btn.disabled !== null ? btn.disabled : {}
+          };
+        }
+        return btn;
+      })
+    )
+  };
+}
 
 /**
  * 回應 Callback Query（Inline Keyboard 按鈕點擊）

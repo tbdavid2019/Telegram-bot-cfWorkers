@@ -37,6 +37,7 @@ test('commandFund prompts usage guide when input is empty', async () => {
 
 test('commandFund formats ticker, calls API, and formats report correctly', async () => {
   let sentMessage = '';
+  let sentRichMessage = null;
   const context = {
     SHARE_CONTEXT: { currentBotToken: 'fake_token' },
     CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
@@ -46,7 +47,8 @@ test('commandFund formats ticker, calls API, and formats report correctly', asyn
   globalThis.fetch = async (url, opts) => {
     if (typeof url === 'string' && url.includes('api.telegram.org')) {
       const body = JSON.parse(opts.body);
-      sentMessage = body.text;
+      sentMessage = body.text || '';
+      sentRichMessage = body.rich_message || null;
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
     if (typeof url === 'string' && url.includes('api/analysis')) {
@@ -105,6 +107,41 @@ test('commandFund formats ticker, calls API, and formats report correctly', asyn
     assert.match(sentMessage, /長期 AI 龍頭但短期估值受限/);
     assert.match(sentMessage, /巴菲特/);
     assert.match(sentMessage, /木頭姐/);
+
+    // 驗證 Telegram 10.3 InputRichBlockTable 結構
+    assert.ok(sentRichMessage, '應包含 rich_message 欄位');
+    assert.ok(Array.isArray(sentRichMessage.blocks), 'blocks 應為陣列');
+    assert.equal(sentRichMessage.blocks.length, 2);
+    
+    // 投資委員會最終決策表格
+    const decisionTable = sentRichMessage.blocks[0];
+    assert.equal(decisionTable.type, 'table');
+    assert.equal(decisionTable.is_compact, true);
+    assert.equal(decisionTable.caption, '🎯 投資委員會最終決策');
+    assert.deepEqual(decisionTable.cells[0], [
+      { text: '標的', is_header: true },
+      { text: '建議動作', is_header: true },
+      { text: '決策信心度', is_header: true },
+      { text: '建議股數', is_header: true }
+    ]);
+    assert.deepEqual(decisionTable.cells[1], [
+      { text: 'NVDA' },
+      { text: '🔴 做空 (SHORT)' },
+      { text: '90%' },
+      { text: '469 股' }
+    ]);
+
+    // 傳奇投資大師評級表格
+    const analystTable = sentRichMessage.blocks[1];
+    assert.equal(analystTable.type, 'table');
+    assert.equal(analystTable.is_compact, true);
+    assert.equal(analystTable.caption, '👥 傳奇投資大師評級');
+    assert.deepEqual(analystTable.cells[0], [
+      { text: '標的', is_header: true },
+      { text: '大師 / 分析師', is_header: true },
+      { text: '獨立評級', is_header: true },
+      { text: '信心度', is_header: true }
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }

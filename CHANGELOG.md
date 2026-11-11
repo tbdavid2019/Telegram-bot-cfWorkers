@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.0] - 2026-11-11
+
+### Added & Changed
+- **Telegram Bot API 10.3 (August 24, 2026) Rich Messages Phase 1 落地實作**：
+  - **原生富文本表格支援 (`InputRichBlockTable`)**：
+    - 新增 [src/telegram/rich.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/telegram/rich.js)，提供 `buildRichTable`、`tableToLegacyHtml` 與 `splitRichTextIntoLegacyChunks`。
+    - 在 [src/features/stock.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/stock.js) 將 `/stock`（台股）與 `/stock2`（美股）行情重構為 Telegram 10.3 原生表格（含 OHLC、現價、漲跌與成交量），並自動附帶結構化文字 Fallback。
+    - 將 `/fund`（AI 對沖基金多 Agent 分析報告）重構為兩張原生表格：🎯 投資委員會最終決策表格與 👥 傳奇投資大師獨立評級表格。
+  - **按鈕原生禁用支援 (`DisabledButton`)**：
+    - 在 [src/telegram/telegram.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/telegram/telegram.js) 新增 `buildInlineButton` 與 `buildInlineKeyboard`，嚴格遵守 Telegram 10.3 規範：當按鈕被禁用時套用 `disabled: {}` 物件，並徹底移除 `callback_data`、`url`、`web_app` 等互斥 action 欄位。
+    - 在 [src/features/llm.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/llm.js) 的 `/model` 選單，將使用者當前使用的 profile 按鈕設置為 disabled。
+    - 在 [src/features/image-gen.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/image-gen.js) 的 `/setimg` 選單，將當前使用的生圖供應商按鈕設置為 disabled，並在 [src/telegram/message.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/telegram/message.js) 完善 callback query 路由與測試。
+  - **工業級多重自動降級與長文本安全切塊**：
+    - `sendRichMessageToTelegram` 實作自動降級機制：當遭遇 400（客戶端不支持）、404/405/501（舊端點）、5xx（伺服器錯誤）、`ok: false` 或網路例外時，自動無縫降級為標準 `sendMessage`。
+    - 當降級文字超過 4,000 字元時，依段落邊界智慧切塊，保留安全預算並自動補齊未閉合之 HTML 標籤，避開 UTF-16 surrogate pairs 與 HTML 實體。
+- **OpenCode + Codex + OMP 三方獨立全量代碼審查收斂與修復**：
+  - 修正 `buildRichTable` 內層 `toCell` 回傳物件格式，確保 `cells` 嚴格符合 Telegram 10.3 二維陣列結構 `[[RichBlockTableCell]]`，表頭自動注入 `is_header: true`。
+  - 擴充 `sendRichMessageToTelegram` 降級捕獲範圍，排除 401/403/429 顯式錯誤。
+  - 多 Chunk 降級發送中若任一 chunk 失敗立即中斷回報，且後續 chunk 清除 `reply_to_message_id` 防止重複引用。
+  - `/fund` 多標的分析師評級表格加入標的代碼欄位，缺省股數改顯示 `—`。
+  - 數值邊界防護：避免昨收為 0 或 NaN 時計算錯誤。
+- **全域開發流升級 (`flash-dual-review-pipeline`)**：
+  - 更新全域技能與規則，升級為 **OpenCode + Codex + OMP 三方「獨立全量全覆蓋審查」**。
+- **單元測試全數覆蓋**：
+  - 新增 [test/rich-messages.test.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/test/rich-messages.test.js) 與更新 [test/stock-fund.test.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/test/stock-fund.test.js)。
+  - 全庫 141 項單元測試 100% 通過（0 Failed）。
+
 ## [1.14.0] - 2026-11-11
 
 ### Added & Changed

@@ -3,7 +3,7 @@
  * `/model` is canonical; `/llmchange` remains a compatibility alias.
  */
 
-import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext, buildInlineButton } from '../telegram/telegram.js';
 import { trimUserConfig as trimPersistedUserConfig } from '../telegram/context.js';
 import { DATABASE } from '../config/env.js';
 import {
@@ -147,7 +147,7 @@ export async function commandLLMChange(message, command, subcommand, context) {
   return commandModel(message, command, subcommand, context);
 }
 
-async function showModelMenu(context) {
+export async function showModelMenu(context) {
   const profiles = getAllLLMProfiles(context);
   const currentName = getCurrentProfileName(context);
   const names = Object.keys(profiles);
@@ -162,10 +162,13 @@ async function showModelMenu(context) {
 
   const buttons = [];
   for (let index = 0; index < names.length; index += 2) {
-    buttons.push(names.slice(index, index + 2).map((name) => ({
-      text: `${name === currentName ? '✓ ' : ''}${profiles[name].name || name}`,
-      callback_data: `/model:${name}`
-    })));
+    buttons.push(names.slice(index, index + 2).map((name) => {
+      const displayName = profiles[name].name || name;
+      return buildInlineButton({
+        text: (name === currentName ? '✓ ' : '') + displayName,
+        ...(name === currentName ? { disabled: {} } : { callback_data: `/model:${name}` })
+      });
+    }));
   }
   context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({ inline_keyboard: buttons });
   context.CURRENT_CHAT_CONTEXT.parse_mode = 'Markdown';

@@ -1,5 +1,10 @@
 // AI 圖片生成功能模組
-import { sendMessageToTelegramWithContext, sendPhotoToTelegramWithContext, sendChatActionToTelegramWithContext } from '../telegram/telegram.js';
+import {
+  sendMessageToTelegramWithContext,
+  sendPhotoToTelegramWithContext,
+  sendChatActionToTelegramWithContext,
+  buildInlineButton
+} from '../telegram/telegram.js';
 import { extractTelegramPhotoUrl } from '../telegram/message.js';
 import { isGeminiImageEnable, requestImageFromGemini } from '../agent/gemini.js';
 import { isOpenAIImageEnable, requestImageFromOpenAI, getOpenAIImageApiBase } from '../agent/openai.js';
@@ -307,6 +312,22 @@ export async function commandSetImageProvider(message, command, subcommand, cont
     msg += `💡 **使用方法**: \`/setimg <provider>\`\n`;
     msg += `📝 **範例**: \`/setimg openai\``;
     
+    const buttons = [];
+    let row = [];
+    for (const p of validProviders) {
+      row.push(buildInlineButton({
+        text: (p === currentProvider ? '✓ ' : '') + p,
+        ...(p === currentProvider ? { disabled: {} } : { callback_data: `/setimg:${p}` })
+      }));
+      if (row.length === 2) {
+        buttons.push(row);
+        row = [];
+      }
+    }
+    if (row.length > 0) {
+      buttons.push(row);
+    }
+    context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify({ inline_keyboard: buttons });
     context.CURRENT_CHAT_CONTEXT.parse_mode = "Markdown";
     return sendMessageToTelegramWithContext(context)(msg);
   }
@@ -325,10 +346,12 @@ export async function commandSetImageProvider(message, command, subcommand, cont
     context.USER_CONFIG.AI_IMAGE_PROVIDER = provider;
     
     // 保存配置到資料庫
-    await DATABASE.put(
-      context.SHARE_CONTEXT.configStoreKey,
-      JSON.stringify(trimUserConfig(context.USER_CONFIG))
-    );
+    if (DATABASE && typeof DATABASE.put === 'function') {
+      await DATABASE.put(
+        context.SHARE_CONTEXT.configStoreKey,
+        JSON.stringify(trimUserConfig(context.USER_CONFIG))
+      );
+    }
     
     // 檢查設定的服務是否可用
     let statusMsg = `✅ **圖片生成服務已設定為**: ${provider}\n\n`;

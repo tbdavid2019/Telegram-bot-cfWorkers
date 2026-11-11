@@ -80,6 +80,13 @@ export async function msgHandleCallbackQuery(message, context) {
     return handleLocationCallback(message, context);
   }
 
+  // 處理圖片生成模型切換
+  if (callbackData.startsWith('/setimg:')) {
+    const provider = callbackData.replace('/setimg:', '');
+    const { commandSetImageProvider } = await import('../features/image-gen.js');
+    return commandSetImageProvider(message, '/setimg', provider, context);
+  }
+
   // 處理語音回覆切換
   if (callbackData.startsWith('/voicereply:')) {
     const mode = callbackData.split(':')[1]; // 'text' 或 'voice'

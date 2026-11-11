@@ -3,7 +3,8 @@
  * 股票查詢功能
  */
 
-import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext, sendRichMessageWithContext } from '../telegram/telegram.js';
+import { buildRichTable } from '../telegram/rich.js';
 
 // 台股熱門股票快捷列表
 const TW_HOT_STOCKS = [
@@ -147,7 +148,8 @@ async function fetchTWStock(stockCode, context) {
 
     const stockType = detectStockType(formattedCode);
     const formattedStockInfo = formatUniversalStockData(meta, quote, stockCode, stockType);
-    return sendMessageToTelegramWithContext(context)(formattedStockInfo);
+    const tableBlock = buildUniversalStockTable(meta, quote, stockCode, stockType);
+    return sendRichMessageWithContext(context)({ blocks: [tableBlock] }, formattedStockInfo);
     
   } catch (e) {
     console.error(`Stock Query Error: ${e.message}`); 
@@ -264,6 +266,77 @@ ${trendSymbol} **漲跌**: ${changeSymbol}${formatNumber(change)} (${changeSymbo
 }
 
 /**
+ * 構建金融行情之 Telegram 10.3 原生表格 (InputRichBlockTable)
+ * @param {Object} meta - 股票元數據
+ * @param {Object} quote - 股票報價數據
+ * @param {string} originalCode - 原始代碼
+ * @param {string} stockType - 股票類型
+ * @returns {Object} InputRichBlockTable
+ */
+function buildUniversalStockTable(meta, quote, originalCode, stockType) {
+  const symbol = meta.symbol || originalCode;
+  const currency = meta.currency || 'USD';
+  const stockName = meta.longName || meta.shortName || meta.displayName || '';
+  
+  const currentPrice = meta.regularMarketPrice ?? meta.previousClose;
+  const previousClose = meta.previousClose;
+  const hasValidPrice = typeof currentPrice === 'number' && Number.isFinite(currentPrice);
+  const hasValidPrev = typeof previousClose === 'number' && Number.isFinite(previousClose) && previousClose !== 0;
+
+  let change = 0;
+  let changePercent = 0;
+  if (hasValidPrice && hasValidPrev) {
+    change = currentPrice - previousClose;
+    changePercent = ((change / previousClose) * 100);
+  }
+  
+  const dayHigh = meta.regularMarketDayHigh ?? 'N/A';
+  const dayLow = meta.regularMarketDayLow ?? 'N/A';
+  const dayOpen = quote?.open?.length ? quote.open[quote.open.length - 1] : (meta.regularMarketOpen ?? 'N/A');
+  const volume = meta.regularMarketVolume ?? 'N/A';
+  const marketEmoji = getMarketEmoji(stockType);
+
+  const formatNumber = (num) => {
+    if (typeof num !== 'number' || !Number.isFinite(num)) return num ? String(num) : 'N/A';
+    return num.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatVolume = (vol) => {
+    if (typeof vol !== 'number' || !Number.isFinite(vol)) return vol ? String(vol) : 'N/A';
+    if (vol >= 1000000000) {
+      return `${(vol / 1000000000).toFixed(1)}B`;
+    } else if (vol >= 1000000) {
+      return `${(vol / 1000000).toFixed(1)}M`;
+    } else if (vol >= 1000) {
+      return `${(vol / 1000).toFixed(1)}K`;
+    }
+    return vol.toLocaleString();
+  };
+
+  const changeSymbol = change > 0 ? '+' : '';
+
+  const rows = [
+    ['現價', `${formatNumber(currentPrice)} ${currency}`],
+    ['漲跌', hasValidPrice && hasValidPrev ? `${changeSymbol}${formatNumber(change)} (${changeSymbol}${changePercent.toFixed(2)}%)` : 'N/A'],
+    ['開盤價', `${formatNumber(dayOpen)}`],
+    ['今日最高', `${formatNumber(dayHigh)}`],
+    ['今日最低', `${formatNumber(dayLow)}`],
+    ['昨收', `${formatNumber(previousClose)}`],
+    ['成交量', `${formatVolume(volume)}`]
+  ];
+
+  const caption = `${marketEmoji} ${symbol} ${stockName ? `(${stockName})` : ''}`.trim();
+
+  return buildRichTable({
+    headers: ['指標', '數值'],
+    rows,
+    is_compact: true,
+    is_striped: true,
+    caption
+  });
+}
+
+/**
  * 根據股票類型獲取市場表情符號
  * @param {string} stockType - 股票類型
  * @returns {string} 表情符號
@@ -366,7 +439,8 @@ async function fetchUSStock(stockSymbol, context) {
     }
 
     const formattedStockInfo = formatUniversalStockData(meta, quote, stockSymbol, 'us');
-    return sendMessageToTelegramWithContext(context)(formattedStockInfo);
+    const tableBlock = buildUniversalStockTable(meta, quote, stockSymbol, 'us');
+    return sendRichMessageWithContext(context)({ blocks: [tableBlock] }, formattedStockInfo);
     
   } catch (e) {
     console.error(`Stock2 Query Error: ${e.message}`);
@@ -743,6 +817,69 @@ export async function commandFund(message, command, subcommand, context) {
 
     const data = await response.json();
     const formattedReport = formatFundReport(data, tickers);
+
+    // 建構投資委員會最終決策與傳奇大師評級之原生表格區塊
+    const decisions = data.decisions || {};
+    const analystSignals = data.analyst_signals || {};
+
+    const decisionRows = [];
+    for (const ticker of tickers) {
+      const dec = decisions[ticker];
+      if (dec && (dec.action || dec.reasoning)) {
+        const confText = dec.confidence !== undefined 
+          ? (dec.confidence <= 100 ? `${dec.confidence}%` : `評分 ${Math.round(dec.confidence)}`) 
+          : 'N/A';
+        decisionRows.push([
+          ticker.toUpperCase(),
+          getActionTag(dec.action),
+          confText,
+          dec.quantity !== undefined && dec.quantity !== null ? `${dec.quantity} 股` : '—'
+        ]);
+      }
+    }
+
+    const analystRows = [];
+    const personaEntries = Object.entries(analystSignals).filter(
+      ([agentName]) => agentName !== 'round_table' && agentName !== 'risk_management_agent'
+    );
+    for (const [agentKey, signalObj] of personaEntries) {
+      for (const ticker of tickers) {
+        const sig = signalObj[ticker];
+        if (!sig) continue;
+        const displayName = ANALYST_NAMES[agentKey] || agentKey.replace('_agent', '');
+        const tag = getSignalTag(sig.signal);
+        const conf = sig.confidence !== undefined 
+          ? (sig.confidence <= 100 ? `${sig.confidence}%` : `評分: ${Math.round(sig.confidence)}`) 
+          : 'N/A';
+        analystRows.push([ticker.toUpperCase(), displayName, tag, conf]);
+      }
+    }
+
+    const blocks = [];
+    if (decisionRows.length > 0) {
+      const decTable = buildRichTable({
+        headers: ['標的', '建議動作', '決策信心度', '建議股數'],
+        rows: decisionRows,
+        is_compact: true,
+        is_striped: true,
+        caption: '🎯 投資委員會最終決策'
+      });
+      if (decTable) blocks.push(decTable);
+    }
+    if (analystRows.length > 0) {
+      const anaTable = buildRichTable({
+        headers: ['標的', '大師 / 分析師', '獨立評級', '信心度'],
+        rows: analystRows,
+        is_compact: true,
+        is_striped: true,
+        caption: '👥 傳奇投資大師評級'
+      });
+      if (anaTable) blocks.push(anaTable);
+    }
+
+    if (blocks.length > 0) {
+      return sendRichMessageWithContext(context)({ blocks }, formattedReport);
+    }
     return sendMessageToTelegramWithContext(context)(formattedReport);
   } catch (e) {
     console.error('AI Hedge Fund Error:', e);
