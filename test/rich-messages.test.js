@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import {
   buildRichTable,
   tableToLegacyHtml,
-  splitRichTextIntoLegacyChunks
+  splitRichTextIntoLegacyChunks,
+  markdownTableToRichBlock,
+  extractRichBlocksFromMarkdown
 } from '../src/telegram/rich.js';
 import {
   sendRichMessage,
@@ -545,4 +547,60 @@ test('/stock2: outputs native rich table for US equity quote and provides fallba
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('markdownTableToRichBlock: converts GFM markdown table to Telegram 10.3 InputRichBlockTable', () => {
+  const tableMd = `| 城市 | 氣溫 | 狀況 |\n| :--- | :---: | ---: |\n| 台北 | 24°C | 多雲 |\n| 高雄 | 28°C | 晴天 |`;
+  const block = markdownTableToRichBlock(tableMd, { caption: '全台主要城市天氣' });
+
+  assert.ok(block);
+  assert.equal(block.type, 'table');
+  assert.equal(block.is_compact, true);
+  assert.equal(block.is_striped, true);
+  assert.equal(block.caption, '全台主要城市天氣');
+  assert.equal(block.cells.length, 3);
+
+  // Headers
+  assert.deepEqual(block.cells[0], [
+    { text: '城市', is_header: true, align: 'left' },
+    { text: '氣溫', is_header: true, align: 'center' },
+    { text: '狀況', is_header: true, align: 'right' }
+  ]);
+
+  // Data rows
+  assert.deepEqual(block.cells[1], [
+    { text: '台北', align: 'left' },
+    { text: '24°C', align: 'center' },
+    { text: '多雲', align: 'right' }
+  ]);
+  assert.deepEqual(block.cells[2], [
+    { text: '高雄', align: 'left' },
+    { text: '28°C', align: 'center' },
+    { text: '晴天', align: 'right' }
+  ]);
+});
+
+test('markdownTableToRichBlock: safely returns null for non-table markdown or invalid inputs', () => {
+  assert.equal(markdownTableToRichBlock(null), null);
+  assert.equal(markdownTableToRichBlock(''), null);
+  assert.equal(markdownTableToRichBlock('這是一般純文字段落，沒有任何 Markdown 表格。'), null);
+  assert.equal(markdownTableToRichBlock('```\ncode block\n```'), null);
+});
+
+test('extractRichBlocksFromMarkdown: parses multiple tables and segments mixed text properly', () => {
+  const mixed = `這是開頭說明。\n\n| 表一欄A | 表一欄B |\n|---|---|\n| 1 | 2 |\n\n中段過渡說明。\n\n| 表二欄X | 表二欄Y |\n|---|---|\n| 8 | 9 |\n\n結尾總結。`;
+  const extracted = extractRichBlocksFromMarkdown(mixed);
+
+  assert.equal(extracted.blocks.length, 2);
+  assert.equal(extracted.blocks[0].cells[1][0].text, '1');
+  assert.equal(extracted.blocks[1].cells[1][0].text, '8');
+
+  assert.ok(extracted.text.includes('這是開頭說明。'));
+  assert.ok(extracted.text.includes('中段過渡說明。'));
+  assert.ok(extracted.text.includes('結尾總結。'));
+  assert.ok(!extracted.text.includes('| 表一欄A |'));
+  assert.ok(!extracted.text.includes('| 表二欄X |'));
+
+  assert.ok(extracted.fallbackText.includes('• <b>1</b> | <b>表一欄B:</b> 2'));
+  assert.ok(extracted.fallbackText.includes('• <b>8</b> | <b>表二欄Y:</b> 9'));
 });

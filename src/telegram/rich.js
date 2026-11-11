@@ -3,7 +3,7 @@
  * 包含富文本原生表格 (InputRichBlockTable)、相容性 HTML 轉換與段落感知降級切分
  */
 
-import { balanceTelegramHtmlTags } from '../utils/md2tgmd.js';
+import { balanceTelegramHtmlTags, parseMarkdownTables, markdownToTelegramHtml, cleanCellPlainText } from '../utils/md2tgmd.js';
 import { escapeHTML } from '../utils/utils.js';
 
 /**
@@ -114,10 +114,15 @@ export function buildRichTable({
 
   const tableBlock = {
     type: 'table',
-    cells,
-    is_compact: Boolean(is_compact),
-    is_striped: Boolean(is_striped)
+    cells
   };
+
+  if (Boolean(is_compact)) {
+    tableBlock.is_compact = true;
+  }
+  if (Boolean(is_striped)) {
+    tableBlock.is_striped = true;
+  }
 
   if (caption !== undefined && caption !== null && String(caption).trim() !== '') {
     tableBlock.caption = String(caption).trim();
@@ -263,4 +268,140 @@ export function splitRichTextIntoLegacyChunks(text, limit = 4000) {
   }
 
   return chunks;
+}
+
+/**
+ * 將 GFM Markdown 表格字串轉換為 Telegram 10.3 原生 InputRichBlockTable 物件
+ * @param {string} tableMarkdown - GFM 表格 Markdown 字串
+ * @param {Object} [options={}]
+ * @param {string} [options.caption] - 自訂表格標題（若無則自動提取 Markdown 標題/Caption）
+ * @param {boolean} [options.is_compact=true] - 是否緊湊排列
+ * @param {boolean} [options.is_striped=true] - 是否斑馬紋交替色彩
+ * @returns {Object|null} InputRichBlockTable，若無有效內容則回傳 null
+ */
+export function markdownTableToRichBlock(tableInput, options = {}) {
+  if (!tableInput) return null;
+
+  let table;
+  if (typeof tableInput === 'object' && tableInput !== null && Array.isArray(tableInput.headers)) {
+    table = tableInput;
+  } else if (typeof tableInput === 'string') {
+    const tables = parseMarkdownTables(tableInput);
+    if (tables.length === 0) return null;
+    table = tables[0];
+  } else {
+    return null;
+  }
+
+  const aligns = table.aligns || [];
+
+  const headers = (table.headers || []).map((h, i) => {
+    const align = aligns[i];
+    return {
+      text: cleanCellPlainText(h),
+      ...(align && ['left', 'center', 'right'].includes(align) ? { align } : {})
+    };
+  });
+
+  const rows = (table.rows || []).map((row) =>
+    (Array.isArray(row) ? row : [row]).map((cell, i) => {
+      const align = aligns[i];
+      return {
+        text: cleanCellPlainText(cell),
+        ...(align && ['left', 'center', 'right'].includes(align) ? { align } : {})
+      };
+    })
+  );
+
+  const caption = options.caption !== undefined ? options.caption : table.caption;
+
+  return buildRichTable({
+    headers,
+    rows,
+    is_compact: options.is_compact !== undefined ? Boolean(options.is_compact) : true,
+    is_striped: options.is_striped !== undefined ? Boolean(options.is_striped) : true,
+    caption
+  });
+}
+
+/**
+ * 從 Markdown 文本中提取 Telegram 10.3 富文本表格區塊，並將文本拆分為常規文字與富文本物件
+ * @param {string} markdown - 原始 Markdown 訊息
+ * @returns {{ text: string, blocks: Array<Object>, fallbackText: string, segments: Array<Object> }}
+ */
+export function extractRichBlocksFromMarkdown(markdown) {
+  if (markdown === undefined || markdown === null) {
+    return {
+      text: '',
+      blocks: [],
+      fallbackText: '',
+      segments: []
+    };
+  }
+
+  const str = typeof markdown !== 'string' ? String(markdown) : markdown;
+  if (!str.trim()) {
+    return {
+      text: str,
+      blocks: [],
+      fallbackText: str,
+      segments: [{ type: 'text', content: str }]
+    };
+  }
+
+  const normalized = str.replace(/\r\n/g, '\n');
+  const tables = parseMarkdownTables(normalized);
+
+  if (tables.length === 0) {
+    const fallback = markdownToTelegramHtml(normalized);
+    return {
+      text: normalized,
+      blocks: [],
+      fallbackText: fallback,
+      segments: [{ type: 'text', content: normalized }]
+    };
+  }
+
+  const blocks = [];
+  const segments = [];
+  let lastIndex = 0;
+
+  for (const table of tables) {
+    const richBlock = markdownTableToRichBlock(table, { caption: table.caption });
+    if (richBlock) {
+      blocks.push(richBlock);
+    }
+
+    const idx = normalized.indexOf(table.raw, lastIndex);
+    if (idx !== -1) {
+      const textBefore = normalized.slice(lastIndex, idx);
+      if (textBefore.trim()) {
+        segments.push({ type: 'text', content: textBefore });
+      }
+      segments.push({ type: 'table', block: richBlock, raw: table.raw });
+      lastIndex = idx + table.raw.length;
+    }
+  }
+
+  if (lastIndex < normalized.length) {
+    const textAfter = normalized.slice(lastIndex);
+    if (textAfter.trim()) {
+      segments.push({ type: 'text', content: textAfter });
+    }
+  }
+
+  let cleanText = normalized;
+  for (const table of tables) {
+    cleanText = cleanText.replace(table.raw, '');
+  }
+  cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
+
+  const fallbackText = markdownToTelegramHtml(normalized);
+
+  return {
+    text: cleanText,
+    blocks,
+    fallbackText,
+    segments
+  };
 }

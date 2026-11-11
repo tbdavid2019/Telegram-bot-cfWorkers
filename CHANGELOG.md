@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.0] - 2026-11-11
+
+### Added & Changed
+- **Telegram Bot API 10.3 Phase 2 落地實作：Markdown 表格智慧解析與優雅排版引擎**：
+  - **解決痛點**：過去 LLM（如 Gemini/GPT）回覆天氣預報、多欄位報表時產生的 GFM Markdown 表格（`| col | col |` 與 `|---|---|`），在手機端 Telegram 上被當作普通文字折行，導致直線與減號碎裂難讀。
+  - **全局 Markdown 表格解析器 (`src/utils/md2tgmd.js`)**：
+    - 新增 `parseMarkdownTables`、`splitRowCells`、`parseAlignment` 與 `formatMarkdownTableToHtml`。
+    - 精準辨識 GFM 表格語法，在 Code Block 隔離後以佔位符保護，轉換為手機直式閱讀極佳的條列結構：
+      - 首欄主鍵自動加粗（若為 `<code>` 則不重複包 `<b>`，徹底避免 Telegram `<b><code>` 實體衝突報錯）。
+      - 後續欄位以 `<b>表頭:</b> 數值` 格式呈現，以 ` | ` 清晰分隔。
+      - 徹底消除原始 Markdown 管道符號與 `|---|---|` 破碎直線。
+      - 支援轉義管道符 `\|`、單元格超連結雙引號轉義（`&quot;`）、空欄自動補齊 `—`。
+  - **Telegram 10.3 原生表格轉換模組 (`src/telegram/rich.js`)**：
+    - 新增 `markdownTableToRichBlock` 與 `extractRichBlocksFromMarkdown`。
+    - 自動將 Markdown 表格轉化為 Telegram 10.3 規範的 `InputRichBlockTable` 原生表格物件（`align` 對齊、表頭 `is_header: true`、單元格純文字清理 `cleanCellPlainText`）。
+    - 嚴格遵守 Telegram 10.3 規範：`is_compact` 與 `is_striped` 為 optional True，關閉時自動省略欄位。
+  - **Code Block 語法隔離**：
+    - `parseMarkdownTables` 自動識別並跳過 triple-backtick (```` ``` ````)、tilde (`~~~`) 及 4-space 縮進代碼塊，代碼塊內的表格絕不被誤轉換。
+    - 嚴格要求表頭欄位數與 delimiter 欄位數相等，防止 Setext 標題被誤認為表格。
+- **OpenCode + Codex + OMP 三方獨立全量 Code Review 收斂與修復**：
+  - 修復 Caption 匹配正則潛在之 ReDoS 回溯漏洞，消除多餘空白遞迴匹配。
+  - 修復單元格內含超連結時雙引號逃逸 HTML attribute 的安全隱患。
+  - 修正首欄包含行內 code 佔位符時誤加粗導致 Telegram 實體巢狀衝突之問題。
+- **單元測試全數覆蓋**：
+  - 於 [test/telegram-markdown.test.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/test/telegram-markdown.test.js) 與 [test/rich-messages.test.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/test/rich-messages.test.js) 新增 13 項測試（涵蓋真實五欄天氣預報、代碼塊隔離、超連結雙引號安全、對齊解析與空欄容錯）。
+  - 全庫 154 項單元測試 100% 通過（0 Failed）。
+
 ## [1.15.0] - 2026-11-11
 
 ### Added & Changed
