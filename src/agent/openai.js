@@ -69,22 +69,40 @@ export function getOpenAIChatModel(context) {
 }
 
 export function openAIImageKeyFromContext(context) {
-  // 如果有專門的圖片 API Key，優先使用
-  if (context.USER_CONFIG.OPENAI_IMAGE_API_KEY && context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length > 0) {
-    const length = context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length;
-    return context.USER_CONFIG.OPENAI_IMAGE_API_KEY[Math.floor(Math.random() * length)];
+  const imageBase = getOpenAIImageApiBase(context);
+  const isAiurl = imageBase?.includes('aiurl.tw');
+
+  // 1. 如果有專門的圖片 API Key 且非空，優先使用
+  const rawKey = context?.USER_CONFIG?.OPENAI_IMAGE_API_KEY;
+  const imageKeys = Array.isArray(rawKey)
+    ? rawKey.filter(k => typeof k === 'string' && k.trim() !== '')
+    : (typeof rawKey === 'string' && rawKey.trim() !== '' ? [rawKey.trim()] : []);
+
+  if (imageKeys.length > 0) {
+    return imageKeys[Math.floor(Math.random() * imageKeys.length)];
   }
-  // 否則使用一般的 OpenAI API Key
+
+  // 2. 若為 aiurl 端點，僅能使用 AIURL_API_KEY，嚴禁回退至使用者的官方 OPENAI_API_KEY（防洩漏）
+  if (isAiurl) {
+    if (context?.USER_CONFIG?.AIURL_API_KEY && context.USER_CONFIG.AIURL_API_KEY.trim() !== '') {
+      return context.USER_CONFIG.AIURL_API_KEY.trim();
+    }
+    return null; // 無合法 aiurl 專用金鑰時回傳 null，避免將官方金鑰誤送往第三方端點
+  }
+
+  // 3. 非 aiurl 端點（例如官方端點），允許使用一般的 OpenAI API Key（支援 LLM Profiles）
   return openAIKeyFromContext(context);
 }
 
 export function getOpenAIImageApiBase(context) {
-  // 如果有專門的圖片 API BASE，優先使用
-  if (context.USER_CONFIG.OPENAI_IMAGE_API_BASE && context.USER_CONFIG.OPENAI_IMAGE_API_BASE.trim() !== "") {
-    return context.USER_CONFIG.OPENAI_IMAGE_API_BASE.trim();
+  const azureBase = context?.USER_CONFIG?.OPENAI_API_BASE;
+  if (azureBase && typeof azureBase === 'string' && azureBase.includes('azure.com')) {
+    return azureBase.replace(/\/+$/, '');
   }
-  // 否則使用一般的 OpenAI API BASE
-  return context.USER_CONFIG.OPENAI_API_BASE;
+  if (context?.USER_CONFIG?.OPENAI_IMAGE_API_BASE && context.USER_CONFIG.OPENAI_IMAGE_API_BASE.trim() !== "") {
+    return context.USER_CONFIG.OPENAI_IMAGE_API_BASE.trim().replace(/\/+$/, '');
+  }
+  return "https://llm.aiurl.tw/v1";
 }
 
 // ========== 狀態檢查 ==========
@@ -102,10 +120,24 @@ export function isOpenAIEnable(context) {
 }
 
 export function isOpenAIImageEnable(context) {
-  // 檢查是否有專門的圖片 API Key，或者有一般的 OpenAI API Key
+  const imageBase = getOpenAIImageApiBase(context);
+  const isAiurl = imageBase?.includes('aiurl.tw');
+
+  const rawKey = context?.USER_CONFIG?.OPENAI_IMAGE_API_KEY;
+  const hasImageKey = Array.isArray(rawKey)
+    ? rawKey.some(k => typeof k === 'string' && k.trim() !== '')
+    : Boolean(typeof rawKey === 'string' && rawKey.trim() !== '');
+
+  // 若為 aiurl 端點，必須具備專屬圖片金鑰或 AIURL_API_KEY
+  if (isAiurl) {
+    return hasImageKey || Boolean(context?.USER_CONFIG?.AIURL_API_KEY && context.USER_CONFIG.AIURL_API_KEY.trim() !== '');
+  }
+
+  // 官方或第三方端點：支援 OPENAI_IMAGE_API_KEY、OPENAI_API_KEY 或 LLM Profiles
   return (
-    (context.USER_CONFIG.OPENAI_IMAGE_API_KEY && context.USER_CONFIG.OPENAI_IMAGE_API_KEY.length > 0) ||
-    (context.USER_CONFIG.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0)
+    hasImageKey ||
+    (context?.USER_CONFIG?.OPENAI_API_KEY && context.USER_CONFIG.OPENAI_API_KEY.length > 0) ||
+    Boolean(openAIKeyFromContext(context))
   );
 }
 
@@ -200,7 +232,11 @@ export async function requestCompletionsFromOpenAI(params, context, onStream, pr
  * 檢查 Azure 圖片生成是否啟用
  */
 export function isAzureImageEnable(context) {
-  return isOpenAIImageEnable(context) && context.USER_CONFIG.OPENAI_API_BASE?.includes('azure.com');
+  const azureBase = context?.USER_CONFIG?.OPENAI_API_BASE;
+  if (!azureBase || typeof azureBase !== 'string' || !azureBase.includes('azure.com')) {
+    return false;
+  }
+  return isOpenAIImageEnable(context);
 }
 
 /**
@@ -212,15 +248,17 @@ export async function requestImageFromAzureOpenAI(prompt, context) {
 
 export async function requestImageFromOpenAI(prompt, context) {
   const url = `${getOpenAIImageApiBase(context)}/images/generations`;
+  const apiKey = openAIImageKeyFromContext(context);
+  if (!apiKey) {
+    throw new Error("未設定有效的圖片生成 API Key (請設定 OPENAI_IMAGE_API_KEY 或 AIURL_API_KEY)");
+  }
   const header = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${openAIImageKeyFromContext(context)}`
+    "Authorization": `Bearer ${apiKey}`
   };
   
-  // 檢查是否使用 gpt-image-1 模型
-  const isGptImage1 = 
-    context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
-    context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1";
+  // 僅在明確指定使用 gpt-image-1 時才走特殊分支
+  const isGptImage1 = context?.USER_CONFIG?.DALL_E_MODEL === "gpt-image-1";
   
   const body = {
     prompt,
@@ -230,33 +268,53 @@ export async function requestImageFromOpenAI(prompt, context) {
   if (isGptImage1) {
     // GPT-Image-1 配置
     body.model = "gpt-image-1";
-    body.size = context.USER_CONFIG.GPT_IMAGE_SIZE || "1024x1024";
+    body.size = context?.USER_CONFIG?.GPT_IMAGE_SIZE || "1024x1024";
   } else {
-    // DALL-E 配置
-    body.model = context.USER_CONFIG.DALL_E_MODEL;
-    body.size = context.USER_CONFIG.DALL_E_IMAGE_SIZE;
+    // DALL-E 配置 / OpenAI 相容圖片模型 (預設 codex/gpt-image-2)
+    body.model = context?.USER_CONFIG?.DALL_E_MODEL || "codex/gpt-image-2";
+    body.size = context?.USER_CONFIG?.DALL_E_IMAGE_SIZE || "1024x1024";
     
     if (body.model === "dall-e-3") {
-      body.quality = context.USER_CONFIG.DALL_E_IMAGE_QUALITY;
-      body.style = context.USER_CONFIG.DALL_E_IMAGE_STYLE;
+      body.quality = context?.USER_CONFIG?.DALL_E_IMAGE_QUALITY || "standard";
+      body.style = context?.USER_CONFIG?.DALL_E_IMAGE_STYLE || "natural";
     }
   }
   
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: header,
-    body: JSON.stringify(body)
-  }).then((res) => res.json());
-  
-  if (resp.error?.message) {
-    throw new Error(resp.error.message);
+  let respText;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: header,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25000)
+    });
+    respText = await res.text();
+  } catch (netErr) {
+    throw new Error(`請求端點失敗 (${netErr.name === 'TimeoutError' ? '連線逾時 25s' : netErr.message})`);
+  }
+
+  let resp;
+  try {
+    resp = JSON.parse(respText);
+  } catch {
+    throw new Error(`端點回傳非 JSON 回應 (HTTP ${res?.status || 'Unknown'}): ${respText.substring(0, 150)}`);
+  }
+
+  if (!res.ok || resp.error) {
+    const errMsg = resp.error?.message || resp.message || resp.detail || JSON.stringify(resp);
+    throw new Error(`API 錯誤 (HTTP ${res.status}): ${errMsg}`);
   }
   
-  // 處理 gpt-image-1 的 base64 回應
-  if (isGptImage1 && resp?.data?.[0]?.b64_json) {
+  // 優先處理 base64 回應 (相容 codex/gpt-image-2, gpt-image-1 等端點)
+  if (resp?.data?.[0]?.b64_json) {
     return `data:image/png;base64,${resp.data[0].b64_json}`;
   }
   
-  // 處理 DALL-E 的 URL 回應
-  return resp?.data?.[0]?.url;
+  // 處理 URL 回應 (如 DALL-E)
+  if (resp?.data?.[0]?.url) {
+    return resp.data[0].url;
+  }
+
+  throw new Error("圖片生成端點未回傳有效圖片資料 (缺少 b64_json 或 url)");
 }

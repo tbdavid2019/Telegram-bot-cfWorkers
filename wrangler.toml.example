@@ -63,11 +63,11 @@ ENABLE_LOCATION_SERVICE = "false"
 GPS_IN_LIST = "true"
 GOOGLE_MAPS_API_KEY = "AIza-YOUR-MAPS-KEY-HERE"
 
-# 圖片生成設定
-AI_IMAGE_PROVIDER = "gemini"
-DALL_E_MODEL = "gpt-image-1-mini"
-DALL_E_IMAGE_STYLE = "natural"
-OPENAI_IMAGE_API_BASE = "https://api.openai.com/v1"
+# 圖片生成設定 (第一順位: aiurl / 備援: Gemini)
+AI_IMAGE_PROVIDER = "openai"
+DALL_E_MODEL = "codex/gpt-image-2"
+DALL_E_IMAGE_SIZE = "1024x1024"
+OPENAI_IMAGE_API_BASE = "https://llm.aiurl.tw/v1"
 OPENAI_IMAGE_API_KEY = "sk-YOUR-KEY-HERE"
 GEMINI_IMAGE_API_KEY = "AIza-YOUR-KEY-HERE"
 GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview"
@@ -239,12 +239,11 @@ OPENROUTER_API_KEY = "sk-YOUR-KEY-HERE"
 # Bedrock API Key
 BEDROCK_API_KEY = "YOUR-BEDROCK-KEY"
 
-# 圖片生成設定
-AI_IMAGE_PROVIDER = "gemini"
-DALL_E_MODEL = "gpt-image-1-mini"
+# 圖片生成設定 (第一順位: aiurl / 備援: Gemini)
+AI_IMAGE_PROVIDER = "openai"
+DALL_E_MODEL = "codex/gpt-image-2"
 DALL_E_IMAGE_SIZE = "1024x1024"
-DALL_E_IMAGE_STYLE = "natural"
-OPENAI_IMAGE_API_BASE = "https://api.openai.com/v1"
+OPENAI_IMAGE_API_BASE = "https://llm.aiurl.tw/v1"
 OPENAI_IMAGE_API_KEY = "sk-YOUR-KEY-HERE"
 GEMINI_IMAGE_API_KEY = "AIza-YOUR-KEY-HERE"
 GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview"

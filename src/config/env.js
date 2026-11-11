@@ -12,8 +12,8 @@ export class UserConfig {
   //
   // 舊版 provider 選擇；有有效 LLM Profile 時不使用此欄位
   AI_PROVIDER = "auto";
-  // AI圖片提供商: auto, openai, azure, workers
-  AI_IMAGE_PROVIDER = "auto";
+  // AI圖片提供商: openai (第一順位), auto, gemini, azure, workers
+  AI_IMAGE_PROVIDER = "openai";
   // 全局默認初始化消息
   SYSTEM_INIT_MESSAGE = null;
   // 全局默認初始化消息角色
@@ -28,24 +28,24 @@ export class UserConfig {
   OPENAI_API_BASE = "https://api.openai.com/v1";
   // OpenAI API Extra Params
   OPENAI_API_EXTRA_PARAMS = {};
-  // -- DALLE 配置 --
-  // DALL-E的模型名称
-  DALL_E_MODEL = "gpt-image-1-mini";
+  // -- DALLE / OpenAI 相容圖片配置 --
+  // 圖片模型名稱 (第一順位預設使用 codex/gpt-image-2)
+  DALL_E_MODEL = "codex/gpt-image-2";
   // DALL-E图片尺寸
   DALL_E_IMAGE_SIZE = "1024x1024";
   // DALL-E图片质量
   DALL_E_IMAGE_QUALITY = "standard";
   // DALL-E图片风格
   DALL_E_IMAGE_STYLE = "vivid";
-  // GPT-Image-1 的配置
-  GPT_IMAGE_MODEL = "gpt-image-1";
+  // GPT-Image-1 的配置 (舊版相容，若未指定則優先遵循 DALL_E_MODEL)
+  GPT_IMAGE_MODEL = "";
   // GPT-Image-1 图片尺寸
   GPT_IMAGE_SIZE = "1024x1024";
   // -- 圖片生成專用配置 --
-  // 圖片生成專用 API Key (如果為空則使用 OPENAI_API_KEY)
+  // 圖片生成專用 API Key (若為空且端點為 aiurl 則使用 AIURL_API_KEY；官方端點則使用 OPENAI_API_KEY)
   OPENAI_IMAGE_API_KEY = [];
-  // 圖片生成 API BASE (如果為空則使用 OPENAI_API_BASE)
-  OPENAI_IMAGE_API_BASE = "";
+  // 圖片生成 API BASE (第一順位預設使用 https://llm.aiurl.tw/v1)
+  OPENAI_IMAGE_API_BASE = "https://llm.aiurl.tw/v1";
   // -- Gemini 圖片生成配置 --
   // Gemini 圖片生成模型
   GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview";
@@ -73,7 +73,7 @@ export class UserConfig {
   WORKERS_CHAT_MODEL = "@cf/openai/gpt-oss-120b";
   WORKERS_AI_EXTRA_PARAMS = { max_tokens: 4096 };
   // Text-to-Image Model
-  WORKERS_IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
+  WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
   // -- Gemini 配置 --
   //
   // Google Gemini API Key

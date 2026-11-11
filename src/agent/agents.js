@@ -144,11 +144,11 @@ export const imageGenAgents = [
     enable: isGeminiImageEnable,
     request: requestImageFromGemini
   },
-  // {
-  //   name: "workers",
-  //   enable: isWorkersAIEnable,
-  //   request: requestImageFromWorkersAI
-  // }
+  {
+    name: "workers",
+    enable: isWorkersAIImageEnable,
+    request: requestImageFromWorkersAI
+  }
 ];
 
 // ========== 工具函數 ==========
@@ -215,43 +215,53 @@ export function loadChatLLM(context) {
  * 檢查 Workers AI 是否啟用
  */
 export function isWorkersAIImageEnable(context) {
-  return context.USER_CONFIG.AI_IMAGE_PROVIDER === 'workers';
+  return Boolean(context?.AI_BINDING || context?.env?.AI);
 }
 
 /**
  * 從 Workers AI 請求圖片生成
  */
 export async function requestImageFromWorkersAI(prompt, context) {
-  // Workers AI 圖片生成實現
-  const ai = context.AI_BINDING;
+  const ai = context.AI_BINDING || context?.env?.AI;
   if (!ai) {
     throw new Error('Workers AI binding not available');
   }
   
-  const response = await ai.run('@cf/stabilityai/stable-diffusion-xl-base-1.0', {
+  const model = context.USER_CONFIG?.WORKERS_IMAGE_MODEL || '@cf/black-forest-labs/flux-1-schnell';
+  const response = await ai.run(model, {
     prompt: prompt
   });
   
+  if (response instanceof Blob) {
+    return response;
+  }
+  if (response instanceof Uint8Array || response instanceof ArrayBuffer) {
+    return new Blob([response], { type: 'image/png' });
+  }
+  if (response && typeof response.getReader === 'function') {
+    const arrayBuffer = await new Response(response).arrayBuffer();
+    return new Blob([arrayBuffer], { type: 'image/png' });
+  }
+  if (response?.image && typeof response.image === 'string') {
+    return response.image.startsWith('data:') ? response.image : `data:image/png;base64,${response.image}`;
+  }
   return response;
 }
 
 export function loadImageGen(context) {
   console.log(`[DEBUG] loadImageGen called with AI_IMAGE_PROVIDER: ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
   
-  // 優先使用指定的 AI_IMAGE_PROVIDER
+  // 優先使用指定的 AI_IMAGE_PROVIDER (若可用)
   for (const imgGen of imageGenAgents) {
-    console.log(`[DEBUG] Checking if ${imgGen.name} === ${context.USER_CONFIG.AI_IMAGE_PROVIDER}`);
-    if (imgGen.name === context.USER_CONFIG.AI_IMAGE_PROVIDER) {
-      console.log(`[DEBUG] Found matching provider: ${imgGen.name}`);
+    if (imgGen.name === context.USER_CONFIG.AI_IMAGE_PROVIDER && imgGen.enable(context)) {
+      console.log(`[DEBUG] Found matching and enabled provider: ${imgGen.name}`);
       return imgGen;
     }
   }
   
   // 自動選擇第一個可用的
-  console.log(`[DEBUG] No matching provider found, checking enable() functions...`);
   for (const imgGen of imageGenAgents) {
     const enabled = imgGen.enable(context);
-    console.log(`[DEBUG] ${imgGen.name}.enable() = ${enabled}`);
     if (enabled) {
       console.log(`[DEBUG] Selected auto provider: ${imgGen.name}`);
       return imgGen;
@@ -272,16 +282,15 @@ export function currentImageModel(agentName, context) {
     //     return context.USER_CONFIG.AZURE_DALLE_API;
     //   }
     case "openai":
-      // 檢查是否使用 gpt-image-1
-      if (context.USER_CONFIG.DALL_E_MODEL === "gpt-image-1" || 
-          context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
+      // 僅在明確指定使用 gpt-image-1 時才顯示
+      if (context?.USER_CONFIG?.DALL_E_MODEL === "gpt-image-1") {
         return "gpt-image-1";
       }
-      return context.USER_CONFIG.DALL_E_MODEL;
+      return context?.USER_CONFIG?.DALL_E_MODEL || "codex/gpt-image-2";
     case "gemini":
-      return context.USER_CONFIG.GEMINI_IMAGE_MODEL;
-    // case "workers":
-    //   return context.USER_CONFIG.WORKERS_IMAGE_MODEL;
+      return context?.USER_CONFIG?.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview";
+    case "workers":
+      return context?.USER_CONFIG?.WORKERS_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell";
     default:
       return null;
   }

@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.0] - 2026-11-11
+
+### Added & Changed
+- **生圖第一順位全面切換至 `https://llm.aiurl.tw/v1`（模型：`codex/gpt-image-2`）**：
+  - 將所有 Bot 環境（`tgbotaws`, `tgbotchatgpt`, `tgbotgemini`, `tgbot444`）之預設圖片生成供應商由 Google Gemini 切換至高性價比、高畫質的 OpenAI 相容端點 `https://llm.aiurl.tw/v1`。
+  - 預設生圖模型設為 `codex/gpt-image-2`，預設尺寸 `1024x1024`。
+  - 在 [src/config/env.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/config/env.js) 將預設 `AI_IMAGE_PROVIDER` 設為 `"openai"`，預設 `OPENAI_IMAGE_API_BASE` 設為 `"https://llm.aiurl.tw/v1"`，預設 `DALL_E_MODEL` 設為 `"codex/gpt-image-2"`。
+  - 同步更新 [wrangler.toml.example](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/wrangler.toml.example) 與各環境 `.dev.vars`。
+- **4-Tier 生圖工業級多層級自動容錯備援鏈 (Multi-Tier Image Fallback Chain)**：
+  - **根本原因**：原專案生圖模組為單點調用架構，一旦第一順位端點遭遇 429 頻率限制、500 伺服器異常或超時，會直接在 Telegram 拋出 `ERROR` 終止，缺乏自動容錯降級機制。
+  - **解決方案**：在 [src/features/image-gen.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/image-gen.js) 與 [src/agent/agents.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/agents.js) 實作 `getImageGenChain`，建構 4 級容錯備援鏈：
+    1. **Tier 1 (首選主力)**：OpenAI 相容主力端點 (`https://llm.aiurl.tw/v1`，模型 `codex/gpt-image-2`)。
+    2. **Tier 2 (官方備援)**：OpenAI 官方原廠 (`https://api.openai.com/v1`，模型 `dall-e-3`，當有官方金鑰且主力端點非官方時自動啟用)。
+    3. **Tier 3 (原廠備援)**：Google Gemini 原廠多模態生圖 (`gemini-3-pro-image-preview`)。
+    4. **Tier 4 (邊緣保底)**：Cloudflare Workers AI 邊緣內網免連外生圖 (`@cf/black-forest-labs/flux-1-schnell`)。
+  - 在 `commandGenerateImg` 中加入自動級聯重試：當首選服務發生異常時，系統自動無縫降級切換至下一順位，確保 Telegram 端不中斷生圖服務。
+  - 指令 `/setimg` 視覺化即時列出目前生圖備援鏈（Fallback Chain）節點與啟用狀態。
+  - 指令 `/img2`（多服務並行生圖）自動調用所有可用節點並行生成。
+- **生圖回應解析與金鑰安全繼承重構**：
+  - 修復 [src/agent/openai.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/openai.js) 的 `requestImageFromOpenAI` 原先僅在 `gpt-image-1` 時才解析 base64 的硬限制，全面支援所有 OpenAI 相容端點回傳之 `b64_json`（自動包裝為 `data:image/png;base64,...` 給 Telegram 渲染）與 `url`。
+  - 優化 `openAIImageKeyFromContext`：若生圖端點為 `aiurl.tw` 且未顯式配置 `OPENAI_IMAGE_API_KEY`，自動安全繼承共用的 `AIURL_API_KEY`。
+- **單元測試覆蓋擴充**：
+  - 新增 [test/image-gen.test.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/test/image-gen.test.js)，包含 9 項針對預設配置、自訂端點、金鑰隔離防洩漏、安全解析、Fallback 佇列排序與多級自動降級的單元測試。
+  - 全庫 125 項單元測試全數通過（100% Pass）。
+
 ## [1.13.0] - 2026-11-09
 
 ### Fixed
