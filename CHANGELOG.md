@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
   - **根本原因**：原專案生圖模組為單點調用架構，一旦第一順位端點遭遇 429 頻率限制、500 伺服器異常或超時，會直接在 Telegram 拋出 `ERROR` 終止，缺乏自動容錯降級機制。
   - **解決方案**：在 [src/features/image-gen.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/features/image-gen.js) 與 [src/agent/agents.js](file:///Users/david/Documents/git/tbdavid2019/Telegram-bot-cfWorkers/src/agent/agents.js) 實作 `getImageGenChain`，建構 4 級容錯備援鏈：
     1. **Tier 1 (首選主力)**：OpenAI 相容主力端點 (`https://llm.aiurl.tw/v1`，模型 `codex/gpt-image-2`)。
-    2. **Tier 2 (官方備援)**：OpenAI 官方原廠 (`https://api.openai.com/v1`，模型 `dall-e-3`，當有官方金鑰且主力端點非官方時自動啟用)。
+    2. **Tier 2 (官方備援)**：OpenAI 官方原廠 (`https://api.openai.com/v1`，模型更新為官方現役 `gpt-image-2`，徹底替換已於 2026/05 下線之 `dall-e-3`；當有官方金鑰且主力端點非官方時自動啟用)。
     3. **Tier 3 (原廠備援)**：Google Gemini 原廠多模態生圖 (`gemini-3-pro-image-preview`)。
     4. **Tier 4 (邊緣保底)**：Cloudflare Workers AI 邊緣內網免連外生圖 (`@cf/black-forest-labs/flux-1-schnell`)。
   - 在 `commandGenerateImg` 中加入自動級聯重試：當首選服務發生異常時，系統自動無縫降級切換至下一順位，確保 Telegram 端不中斷生圖服務。

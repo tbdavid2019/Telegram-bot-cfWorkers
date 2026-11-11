@@ -98,7 +98,7 @@ function currentImageModel(agentName, context) {
         context.USER_CONFIG.GPT_IMAGE_MODEL === "gpt-image-1") {
         return "gpt-image-1";
       }
-      return context.USER_CONFIG.DALL_E_MODEL || "dall-e-3";
+      return context.USER_CONFIG.DALL_E_MODEL || "codex/gpt-image-2";
     case "gemini":
       return context.USER_CONFIG.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview";
     default:

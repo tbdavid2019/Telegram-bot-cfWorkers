@@ -13,7 +13,7 @@ import { ENV, DATABASE } from '../config/env.js';
  * 取得依優先順序排序的圖片生成服務鏈（具備多層級自動降級備援）
  * 預設備援鏈：
  * Tier 1: OpenAI 相容主力端點 (llm.aiurl.tw / codex/gpt-image-2)
- * Tier 2: OpenAI 官方備援 (api.openai.com / dall-e-3，若有 OPENAI_API_KEY 且端點非官方)
+ * Tier 2: OpenAI 官方備援 (api.openai.com / gpt-image-2，若有 OPENAI_API_KEY 且端點非官方)
  * Tier 3: Google Gemini (gemini-3-pro-image-preview)
  * Tier 4: Cloudflare Workers AI (@cf/black-forest-labs/flux-1-schnell)
  */
@@ -29,7 +29,7 @@ export function getImageGenChain(context) {
     },
     {
       name: "openai-official",
-      label: "OpenAI 官方原廠 (api.openai.com)",
+      label: "OpenAI 官方原廠 (api.openai.com / gpt-image-2)",
       enable: (ctx) => {
         const base = getOpenAIImageApiBase(ctx);
         const hasOpenAiKey = ctx.USER_CONFIG.OPENAI_API_KEY && ctx.USER_CONFIG.OPENAI_API_KEY.length > 0;
@@ -42,7 +42,7 @@ export function getImageGenChain(context) {
             ...ctx.USER_CONFIG,
             OPENAI_IMAGE_API_BASE: "https://api.openai.com/v1",
             OPENAI_IMAGE_API_KEY: ctx.USER_CONFIG.OPENAI_API_KEY,
-            DALL_E_MODEL: "dall-e-3"
+            DALL_E_MODEL: "gpt-image-2"
           }
         };
         return requestImageFromOpenAI(prompt, officialCtx);
