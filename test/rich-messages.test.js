@@ -31,7 +31,7 @@ import { showModelMenu } from '../src/features/llm.js';
 import { commandSetImageProvider } from '../src/features/image-gen.js';
 import { msgHandleCallbackQuery } from '../src/telegram/message.js';
 import { commandStock, commandStockTW } from '../src/features/stock.js';
-import { commandWeather } from '../src/features/weather.js';
+import { commandWeather, commandWeatherAlert, formatWeatherAlertCard } from '../src/features/weather.js';
 import { chatWithLLM } from '../src/agent/llm.js';
 import { getCharDisplayWidth } from '../src/utils/md2tgmd.js';
 import { commandMenu } from '../src/features/system.js';
@@ -704,9 +704,78 @@ test('commandWeather: generates Telegram 10.3 InputRichBlockTable and attaches i
     assert.equal(markup.inline_keyboard[1][2].text, '📍 高雄');
     assert.equal(markup.inline_keyboard[1][2].callback_data, '/wt:高雄');
 
-    // 驗證 Fallback Text 包含氣象資訊
+    // 驗證 Fallback Text 包含氣象資訊卡片
     assert.match(sentBody.text, /Taipei 的天氣預報/);
-    assert.match(sentBody.text, /當前天氣/);
+    assert.match(sentBody.text, /現況/);
+    assert.match(sentBody.text, /<pre><code>/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandWeatherAlert: groups weather hazards by phenomenon and formats into <pre><code> card', async () => {
+  let sentBody = null;
+  const context = {
+    SHARE_CONTEXT: {
+      currentBotToken: 'token123',
+      chatHistoryKey: 'history:12345',
+      chatType: 'private',
+      speakerId: 12345
+    },
+    CURRENT_CHAT_CONTEXT: {
+      chat_id: 12345
+    }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('opendata.cwa.gov.tw')) {
+      return new Response(JSON.stringify({
+        records: {
+          location: [
+            {
+              locationName: '澎湖縣',
+              hazardConditions: {
+                hazards: [{
+                  info: { phenomena: '陸上強風', significance: '特報' },
+                  validTime: { startTime: '2026-11-12 10:00:00', endTime: '2026-11-12 20:00:00' }
+                }]
+              }
+            },
+            {
+              locationName: '彰化縣',
+              hazardConditions: {
+                hazards: [{
+                  info: { phenomena: '陸上強風', significance: '特報' },
+                  validTime: { startTime: '2026-11-12 10:00:00', endTime: '2026-11-12 20:00:00' }
+                }]
+              }
+            }
+          ]
+        }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (String(url).includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 2 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandWeatherAlert({}, '/weatheralert', '', context);
+
+    assert.ok(sentBody);
+    assert.match(sentBody.text, /⚠️ 台灣即時天氣特報/);
+    assert.match(sentBody.text, /<pre><code>/);
+    assert.match(sentBody.text, /\[ 陸上強風特報 \]/);
+    assert.match(sentBody.text, /澎湖縣、彰化縣/);
+    assert.match(sentBody.text, /11\/12 10:00 ~ 11\/12 20:00/);
+
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    assert.ok(markup.inline_keyboard);
+    assert.equal(markup.inline_keyboard[0][0].text, '🔄 重新整理特報');
+    assert.equal(markup.inline_keyboard[0][1].text, '🌦️ 台北天氣');
   } finally {
     globalThis.fetch = originalFetch;
   }
