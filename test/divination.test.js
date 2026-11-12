@@ -6,7 +6,8 @@ import {
   commandFengshui,
   commandYinyuan,
   commandAnswerBook,
-  commandTempleOracleJP
+  commandTempleOracleJP,
+  formatAnswerBookCard
 } from '../src/features/divination.js';
 import { commandHandlers, isValidCommand } from '../src/telegram/commands.js';
 
@@ -565,8 +566,14 @@ test('commandAnswerBook queries qi.david888.com and falls back gracefully', asyn
 
   try {
     await commandAnswerBook({}, '/boa', '我該接受這個工作 offer 嗎？', context);
-    assert.match(sentMessage, /📖 【解答之書】/);
-    assert.match(sentMessage, /順其自然，答案即在眼前。/);
+    assert.doesNotMatch(sentMessage, /【解答之書】/);
+    assert.doesNotMatch(sentMessage, /The Book of Answers/);
+    assert.doesNotMatch(sentMessage, /靜下心來/);
+    assert.match(sentMessage, /💭 <i>問題：我該接受這個工作 offer 嗎？<\/i>/);
+    assert.match(sentMessage, /<pre><code>/);
+    assert.match(sentMessage, /╔═+╗/);
+    assert.match(sentMessage, /║.*順其自然，答案即在眼前。.*║/);
+    assert.match(sentMessage, /╚═+╝/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -786,10 +793,14 @@ test('commandAnswerBook formats elegant card layout and attaches rich menu keybo
   try {
     await commandAnswerBook({}, '/boa', '今天適合出門嗎？', context);
     assert.ok(sentBody);
-    assert.match(sentBody.text, /📖 【解答之書】/);
-    assert.match(sentBody.text, /The Book of Answers/);
+    assert.doesNotMatch(sentBody.text, /【解答之書】/);
+    assert.doesNotMatch(sentBody.text, /The Book of Answers/);
+    assert.doesNotMatch(sentBody.text, /靜下心來/);
     assert.match(sentBody.text, /💭 <i>問題：今天適合出門嗎？<\/i>/);
-    assert.match(sentBody.text, /✨ <b>保持開放的心態，好運將不期而至。<\/b>/);
+    assert.match(sentBody.text, /<pre><code>/);
+    assert.match(sentBody.text, /╔═+╗/);
+    assert.match(sentBody.text, /║.*保持開放的心態，好運將不期而至。.*║/);
+    assert.match(sentBody.text, /╚═+╝/);
     assert.doesNotMatch(sentBody.text, /<blockquote>/);
 
     const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
@@ -808,6 +819,22 @@ test('commandAnswerBook formats elegant card layout and attaches rich menu keybo
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('formatAnswerBookCard generates clean card without redundancy and formats with pre code and borders', () => {
+  const cardWithQ = formatAnswerBookCard('放手', '我該堅持嗎？');
+  assert.match(cardWithQ, /^💭 <i>問題：我該堅持嗎？<\/i>\n\n<pre><code>╔═+╗\n║\s+║\n║\s+放手\s+║\n║\s+║\n╚═+╝<\/code><\/pre>$/);
+  assert.doesNotMatch(cardWithQ, /【解答之書】/);
+  assert.doesNotMatch(cardWithQ, /The Book of Answers/);
+  assert.doesNotMatch(cardWithQ, /靜下心來/);
+
+  const cardNoQ = formatAnswerBookCard('保持前進');
+  assert.doesNotMatch(cardNoQ, /問題/);
+  assert.match(cardNoQ, /^<pre><code>╔═+╗\n║\s+║\n║\s+保持前進\s+║\n║\s+║\n╚═+╝<\/code><\/pre>$/);
+
+  // HTML escaping test
+  const cardEscaped = formatAnswerBookCard('A < B & C > D');
+  assert.match(cardEscaped, /A &lt; B &amp; C &gt; D/);
 });
 
 test('commandTempleOracleJP formats oracle result and attaches rich menu keyboard', async () => {

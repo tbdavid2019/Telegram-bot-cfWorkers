@@ -7,7 +7,7 @@
 import { sendMessageToTelegramWithContext, buildInlineKeyboard } from '../telegram/telegram.js';
 import { ENV } from '../config/env.js';
 import { resolveUserTimeZone, getZonedDateParts } from '../utils/timezone.js';
-import { escape, markdownToTelegramHtml } from '../utils/md2tgmd.js';
+import { escape, markdownToTelegramHtml, getStringDisplayWidth } from '../utils/md2tgmd.js';
 
 /**
  * 根據問題關鍵詞智能推導占問目的 (purpose)
@@ -1137,13 +1137,44 @@ export async function commandTangPoetry(message, command, subcommand, context) {
 /**
  * 構建解答之書優雅卡片格式
  */
-function formatAnswerBookCard(answerText, question) {
-  let card = `📖 【解答之書】 <i>The Book of Answers</i>\n\n`;
-  if (question) {
-    card += `💭 <i>問題：${escape(question)}</i>\n\n`;
+export function formatAnswerBookCard(answerText, question) {
+  let card = '';
+  const q = (question || '').trim();
+  if (q) {
+    card += `💭 <i>問題：${escape(q)}</i>\n\n`;
   }
-  card += `✨ <b>${escape(answerText)}</b>\n\n`;
-  card += `🌱 靜下心來，答案自會浮現。`;
+
+  const rawLines = String(answerText || '').trim().split(/\r?\n/);
+  let maxLineW = 22;
+  for (const line of rawLines) {
+    const w = getStringDisplayWidth(line);
+    if (w > maxLineW) {
+      maxLineW = w;
+    }
+  }
+
+  const cardW = maxLineW + 8; // 左右各加 4 個空白 padding
+  const topBorder = `╔${'═'.repeat(cardW)}╗`;
+  const emptyRow = `║${' '.repeat(cardW)}║`;
+  const bottomBorder = `╚${'═'.repeat(cardW)}╝`;
+
+  const contentRows = rawLines.map(line => {
+    const w = getStringDisplayWidth(line);
+    const diff = Math.max(0, cardW - w);
+    const leftPad = Math.floor(diff / 2);
+    const rightPad = diff - leftPad;
+    return `║${' '.repeat(leftPad)}${escape(line)}${' '.repeat(rightPad)}║`;
+  });
+
+  const box = [
+    topBorder,
+    emptyRow,
+    ...contentRows,
+    emptyRow,
+    bottomBorder
+  ].join('\n');
+
+  card += `<pre><code>${box}</code></pre>`;
   return card;
 }
 
