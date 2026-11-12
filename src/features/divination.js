@@ -4,9 +4,10 @@
  * 完整對齊 qi.david888.com 與 tbdavid2019/qimen 權威架構規範
  */
 
-import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext, buildInlineKeyboard } from '../telegram/telegram.js';
 import { ENV } from '../config/env.js';
 import { resolveUserTimeZone, getZonedDateParts } from '../utils/timezone.js';
+import { escape } from '../utils/md2tgmd.js';
 
 /**
  * 根據問題關鍵詞智能推導占問目的 (purpose)
@@ -284,6 +285,16 @@ export async function commandTarot(message, command, subcommand, context) {
     }
 
     reply += '\n' + (ans ? ans : '（無回覆內容）');
+
+    if (context && context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+        [{ text: '🎴 抽單張指引', callback_data: '/tarot:1' }],
+        [
+          { text: '📖 解答之書', callback_data: '/boa:again' },
+          { text: '⛩️ 抽淺草寺籤', callback_data: '/oracle' }
+        ]
+      ]);
+    }
 
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
@@ -1055,6 +1066,16 @@ export async function commandTempleOracleJP(message, command, subcommand, contex
 
           const responseMessage = `淺草籤詩:\n類型: ${type}\n詩句: ${poem}\n解釋: ${explanation}\n\n結果:\n${resultMessages}`;
 
+          if (context && context.CURRENT_CHAT_CONTEXT) {
+            context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+              [{ text: '⛩️ 再抽一支籤', callback_data: '/oracle' }],
+              [
+                { text: '📖 解答之書', callback_data: '/boa:again' },
+                { text: '🎴 抽塔羅牌', callback_data: '/tarot:1' }
+              ]
+            ]);
+          }
+
           return sendMessageToTelegramWithContext(context)(responseMessage);
         } else {
           return sendMessageToTelegramWithContext(context)(`錯誤: 無法獲取淺草籤詩的內容。`);
@@ -1108,6 +1129,35 @@ export async function commandTangPoetry(message, command, subcommand, context) {
 }
 
 /**
+ * 構建解答之書優雅卡片格式
+ */
+function formatAnswerBookCard(answerText, question) {
+  let card = `📖 【解答之書】 <i>The Book of Answers</i>\n\n`;
+  if (question) {
+    card += `💭 <i>問題：${escape(question)}</i>\n\n`;
+  }
+  card += `<blockquote>✨ <b>${escape(answerText)}</b></blockquote>\n\n`;
+  card += `🌱 靜下心來，答案自會浮現。`;
+  return card;
+}
+
+/**
+ * 設定占卜功能 Rich Menu 快捷按鈕
+ */
+function setDivinationMenu(context) {
+  if (context && context.CURRENT_CHAT_CONTEXT) {
+    context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+      [{ text: '📖 再翻一頁', callback_data: '/boa:again' }],
+      [
+        { text: '⛩️ 抽淺草寺籤', callback_data: '/oracle' },
+        { text: '🎴 抽塔羅牌', callback_data: '/tarot:1' }
+      ]
+    ]);
+  }
+}
+
+/**
  * 解答之書查詢指令
  * 優先串接 qi.david888.com/api/answerbook-question，自動備援回退
  * @param {Object} message - Telegram 訊息對象
@@ -1132,10 +1182,9 @@ export async function commandAnswerBook(message, command, subcommand, context) {
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.answer) {
-        let reply = `📖 【解答之書】\n`;
-        if (question) reply += `問題：${question}\n\n`;
-        reply += data.answer;
-        return sendMessageToTelegramWithContext(context)(reply);
+        setDivinationMenu(context);
+        const card = formatAnswerBookCard(data.answer, question);
+        return sendMessageToTelegramWithContext(context)(card);
       }
     }
   } catch (e) {
@@ -1152,7 +1201,9 @@ export async function commandAnswerBook(message, command, subcommand, context) {
       try {
         const data = JSON.parse(text);
         if (data.answer) {
-          return sendMessageToTelegramWithContext(context)(`解答之書: ${data.answer}`);
+          setDivinationMenu(context);
+          const card = formatAnswerBookCard(data.answer, question);
+          return sendMessageToTelegramWithContext(context)(card);
         } else {
           return sendMessageToTelegramWithContext(context)(`錯誤: 無法獲取解答之書的答案。`);
         }
@@ -1160,7 +1211,9 @@ export async function commandAnswerBook(message, command, subcommand, context) {
         return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。回應內容: ${text}`);
       }
     } else {
-      return sendMessageToTelegramWithContext(context)(`解答之書: ${text}`);
+      setDivinationMenu(context);
+      const card = formatAnswerBookCard(text, question);
+      return sendMessageToTelegramWithContext(context)(card);
     }
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
@@ -1184,7 +1237,9 @@ export async function commandAnswerBookOriginal(message, command, subcommand, co
       try {
         const data = JSON.parse(text);
         if (data.answer) {
-          return sendMessageToTelegramWithContext(context)(`解答之書: ${data.answer}`);
+          setDivinationMenu(context);
+          const card = formatAnswerBookCard(data.answer, (subcommand || '').trim());
+          return sendMessageToTelegramWithContext(context)(card);
         } else {
           return sendMessageToTelegramWithContext(context)(`錯誤: 無法獲取解答之書的答案。`);
         }
@@ -1192,12 +1247,17 @@ export async function commandAnswerBookOriginal(message, command, subcommand, co
         return sendMessageToTelegramWithContext(context)(`錯誤: 無法解析JSON回應。回應內容: ${text}`);
       }
     } else {
-      return sendMessageToTelegramWithContext(context)(`錯誤: API回應錯誤，內容: ${text}`);
+      setDivinationMenu(context);
+      const card = formatAnswerBookCard(text, (subcommand || '').trim());
+      return sendMessageToTelegramWithContext(context)(card);
     }
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
   }
 }
+
+// 占卜別名與導出
+export const commandOracle = commandTempleOracleJP;
 
 /**
  * 隨機密碼生成指令

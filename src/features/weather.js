@@ -3,7 +3,13 @@
  * 天氣查詢功能
  */
 
-import { sendMessageToTelegramWithContext, answerCallbackQuery } from '../telegram/telegram.js';
+import {
+  sendMessageToTelegramWithContext,
+  sendRichMessageWithContext,
+  buildInlineKeyboard,
+  answerCallbackQuery
+} from '../telegram/telegram.js';
+import { buildRichTable } from '../telegram/rich.js';
 
 // 預設的快捷城市列表
 const QUICK_CITIES = [
@@ -96,8 +102,54 @@ async function fetchAndSendWeather(locationName, context) {
     const data = await response.json();
 
     if (data && data.current_condition && data.current_condition.length > 0) {
+      const resolvedName = (data.nearest_area && data.nearest_area[0] && data.nearest_area[0].areaName && data.nearest_area[0].areaName[0] && data.nearest_area[0].areaName[0].value) || locationName;
+      const forecasts = data.weather || [];
+
+      // 1. 建立 Telegram 10.3 Native Rich Table
+      const headers = ['日期', '天氣', '最高', '最低', '降雨%'];
+      const tableRows = forecasts.map((day, index) => {
+        const [y, m, d] = day.date.split('-').map(Number);
+        const date = new Date(Date.UTC(y, m - 1, d));
+        const dayName = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'][date.getUTCDay()];
+        const dateLabel = index === 0 ? '今天' : index === 1 ? '明天' : dayName;
+        const weatherDesc = (day.hourly && day.hourly[4] && day.hourly[4].lang_zh && day.hourly[4].lang_zh[0]?.value) || '—';
+        const rainChance = (day.hourly && day.hourly[4] && day.hourly[4].chanceofrain) ? `${day.hourly[4].chanceofrain}%` : '—';
+        return [
+          dateLabel,
+          weatherDesc,
+          `${day.maxtempC}°C`,
+          `${day.mintempC}°C`,
+          rainChance
+        ];
+      });
+
+      const weatherTable = buildRichTable({
+        headers,
+        rows: tableRows,
+        caption: `${resolvedName} 未來預報`,
+        is_compact: true,
+        is_striped: true
+      });
+
+      // 2. 建立 Inline Keyboard 快捷選單
+      const keyboard = buildInlineKeyboard([
+        [
+          { text: '🔄 重新整理', callback_data: `/wt:${locationName}` },
+          { text: '🌦️ 選擇其他城市', callback_data: '/wt' }
+        ]
+      ]);
+      if (context && context.CURRENT_CHAT_CONTEXT) {
+        context.CURRENT_CHAT_CONTEXT.reply_markup = keyboard;
+      }
+
+      // 3. 格式化相容備援文字（含 Markdown 表格，供 fallback 時呈現方框格線）
       const formattedWeatherInfo = formatWeatherInfo(data);
-      return sendMessageToTelegramWithContext(context)(formattedWeatherInfo);
+
+      if (weatherTable) {
+        return sendRichMessageWithContext(context)({ blocks: [weatherTable] }, formattedWeatherInfo);
+      } else {
+        return sendMessageToTelegramWithContext(context)(formattedWeatherInfo);
+      }
     } else {
       return sendMessageToTelegramWithContext(context)(`未找到 ${locationName} 的天氣信息。`);
     }
@@ -114,7 +166,7 @@ async function fetchAndSendWeather(locationName, context) {
 function formatWeatherInfo(data) {
   const locationName = data.nearest_area[0].areaName[0].value;
   const current = data.current_condition[0];
-  const forecasts = data.weather;
+  const forecasts = data.weather || [];
 
   const currentWeather = `
 當前天氣：
@@ -127,27 +179,19 @@ function formatWeatherInfo(data) {
 風向：${current.winddir16Point}
   `;
 
-  const forecastInfo = forecasts.map((day, index) => {
+  // 附帶 Markdown 表格供 Fallback 呈現精緻 Box-drawing
+  let tableMd = `\n| 日期 | 天氣狀況 | 最高溫 | 最低溫 | 降雨機率 |\n| :--- | :--- | :--- | :--- | :--- |\n`;
+  forecasts.forEach((day, index) => {
     const [y, m, d] = day.date.split('-').map(Number);
     const date = new Date(Date.UTC(y, m - 1, d));
-    const dayName = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][date.getUTCDay()];
-    return `
-${index === 0 ? '今天' : index === 1 ? '明天' : dayName} (${day.date}):
-天氣狀況：${day.hourly[4].lang_zh[0].value}
-最高溫度：${day.maxtempC}°C
-最低溫度：${day.mintempC}°C
-降雨機率：${day.hourly[4].chanceofrain}%
-    `;
-  }).join('\n');
+    const dayName = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'][date.getUTCDay()];
+    const dateLabel = index === 0 ? '今天' : index === 1 ? '明天' : dayName;
+    const weatherDesc = (day.hourly && day.hourly[4] && day.hourly[4].lang_zh && day.hourly[4].lang_zh[0]?.value) || '—';
+    const rainChance = (day.hourly && day.hourly[4] && day.hourly[4].chanceofrain) ? `${day.hourly[4].chanceofrain}%` : '—';
+    tableMd += `| ${dateLabel} | ${weatherDesc} | ${day.maxtempC}°C | ${day.mintempC}°C | ${rainChance} |\n`;
+  });
 
-  return `
-${locationName} 的天氣預報：
-
-${currentWeather}
-
-未來預報：
-${forecastInfo}
-  `;
+  return `${locationName} 的天氣預報：\n${currentWeather}\n未來預報：\n${tableMd}`;
 }
 
 /**

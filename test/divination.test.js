@@ -4,7 +4,9 @@ import {
   commandTarot,
   commandBazi,
   commandFengshui,
-  commandYinyuan
+  commandYinyuan,
+  commandAnswerBook,
+  commandTempleOracleJP
 } from '../src/features/divination.js';
 import { commandHandlers, isValidCommand } from '../src/telegram/commands.js';
 
@@ -750,6 +752,140 @@ test('commandYinyuan supports bazi-match mode with two birth dates', async () =>
     await commandYinyuan({}, '/yinyuan', '八字合婚 男 1995-08-18 14:00 女 1998-03-25 09:30 我們合適嗎？', context);
     assert.match(sentMessage, /【🏮 月老姻緣】/);
     assert.match(sentMessage, /八字合婚分析/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// ===== 解答之書與籤詩 Rich Menu 測試 =====
+test('commandAnswerBook formats elegant card layout and attaches rich menu keyboard', async () => {
+  let sentBody = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('answerbook-question')) {
+      return new Response(JSON.stringify({
+        success: true,
+        answer: '保持開放的心態，好運將不期而至。'
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandAnswerBook({}, '/boa', '今天適合出門嗎？', context);
+    assert.ok(sentBody);
+    assert.match(sentBody.text, /📖 【解答之書】/);
+    assert.match(sentBody.text, /The Book of Answers/);
+    assert.match(sentBody.text, /💭 <i>問題：今天適合出門嗎？<\/i>/);
+    assert.match(sentBody.text, /<blockquote>✨ <b>保持開放的心態，好運將不期而至。<\/b><\/blockquote>/);
+
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    assert.ok(markup.inline_keyboard);
+    assert.equal(markup.inline_keyboard[0][0].text, '📖 再翻一頁');
+    assert.equal(markup.inline_keyboard[0][0].callback_data, '/boa:again');
+    assert.equal(markup.inline_keyboard[1][0].text, '⛩️ 抽淺草寺籤');
+    assert.equal(markup.inline_keyboard[1][0].callback_data, '/oracle');
+    assert.equal(markup.inline_keyboard[1][1].text, '🎴 抽塔羅牌');
+    assert.equal(markup.inline_keyboard[1][1].callback_data, '/tarot:1');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandTempleOracleJP formats oracle result and attaches rich menu keyboard', async () => {
+  let sentBody = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('TempleOracleJP')) {
+      return new Response(JSON.stringify({
+        oracle: {
+          type: '大吉',
+          poem: '七寶浮屠塔，高高峰頂處。',
+          explain: '百事皆順利，祈求必有應。',
+          result: { 願望: '可成', 疾病: '即愈' }
+        }
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandTempleOracleJP({}, '/oracle', '', context);
+    assert.ok(sentBody);
+    assert.match(sentBody.text, /淺草籤詩/);
+    assert.match(sentBody.text, /類型: 大吉/);
+
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    assert.ok(markup.inline_keyboard);
+    assert.equal(markup.inline_keyboard[0][0].text, '⛩️ 再抽一支籤');
+    assert.equal(markup.inline_keyboard[0][0].callback_data, '/oracle');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('msgHandleCallbackQuery routes /boa:again, /oracle, /tarot:1, and /wt correctly', async () => {
+  let routedCommand = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (typeof url === 'string' && url.includes('answerCallbackQuery')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('answerbook-question')) {
+      routedCommand = 'answerbook';
+      return new Response(JSON.stringify({ success: true, answer: '答案' }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('TempleOracleJP')) {
+      routedCommand = 'oracle';
+      return new Response(JSON.stringify({ oracle: { type: '吉', poem: '詩', explain: '解', result: {} } }), { status: 200 });
+    }
+    return originalFetch(url);
+  };
+
+  try {
+    const { msgHandleCallbackQuery } = await import('../src/telegram/message.js');
+
+    // 1. /boa:again
+    const msgBoa = {
+      callback_query: { id: 'cb1', data: '/boa:again', message: { chat: { id: 12345 } } },
+      chat: { id: 12345 }
+    };
+    await msgHandleCallbackQuery(msgBoa, context);
+    assert.equal(routedCommand, 'answerbook');
+
+    // 2. /oracle
+    const msgOracle = {
+      callback_query: { id: 'cb2', data: '/oracle', message: { chat: { id: 12345 } } },
+      chat: { id: 12345 }
+    };
+    await msgHandleCallbackQuery(msgOracle, context);
+    assert.equal(routedCommand, 'oracle');
   } finally {
     globalThis.fetch = originalFetch;
   }

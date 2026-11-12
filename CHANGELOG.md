@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.17.0] - 2026-11-12
+
+### Added & Changed
+- **真實立體 Unicode 框線表格引擎 (East Asian Width 等寬對齊)**：
+  - **解決痛點**：過去 Telegram 手機與桌面端渲染表格時降級為文字條列清單，使用者無法獲得一格一格的立體方框表格體驗。
+  - **東亞字元寬度計算 (`src/utils/md2tgmd.js`)**：
+    - 新增 `getCharDisplayWidth` 與 `getStringDisplayWidth`，精準將中日韓漢字（CJK）、假名、諺文、全形標點符號與 Emoji 計算為 2 個半形字元寬度，ASCII 字元為 1 個字元寬度，控制字元與零寬選擇器（`\uFE0E`, `\uFE0F`, ZWJ）計算為 0 寬度。
+    - 新增 `formatTableAsAsciiBox`：自動生成對齊精準之立體框線表格（`┌─┬─┐`、`├─┼─┤`、`│ │ │`、`└─┴─┘`），並外包 `<pre><code>...</code></pre>` 等寬程式碼區塊。
+    - 全域 Markdown 轉 HTML 引擎 `formatMarkdownTableToHtml` 優先輸出等寬方框表格，並保留 `formatTableAsBulletList` 作為備援相容選項。
+- **LLM 聊天路徑自動表格識別與 Telegram 10.3 Native Rich Table 優先發送**：
+  - 在 `src/agent/llm.js` 的 `chatWithLLM`，透過 `extractRichBlocksFromMarkdown(finalAnswer)` 自動檢測回覆文本中的表格。
+  - 若包含表格，優先呼叫 `sendRichMessageWithContext` 發送 Telegram 10.3 `InputRichBlockTable` 原生富文本表格；遇客戶端不支持或降級時，fallback 文本自動提供精美 Unicode 框線表格。
+- **全方位 Rich Menu (Inline Keyboards) 與占卜互動升級**：
+  - **解答之書 (`/boa`, `/bo`)**：
+    - 升級為典雅卡片排版（`formatAnswerBookCard`）配合 Telegram 原生引用區塊 `<blockquote>`。
+    - 附帶專屬 Rich Menu 按鈕：`[📖 再翻一頁]`、`[⛩️ 抽淺草寺籤]`、`[🎴 抽塔羅牌]`，並在 `src/telegram/message.js` 完成 `/boa:again` 等回調處理。
+  - **淺草寺籤詩 (`/oracle`) 與塔羅牌 (`/tarot`)**：
+    - 增加即時再抽一張、跨占卜跳轉之 Rich Menu 互動按鈕。
+    - 支援 `/oracle` 回調重新抽籤與 `/tarot:1` 單張牌指引。
+- **天氣查詢 (`/wt`) 升級 Telegram 10.3 原生表格與快捷按鈕**：
+  - 在 `fetchAndSendWeather` 生成 3 天天氣預報之 `InputRichBlockTable`（日期、天氣狀況、最高溫、最低溫、降雨機率）。
+  - 掛載快捷選單：`[🔄 重新整理]`、`[🌦️ 選擇其他城市]`，支援無縫點擊重新查詢。
+- **生圖指令 `/setimg` 智慧提示與長度保護**：
+  - 當使用者將 Prompt 輸入於 `/setimg` 時，自動識別並給予友善引導（提示改用 `/img <Prompt>`），並提供 `[🎨 立即生成此圖片]` 按鈕。
+  - 嚴格控制 Telegram `callback_data` 64 位元組上限：支援 KV 臨時存儲或 `Array.from` 安全 Unicode 截斷（杜絕 Emoji Surrogate Pair 切裂造成的 `URI malformed`）。
+- **OpenCode + Codex + OMP 三方獨立全量 Code Review 收斂與修復**：
+  - 修復 `cleanCellPlainText` 處理物件型單元格時可能輸出 `[object Object]` 之邊界缺陷。
+  - 修復占卜卡片未強制設定 `CURRENT_CHAT_CONTEXT.parse_mode = 'HTML'` 導致標籤被雙重轉義問題。
+  - 修復 Prompt 回調截斷 Emoji 時可能拋出 `URIError` 與 KV 過期時的友好提示。
+- **單元測試全數覆蓋**：
+  - 全庫 161 項單元測試 100% 通過（0 Failed）。
+  - 生產環境打包驗證成功（`dist/telegram.work.modular.js` 542.84 KB）。
+
 ## [1.16.0] - 2026-11-11
 
 ### Added & Changed

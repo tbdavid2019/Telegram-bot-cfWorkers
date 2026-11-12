@@ -1,5 +1,6 @@
 // LLM 聊天功能模組
-import { sendMessageToTelegramWithContext, sendChatActionToTelegramWithContext, deleteMessageFromTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext, sendChatActionToTelegramWithContext, deleteMessageFromTelegramWithContext, sendRichMessageWithContext } from '../telegram/telegram.js';
+import { extractRichBlocksFromMarkdown } from '../telegram/rich.js';
 import { loadChatLLM } from './agents.js';
 
 // 從環境變數引入
@@ -784,8 +785,13 @@ export async function chatWithLLM(params, context, modifier) {
       finalAnswer = `🎤 ${context.voiceTranscription}\n\n${safeAnswer}`;
     }
 
-    // 發送最終文字回覆 (包含 Stream 模式的最後一次更新)
-    await sendMessageToTelegramWithContext(context)(finalAnswer);
+    // 檢查回覆中是否包含 Markdown 表格，若有則優先使用 Telegram 10.3 Native Rich Table 發送
+    const { blocks } = extractRichBlocksFromMarkdown(finalAnswer);
+    if (blocks && blocks.length > 0) {
+      await sendRichMessageWithContext(context)(blocks, finalAnswer);
+    } else {
+      await sendMessageToTelegramWithContext(context)(finalAnswer);
+    }
 
     // 檢查是否需要語音回覆
     const chatId = context.CURRENT_CHAT_CONTEXT.chat_id;

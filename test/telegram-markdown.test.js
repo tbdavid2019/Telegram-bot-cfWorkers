@@ -7,7 +7,11 @@ import {
   splitRowCells,
   parseAlignment,
   isDelimiterRow,
-  formatMarkdownTableToHtml
+  formatMarkdownTableToHtml,
+  formatTableAsAsciiBox,
+  formatTableAsBulletList,
+  getCharDisplayWidth,
+  getStringDisplayWidth
 } from '../src/utils/md2tgmd.js';
 import {
   markdownTableToRichBlock,
@@ -142,7 +146,7 @@ describe('Telegram Markdown / HTML Rendering', () => {
   });
 
   describe('GFM Markdown Table Parser & Rendering (Phase 2)', () => {
-    test('正確解析五欄天氣預報表格，消除 raw pipe 偽影並優雅排版', () => {
+    test('正確解析五欄天氣預報表格，消除 raw pipe 偽影並呈現真實方框格線', () => {
       const weatherMarkdown = `### 臺北市未來一週天氣預報
 
 | 日期 | 天氣狀況 | 降雨機率 | 氣溫區間 | 體感與變化重點 |
@@ -164,10 +168,16 @@ describe('Telegram Markdown / HTML Rendering', () => {
       assert.ok(!html.includes('| :--- |'), '不應殘留對齊語法');
       // 驗證標題保留
       assert.match(html, /<b>臺北市未來一週天氣預報<\/b>/);
-      // 驗證第一欄加粗與其他欄位呈現
-      assert.match(html, /• <b>週三 03\/12<\/b> \| <b>天氣狀況:<\/b> 陰有局部短暫陣雨 \| <b>降雨機率:<\/b> 70% \| <b>氣溫區間:<\/b> 18°C - 23°C \| <b>體感與變化重點:<\/b> 氣溫微涼，出門備傘/);
-      assert.match(html, /• <b>週四 03\/13<\/b> \| <b>天氣狀況:<\/b> 多雲時晴 \| <b>降雨機率:<\/b> 20% \| <b>氣溫區間:<\/b> 20°C - 28°C \| <b>體感與變化重點:<\/b> 白天溫暖微熱，日夜溫差大/);
-      assert.match(html, /• <b>週五 03\/14<\/b> \| <b>天氣狀況:<\/b> 多雲午後短暫雷陣雨 \| <b>降雨機率:<\/b> 40% \| <b>氣溫區間:<\/b> 21°C - 27°C \| <b>體感與變化重點:<\/b> 午後山區注意短時強降雨/);
+      // 驗證真實方框格線與對齊排版
+      assert.match(html, /<pre><code>┌/);
+      assert.match(html, /│\s*週三 03\/12\s*│\s*陰有局部短暫陣雨\s*│/);
+      assert.match(html, /│\s*週四 03\/13\s*│\s*多雲時晴\s*│/);
+      assert.match(html, /│\s*週五 03\/14\s*│\s*多雲午後短暫雷陣雨\s*│/);
+      assert.match(html, /└.*┘<\/code><\/pre>/);
+
+      // 驗證相容備援之條列格式
+      const bulletList = formatTableAsBulletList(tables[0]);
+      assert.match(bulletList, /• <b>週三 03\/12<\/b> \| <b>天氣狀況:<\/b> 陰有局部短暫陣雨/);
     });
 
     test('正確解析對齊符號 (:---, :---:, ---:) 與單元格轉義管道符', () => {
@@ -200,10 +210,16 @@ describe('Telegram Markdown / HTML Rendering', () => {
       const input = `| 欄位A | 欄位B | 欄位C |\n| :--- | :--- | :--- |\n| 1 | | 3 |\n| 4 | 5 |`;
       const html = markdownToTelegramHtml(input);
 
-      // 第一行第 2 欄為空，應安全降級為 —
-      assert.match(html, /• <b>1<\/b> \| <b>欄位B:<\/b> — \| <b>欄位C:<\/b> 3/);
-      // 第二行缺少第 3 欄，應安全容錯補齊 —
-      assert.match(html, /• <b>4<\/b> \| <b>欄位B:<\/b> 5 \| <b>欄位C:<\/b> —/);
+      // 方框表格中缺漏單元格安全容錯
+      assert.match(html, /<pre><code>┌/);
+      assert.match(html, /│\s*1\s*│\s*│\s*3\s*│/);
+      assert.match(html, /│\s*4\s*│\s*5\s*│\s*│/);
+
+      // 條列相容備援格式
+      const tables = parseMarkdownTables(input);
+      const bulletHtml = formatTableAsBulletList(tables[0]);
+      assert.match(bulletHtml, /• <b>1<\/b> \| <b>欄位B:<\/b> — \| <b>欄位C:<\/b> 3/);
+      assert.match(bulletHtml, /• <b>4<\/b> \| <b>欄位B:<\/b> 5 \| <b>欄位C:<\/b> —/);
 
       // 驗證 RichBlock 也正確正規化
       const block = markdownTableToRichBlock(input);
@@ -216,7 +232,8 @@ describe('Telegram Markdown / HTML Rendering', () => {
       const html = markdownToTelegramHtml(input);
 
       assert.ok(html.startsWith('早安！以下為為您查詢的即時氣象報告：\n\n'));
-      assert.match(html, /• <b>今天 03\/12<\/b> \| <b>天氣狀況:<\/b> 陰短暫雨 \| <b>降雨機率:<\/b> 80%/);
+      assert.match(html, /<pre><code>┌/);
+      assert.match(html, /│\s*今天 03\/12\s*│\s*陰短暫雨\s*│\s*80%\s*│/);
       assert.ok(html.endsWith('\n\n出門請務必攜帶雨具，祝您有美好的一天！'));
     });
 
@@ -242,7 +259,8 @@ describe('Telegram Markdown / HTML Rendering', () => {
       assert.ok(!result.text.includes('| 2330 | 台積電 |'), '提取後純文字中不應包含原始表格 Markdown');
 
       assert.ok(result.fallbackText.includes('<b>股票清單</b>'));
-      assert.ok(result.fallbackText.includes('• <b>2330</b> | <b>名稱:</b> 台積電'));
+      assert.ok(result.fallbackText.includes('<pre><code>┌'));
+      assert.match(result.fallbackText, /│\s*2330\s*│\s*台積電\s*│/);
     });
 
     test('代碼塊 (```, ~~~) 內的表格不被誤解析為表格', () => {
@@ -254,22 +272,57 @@ describe('Telegram Markdown / HTML Rendering', () => {
 
     test('表單元格內含超連結時雙引號安全轉義為 &quot;', () => {
       const input = '| 網站 | 連結 |\n|---|---|\n| 範例 | [測試](https://example.com/?q="test") |';
-      const html = markdownToTelegramHtml(input);
-      assert.ok(html.includes('&quot;test&quot;'), 'URL 屬性雙引號應安全轉義');
-      assert.ok(!html.includes('href="https://example.com/?q="test"'), '不能出現未轉義之雙引號破壞 attribute');
+      // 條列模式支援富文本 hyper link
+      const tables = parseMarkdownTables(input);
+      const bulletHtml = formatTableAsBulletList(tables[0]);
+      assert.ok(bulletHtml.includes('&quot;test&quot;'), 'URL 屬性雙引號應安全轉義');
+      assert.ok(!bulletHtml.includes('href="https://example.com/?q="test"'), '不能出現未轉義之雙引號破壞 attribute');
+
+      // 方框表格模式提取純文字
+      const boxHtml = formatTableAsAsciiBox(tables[0]);
+      assert.ok(boxHtml.includes('測試'));
     });
 
     test('首欄包含 <code> 時不產生 <b><code> 巢狀結構', () => {
       const input = '| 命令 | 說明 |\n|---|---|\n| `/stock` | 查股票 |';
-      const html = markdownToTelegramHtml(input);
-      assert.ok(html.includes('• <code>/stock</code> | <b>說明:</b> 查股票'));
-      assert.ok(!html.includes('<b><code>'), '嚴格禁止 <b><code> 實體巢狀衝突');
+      const tables = parseMarkdownTables(input);
+      const bulletHtml = formatTableAsBulletList(tables[0]);
+      assert.ok(bulletHtml.includes('• <code>/stock</code> | <b>說明:</b> 查股票'));
+      assert.ok(!bulletHtml.includes('<b><code>'), '嚴格禁止 <b><code> 實體巢狀衝突');
+
+      const boxHtml = formatTableAsAsciiBox(tables[0]);
+      assert.match(boxHtml, /│\s*\/stock\s*│\s*查股票\s*│/);
     });
 
     test('表頭欄數與分隔欄數不一致時不判定為表格 (保持 Setext 語意)', () => {
       const input = 'A | B\n---\n普通段落文字';
       const tables = parseMarkdownTables(input);
       assert.equal(tables.length, 0, '欄數不符不得判定為表格');
+    });
+
+    test('formatTableAsAsciiBox: 正確計算 East Asian Width 並對齊中英文混排單元格', () => {
+      const table = {
+        headers: ['日期', '天氣', '氣溫'],
+        rows: [
+          ['今天', '多雲', '21°C'],
+          ['明天', '陰短暫雨', '19°C']
+        ]
+      };
+      const html = formatTableAsAsciiBox(table);
+      assert.ok(html.startsWith('<pre><code>'));
+      assert.ok(html.endsWith('</code></pre>'));
+
+      assert.equal(getStringDisplayWidth('日期'), 4);
+      assert.equal(getStringDisplayWidth('今天'), 4);
+      assert.equal(getStringDisplayWidth('21°C'), 4);
+      assert.equal(getStringDisplayWidth('陰短暫雨'), 8);
+
+      assert.match(html, /┌──────┬──────────┬──────┐/);
+      assert.match(html, /│ 日期 │ 天氣     │ 氣溫 │/);
+      assert.match(html, /├──────┼──────────┼──────┤/);
+      assert.match(html, /│ 今天 │ 多雲     │ 21°C │/);
+      assert.match(html, /│ 明天 │ 陰短暫雨 │ 19°C │/);
+      assert.match(html, /└──────┴──────────┴──────┘/);
     });
   });
 });

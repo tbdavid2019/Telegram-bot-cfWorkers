@@ -19,6 +19,8 @@ import { showModelMenu } from '../src/features/llm.js';
 import { commandSetImageProvider } from '../src/features/image-gen.js';
 import { msgHandleCallbackQuery } from '../src/telegram/message.js';
 import { commandStock, commandStockTW } from '../src/features/stock.js';
+import { commandWeather } from '../src/features/weather.js';
+import { chatWithLLM } from '../src/agent/llm.js';
 
 test('buildRichTable: generates compliant InputRichBlockTable with defaults and custom options', () => {
   const table = buildRichTable({
@@ -601,6 +603,160 @@ test('extractRichBlocksFromMarkdown: parses multiple tables and segments mixed t
   assert.ok(!extracted.text.includes('| 表一欄A |'));
   assert.ok(!extracted.text.includes('| 表二欄X |'));
 
-  assert.ok(extracted.fallbackText.includes('• <b>1</b> | <b>表一欄B:</b> 2'));
-  assert.ok(extracted.fallbackText.includes('• <b>8</b> | <b>表二欄Y:</b> 9'));
+  assert.ok(extracted.fallbackText.includes('<pre><code>┌'));
+  assert.match(extracted.fallbackText, /│\s*1\s*│\s*2\s*│/);
+  assert.match(extracted.fallbackText, /│\s*8\s*│\s*9\s*│/);
+});
+
+test('commandWeather: generates Telegram 10.3 InputRichBlockTable and attaches inline keyboard', async () => {
+  let sentBody = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'token123' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('wttr.in')) {
+      return new Response(JSON.stringify({
+        nearest_area: [{ areaName: [{ value: 'Taipei' }] }],
+        current_condition: [{
+          temp_C: '22',
+          FeelsLikeC: '23',
+          lang_zh: [{ value: '陰天' }],
+          chanceofrain: '30',
+          humidity: '75',
+          windspeedKmph: '12',
+          winddir16Point: 'ENE'
+        }],
+        weather: [
+          {
+            date: '2026-03-12',
+            maxtempC: '25',
+            mintempC: '19',
+            hourly: [{}, {}, {}, {}, { lang_zh: [{ value: '多雲' }], chanceofrain: '20' }]
+          },
+          {
+            date: '2026-03-13',
+            maxtempC: '27',
+            mintempC: '20',
+            hourly: [{}, {}, {}, {}, { lang_zh: [{ value: '晴天' }], chanceofrain: '10' }]
+          }
+        ]
+      }), { status: 200 });
+    }
+    if (String(url).includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandWeather({}, '/wt', 'Taipei', context);
+
+    assert.ok(sentBody);
+    assert.ok(sentBody.rich_message, '應包含 rich_message 欄位');
+    const table = sentBody.rich_message.blocks[0];
+    assert.equal(table.type, 'table');
+    assert.equal(table.is_compact, true);
+    assert.equal(table.is_striped, true);
+    assert.match(table.caption, /Taipei/);
+
+    // 驗證欄位
+    assert.deepEqual(table.cells[0], [
+      { text: '日期', is_header: true },
+      { text: '天氣', is_header: true },
+      { text: '最高', is_header: true },
+      { text: '最低', is_header: true },
+      { text: '降雨%', is_header: true }
+    ]);
+
+    // 驗證按鈕
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    assert.ok(markup.inline_keyboard);
+    assert.equal(markup.inline_keyboard[0][0].text, '🔄 重新整理');
+    assert.equal(markup.inline_keyboard[0][0].callback_data, '/wt:Taipei');
+    assert.equal(markup.inline_keyboard[0][1].text, '🌦️ 選擇其他城市');
+    assert.equal(markup.inline_keyboard[0][1].callback_data, '/wt');
+
+    // 驗證 Fallback Text 包含氣象資訊
+    assert.match(sentBody.text, /Taipei 的天氣預報/);
+    assert.match(sentBody.text, /當前天氣/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('chatWithLLM: auto-detects markdown tables in final answer and sends via Telegram 10.3 Native Rich Table', async () => {
+  let sentBody = null;
+  const context = {
+    SHARE_CONTEXT: {
+      currentBotToken: 'token123',
+      chatHistoryKey: 'history:12345',
+      chatType: 'private',
+      speakerId: 12345
+    },
+    CURRENT_CHAT_CONTEXT: {
+      chat_id: 12345,
+      api_base: 'https://api.openai.com/v1',
+      model: 'test-model'
+    },
+    USER_CONFIG: {
+      SYSTEM_INIT_MESSAGE: 'You are a helpful assistant',
+      AI_PROVIDER: 'openai',
+      OPENAI_API_KEY: ['test-key'],
+      ENABLE_COMMAND_DISCOVERY: false,
+      DEFAULT_LLM_PROFILE: 'test-profile',
+      LLM_PROFILES: {
+        'test-profile': {
+          provider: 'openai',
+          model: 'test-model',
+          apiBase: 'https://api.openai.com/v1',
+          apiKey: 'test-key'
+        }
+      }
+    },
+    env: {}
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('api.openai.com')) {
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: '以下是本週天氣與氣溫總結：\n\n| 日期 | 天氣 | 氣溫 |\n|---|---|---|\n| 今天 | 晴天 | 25°C |\n| 明天 | 多雲 | 22°C |\n\n祝您有美好的一天！'
+          }
+        }]
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (String(url).includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await chatWithLLM({ message: '本週天氣如何？' }, context);
+
+    assert.ok(sentBody, '應呼叫 Telegram API');
+    assert.ok(sentBody.rich_message, '應觸發 Rich Message 發送端點');
+    const table = sentBody.rich_message.blocks[0];
+    assert.equal(table.type, 'table');
+    assert.deepEqual(table.cells[0], [
+      { text: '日期', is_header: true, align: 'left' },
+      { text: '天氣', is_header: true, align: 'left' },
+      { text: '氣溫', is_header: true, align: 'left' }
+    ]);
+    assert.deepEqual(table.cells[1], [
+      { text: '今天', align: 'left' },
+      { text: '晴天', align: 'left' },
+      { text: '25°C', align: 'left' }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

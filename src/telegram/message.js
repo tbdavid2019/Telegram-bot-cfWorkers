@@ -61,8 +61,53 @@ export async function msgHandleCallbackQuery(message, context) {
   }
 
   // 處理天氣查詢
+  if (callbackData === '/wt') {
+    const { commandWeather } = await import('../features/weather.js');
+    return commandWeather(message, '/wt', '', context);
+  }
   if (callbackData.startsWith('/wt:')) {
     return handleWeatherCallback(message, context);
+  }
+
+  // 處理解答之書
+  if (callbackData === '/boa:again' || callbackData.startsWith('/boa')) {
+    const { commandAnswerBook } = await import('../features/divination.js');
+    return commandAnswerBook(message, '/boa', '', context);
+  }
+
+  // 處理淺草寺籤詩
+  if (callbackData === '/oracle' || callbackData.startsWith('/oracle')) {
+    const { commandTempleOracleJP } = await import('../features/divination.js');
+    return commandTempleOracleJP(message, '/oracle', '', context);
+  }
+
+  // 處理塔羅牌占卜
+  if (callbackData.startsWith('/tarot')) {
+    const spread = callbackData.includes(':') ? callbackData.split(':')[1] : '1';
+    const { commandTarot } = await import('../features/divination.js');
+    return commandTarot(message, '/tarot', spread || '1', context);
+  }
+
+  // 處理一鍵生成圖片 prompt callback (/img_prompt:...)
+  if (callbackData.startsWith('/img_prompt:')) {
+    let prompt = '';
+    if (callbackData.startsWith('/img_prompt:k_')) {
+      const promptId = callbackData.replace('/img_prompt:k_', '');
+      if (DATABASE && typeof DATABASE.get === 'function') {
+        prompt = await DATABASE.get('img_prompt:' + promptId);
+      }
+      if (!prompt) {
+        return sendMessageToTelegramWithContext(context)('⚠️ 圖片生成提示詞已過期，請直接輸入指令：/img <描述>');
+      }
+    } else {
+      try {
+        prompt = decodeURIComponent(callbackData.replace('/img_prompt:', ''));
+      } catch {
+        prompt = callbackData.replace('/img_prompt:', '');
+      }
+    }
+    const { commandGenerateImg } = await import('../features/image-gen.js');
+    return commandGenerateImg(message, '/img', prompt, context);
   }
 
   // 處理台股查詢

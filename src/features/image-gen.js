@@ -5,6 +5,7 @@ import {
   sendChatActionToTelegramWithContext,
   buildInlineButton
 } from '../telegram/telegram.js';
+import { escape } from '../utils/md2tgmd.js';
 import { extractTelegramPhotoUrl } from '../telegram/message.js';
 import { isGeminiImageEnable, requestImageFromGemini } from '../agent/gemini.js';
 import { isOpenAIImageEnable, requestImageFromOpenAI, getOpenAIImageApiBase } from '../agent/openai.js';
@@ -335,10 +336,51 @@ export async function commandSetImageProvider(message, command, subcommand, cont
   const provider = subcommand.toLowerCase().trim();
   
   if (!validProviders.includes(provider)) {
-    return sendMessageToTelegramWithContext(context)(
-      `❌ 無效的圖片生成服務: ${provider}\n\n` +
-      `✅ 可用選項: ${validProviders.join(", ")}`
-    );
+    let callbackData = '';
+    if (DATABASE && typeof DATABASE.put === 'function') {
+      const promptId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      try {
+        await DATABASE.put('img_prompt:' + promptId, subcommand, { expirationTtl: 3600 });
+        callbackData = '/img_prompt:k_' + promptId;
+      } catch (err) {
+        callbackData = '';
+      }
+    }
+    if (!callbackData) {
+      let cutChars = Array.from(subcommand);
+      let encoded = encodeURIComponent(cutChars.join(''));
+      while (new TextEncoder().encode('/img_prompt:' + encoded).length > 64 && cutChars.length > 0) {
+        cutChars.pop();
+        encoded = encodeURIComponent(cutChars.join(''));
+      }
+      callbackData = '/img_prompt:' + encoded;
+    }
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🎨 立即生成此圖片', callback_data: callbackData }
+        ],
+        [
+          { text: '⚡ Auto', callback_data: '/setimg:auto' },
+          { text: '🤖 OpenAI', callback_data: '/setimg:openai' },
+          { text: '✨ Gemini', callback_data: '/setimg:gemini' },
+          { text: '☁️ Workers', callback_data: '/setimg:workers' }
+        ]
+      ]
+    };
+
+    context.CURRENT_CHAT_CONTEXT.reply_markup = JSON.stringify(keyboard);
+    context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+
+    const safeProvider = escape(provider);
+    const safeSubcommand = escape(subcommand);
+
+    const friendlyMsg = `❌ 無效的圖片生成服務: <b>${safeProvider}</b>\n\n` +
+      `💡 提示：若您是想要生成圖片，請使用指令：<code>/img ${safeSubcommand}</code>\n\n` +
+      `⚙️ 若要設定圖片生成模型，請點選下方按鈕：`;
+
+    return sendMessageToTelegramWithContext(context)(friendlyMsg);
   }
   
   try {
@@ -383,3 +425,6 @@ export async function commandSetImageProvider(message, command, subcommand, cont
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
   }
 }
+
+// 圖片生成指令別名
+export const commandGenerateImage = commandGenerateImg;

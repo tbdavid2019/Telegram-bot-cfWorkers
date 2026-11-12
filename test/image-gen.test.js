@@ -292,3 +292,43 @@ test('Image Generation: commandGenerateImg multi-tier fallback (aiurl -> openai-
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Image Generation: commandSetImageProvider handles user prompt confusion with friendly guidance and inline button', async () => {
+  let sentBody = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    const context = {
+      SHARE_CONTEXT: { currentBotToken: 'token123' },
+      CURRENT_CHAT_CONTEXT: { chat_id: 12345 },
+      USER_CONFIG: {}
+    };
+
+    const message = { chat: { id: 12345 } };
+    await commandSetImageProvider(message, '/setimg', '一卡車的抽取式衛生紙', context);
+
+    assert.ok(sentBody);
+    assert.match(sentBody.text, /❌ 無效的圖片生成服務: <b>一卡車的抽取式衛生紙<\/b>/);
+    assert.match(sentBody.text, /💡 提示：若您是想要生成圖片，請使用指令：<code>\/img 一卡車的抽取式衛生紙<\/code>/);
+    assert.match(sentBody.text, /⚙️ 若要設定圖片生成模型/);
+
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    assert.ok(markup.inline_keyboard);
+    const firstBtn = markup.inline_keyboard[0][0];
+    assert.equal(firstBtn.text, '🎨 立即生成此圖片');
+    assert.ok(firstBtn.callback_data.startsWith('/img_prompt:'));
+
+    // 驗證按鈕 callback_data 長度絕對不超過 Telegram 64 bytes 限制
+    const byteLength = new TextEncoder().encode(firstBtn.callback_data).length;
+    assert.ok(byteLength <= 64, `callback_data byte length ${byteLength} must be <= 64 bytes`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

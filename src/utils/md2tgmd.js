@@ -144,6 +144,9 @@ export function formatCellContent(text) {
  */
 export function cleanCellPlainText(text) {
   if (text === undefined || text === null) return '';
+  if (typeof text === 'object' && text.text !== undefined && text.text !== null) {
+    text = text.text;
+  }
   let str = String(text).trim();
   if ((str.startsWith('**') && str.endsWith('**') && str.length >= 4) ||
       (str.startsWith('__') && str.endsWith('__') && str.length >= 4)) {
@@ -290,12 +293,181 @@ export function parseMarkdownTables(markdown) {
 }
 
 /**
- * 將結構化表格轉換為適合 Telegram 手機畫面展示的優雅條列 HTML
- * 第一欄主鍵加粗（若為 <code> 則不重複包 <b> 避免實體巢狀衝突），其他欄位以 <b>表頭:</b> 數值 呈現
+ * 計算單一字元的顯示寬度 (East Asian Width)
+ * CJK 漢字、假名、諺文、全形標點符號與 Emoji 為 2 寬度，ASCII 為 1 寬度
+ * @param {string} char
+ * @returns {number}
+ */
+export function getCharDisplayWidth(char) {
+  if (!char) return 0;
+  const code = char.codePointAt(0);
+  if (!code) return 0;
+
+  // 控制字元與零寬字元 (ZWJ, ZWNJ, BOM, Variation Selectors 等)
+  if (code < 32 || (code >= 0x7f && code < 0xa0)) return 0;
+  if (code === 0x200b || code === 0x200c || code === 0x200d || code === 0xfeff || code === 0xfe0e || code === 0xfe0f) return 0;
+
+  // CJK, Fullwidth, Hangul, Kana, Emojis
+  if (
+    (code >= 0x1100 && code <= 0x115f) || // Hangul Jamo
+    (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) || // CJK Radicals, Kangxi, Hiragana, Katakana, Bopomofo, Hangul
+    (code >= 0xac00 && code <= 0xd7a3) || // Hangul Syllables
+    (code >= 0xf900 && code <= 0xfaff) || // CJK Compatibility Ideographs
+    (code >= 0xfe10 && code <= 0xfe19) || // Vertical forms
+    (code >= 0xfe30 && code <= 0xfe6f) || // CJK Compatibility Forms
+    (code >= 0xff01 && code <= 0xff60) || // Fullwidth Forms
+    (code >= 0xffe0 && code <= 0xffe6) || // Fullwidth Symbols
+    (code >= 0x2100 && code <= 0x214f && (code === 0x2103 || code === 0x2109)) || // ℃, ℉
+    (code >= 0x2600 && code <= 0x27bf) || // Misc symbols (⛩, ☀️, ☁, ⚡)
+    (code >= 0x1f300 && code <= 0x1f64f) ||
+    (code >= 0x1f680 && code <= 0x1f6ff) ||
+    (code >= 0x1f900 && code <= 0x1f9ff) ||
+    (code >= 0x20000 && code <= 0x2fffd) ||
+    (code >= 0x30000 && code <= 0x3fffd)
+  ) {
+    return 2;
+  }
+  return 1;
+}
+
+/**
+ * 計算字串之視覺顯示寬度
+ * @param {string} str
+ * @returns {number}
+ */
+export function getStringDisplayWidth(str) {
+  if (str === undefined || str === null) return 0;
+  const s = String(str);
+  if (!s) return 0;
+  let width = 0;
+  for (const ch of Array.from(s)) {
+    width += getCharDisplayWidth(ch);
+  }
+  return width;
+}
+
+/**
+ * 依據對齊方式將單元格填充至指定視覺寬度
+ * @param {string} text
+ * @param {number} targetWidth
+ * @param {'left'|'center'|'right'} [align='left']
+ * @returns {string}
+ */
+function padCellVisual(text, targetWidth, align = 'left') {
+  const currentWidth = getStringDisplayWidth(text);
+  const diff = Math.max(0, targetWidth - currentWidth);
+  if (diff === 0) return text;
+  if (align === 'right') {
+    return ' '.repeat(diff) + text;
+  }
+  if (align === 'center') {
+    const leftPad = Math.floor(diff / 2);
+    const rightPad = diff - leftPad;
+    return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+  }
+  return text + ' '.repeat(diff);
+}
+
+/**
+ * 將結構化表格渲染為真實的 Unicode Box-Drawing 視覺格線表格
+ * 計算 East Asian Width 視覺寬度，自動處理對齊並包裹於 <pre><code> 標籤中
  * @param {Object} table
  * @returns {string}
  */
-export function formatMarkdownTableToHtml(table) {
+export function formatTableAsAsciiBox(table) {
+  if (!table) return '';
+
+  let headers = [];
+  let rows = [];
+  let aligns = table.aligns || [];
+
+  if (Array.isArray(table.cells) && table.cells.length > 0) {
+    if (table.cells[0].some((c) => c && c.is_header)) {
+      headers = table.cells[0].map((c) => cleanCellPlainText(c));
+      rows = table.cells.slice(1).map((r) => r.map((c) => cleanCellPlainText(c)));
+    } else {
+      rows = table.cells.map((r) => r.map((c) => cleanCellPlainText(c)));
+    }
+  } else {
+    headers = (table.headers || []).map((h) => cleanCellPlainText(h));
+    rows = (table.rows || []).map((r) => (Array.isArray(r) ? r : [r]).map((c) => cleanCellPlainText(c)));
+  }
+
+  const colCount = Math.max(headers.length, ...rows.map((r) => r.length), 0);
+  if (colCount === 0) return '';
+
+  // 補齊不規則行
+  const normalizedHeaders = [...headers];
+  while (normalizedHeaders.length < colCount) normalizedHeaders.push('');
+
+  const normalizedRows = rows.map((r) => {
+    const nr = [...r];
+    while (nr.length < colCount) nr.push('');
+    return nr;
+  });
+
+  // 計算每欄最大顯示寬度（最少為 1）
+  const colWidths = [];
+  for (let c = 0; c < colCount; c++) {
+    const hWidth = normalizedHeaders.length > 0 ? getStringDisplayWidth(normalizedHeaders[c]) : 0;
+    const rWidths = normalizedRows.map((r) => getStringDisplayWidth(r[c]));
+    const maxW = Math.max(1, hWidth, ...rWidths);
+    colWidths.push(maxW);
+  }
+
+  const boxLines = [];
+
+  // 頂部邊框: ┌──────┬──────┐
+  const topBorder = '┌' + colWidths.map((w) => '─'.repeat(w + 2)).join('┬') + '┐';
+  boxLines.push(topBorder);
+
+  // 表頭（若存在）
+  if (normalizedHeaders.some((h) => h.trim() !== '')) {
+    const headerCells = normalizedHeaders.map((h, i) => {
+      const align = aligns[i] || 'left';
+      return ' ' + padCellVisual(h, colWidths[i], align) + ' ';
+    });
+    boxLines.push('│' + headerCells.join('│') + '│');
+
+    // 表頭與資料行分隔線: ├──────┼──────┤
+    const headerSep = '├' + colWidths.map((w) => '─'.repeat(w + 2)).join('┼') + '┤';
+    boxLines.push(headerSep);
+  }
+
+  // 資料行
+  for (const row of normalizedRows) {
+    const rowCells = row.map((cell, i) => {
+      const align = aligns[i] || 'left';
+      return ' ' + padCellVisual(cell, colWidths[i], align) + ' ';
+    });
+    boxLines.push('│' + rowCells.join('│') + '│');
+  }
+
+  // 底部邊框: └──────┴──────┘
+  const bottomBorder = '└' + colWidths.map((w) => '─'.repeat(w + 2)).join('┴') + '┘';
+  boxLines.push(bottomBorder);
+
+  // 轉義 HTML 保留字元 (&, <, >)
+  const escapedBox = boxLines
+    .map((line) => line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    .join('\n');
+
+  let result = '';
+  if (table.caption && String(table.caption).trim()) {
+    result += `<b>${escape(String(table.caption).trim())}</b>\n`;
+  }
+  result += `<pre><code>${escapedBox}</code></pre>`;
+
+  return result;
+}
+
+/**
+ * 將結構化表格轉換為適合 Telegram 手機畫面展示的優雅條列 HTML (相容備援格式)
+ * 第一欄主鍵加粗，其他欄位以 <b>表頭:</b> 數值 呈現
+ * @param {Object} table
+ * @returns {string}
+ */
+export function formatTableAsBulletList(table) {
   if (!table) return '';
   const parts = [];
 
@@ -343,6 +515,23 @@ export function formatMarkdownTableToHtml(table) {
   }
 
   return parts.join('\n');
+}
+
+/**
+ * 將結構化表格轉換為適合 Telegram 展示的 HTML 格式
+ * 優先輸出真實視覺方框格線 (Box-drawing) 程式碼區塊
+ * @param {Object} table
+ * @param {Object} [options={}]
+ * @returns {string}
+ */
+export function formatMarkdownTableToHtml(table, options = {}) {
+  if (!table) return '';
+  if (options.mode === 'list') {
+    return formatTableAsBulletList(table);
+  }
+  const boxHtml = formatTableAsAsciiBox(table);
+  if (!boxHtml) return '';
+  return boxHtml;
 }
 
 /**
