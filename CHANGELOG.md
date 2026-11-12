@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.17.1] - 2026-11-12
+
+### 🛡️ Security & Runtime Upgrade (Node.js 22.23.5 Security Hardening)
+- **容器基底升級 Node.js 22 (`node:22.23.5-bookworm-slim`)**:
+  - `Dockerfile` 多階段構建（builder 與 runtime）基底映像全面升級為 `node:22.23.5-bookworm-slim`。
+  - 完整防護 Node.js 官方 2026-11-11 安全公告修復之多項 High severity 安全性漏洞。
+
+
 ## [1.17.0] - 2026-11-12
 
 ### Added & Changed
