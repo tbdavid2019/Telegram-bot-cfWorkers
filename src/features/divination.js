@@ -1117,8 +1117,22 @@ export async function commandTangPoetry(message, command, subcommand, context) {
           const title = data.poem.title || '標題未提供';
           const author = data.poem.author || '作者未提供';
           const poemText = data.poem.text || '詩句未提供';
+
+          if (context) {
+            if (!context.CURRENT_CHAT_CONTEXT) {
+              context.CURRENT_CHAT_CONTEXT = {};
+            }
+            context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+            context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+              [
+                { text: '📜 再來一首', callback_data: '/poetry:again' },
+                { text: '📖 解答之書', callback_data: '/boa' }
+              ]
+            ]);
+          }
+
           return sendMessageToTelegramWithContext(context)(
-            `唐詩: \n標題: ${title}\n作者: ${author}\n詩句:\n${poemText}`
+            `<pre><code>《${escape(title)}》 ${escape(author)}\n\n${escape(poemText)}</code></pre>`
           );
         } else {
           return sendMessageToTelegramWithContext(context)(`錯誤: 無法獲取唐詩的內容。`);
@@ -1358,7 +1372,20 @@ export async function generateRandomPassword(message, command, subcommand, conte
     const data = await response.json();
 
     if (data.RandomPassword) {
-      return sendMessageToTelegramWithContext(context)(`${data.RandomPassword}`);
+      if (context) {
+        if (!context.CURRENT_CHAT_CONTEXT) {
+          context.CURRENT_CHAT_CONTEXT = {};
+        }
+        context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+        context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+          [
+            { text: '🔄 重新生成', callback_data: '/password' }
+          ]
+        ]);
+      }
+      return sendMessageToTelegramWithContext(context)(
+        `🔑 <b>隨機密碼</b>\n\n<pre><code>${escape(data.RandomPassword)}</code></pre>`
+      );
     } else {
       return sendMessageToTelegramWithContext(context)(`Failed to get a valid password from the API.`);
     }

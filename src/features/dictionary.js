@@ -4,6 +4,7 @@
  */
 
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { escape } from '../utils/md2tgmd.js';
 
 /**
  * 中文字典查詢指令
@@ -21,6 +22,10 @@ export async function commandDictCN(message, command, subcommand, context) {
     const response = await fetch(`https://www.moedict.tw/raw/${encodeURIComponent(subcommand)}`);
     const data = await response.json();
     const formattedDict = formatDictionaryData(data);
+    if (context) {
+      if (!context.CURRENT_CHAT_CONTEXT) context.CURRENT_CHAT_CONTEXT = {};
+      context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    }
     return sendMessageToTelegramWithContext(context)(formattedDict);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -43,6 +48,10 @@ export async function commandDictEN(message, command, subcommand, context) {
     const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(subcommand)}`);
     const data = await response.json();
     const formattedDict = formatDictionaryDataEN(data);
+    if (context) {
+      if (!context.CURRENT_CHAT_CONTEXT) context.CURRENT_CHAT_CONTEXT = {};
+      context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    }
     return sendMessageToTelegramWithContext(context)(formattedDict);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -54,26 +63,27 @@ export async function commandDictEN(message, command, subcommand, context) {
  * @param {Array} data - API 回傳的字典資料
  * @returns {string} 格式化的字典資訊
  */
-function formatDictionaryDataEN(data) {
+export function formatDictionaryDataEN(data) {
   if (!Array.isArray(data) || data.length === 0) {
     return 'No definitions found for the provided word.';
   }
 
   const entry = data[0];
-  const word = entry.word;
-  const phonetic = entry.phonetic ? `Phonetic: ${entry.phonetic}\n` : '';
-  const origin = entry.origin ? `Origin: ${entry.origin}\n` : '';
-  const meanings = entry.meanings.map(meaning => {
-    const partOfSpeech = meaning.partOfSpeech;
-    const definitions = meaning.definitions.map(def => {
-      const definition = def.definition;
-      const example = def.example ? `Example: ${def.example}` : '';
-      return `- ${definition}\n${example}`;
-    }).join('\n');
-    return `\nPart of Speech: ${partOfSpeech}\n${definitions}`;
-  }).join('\n');
+  const word = escape(entry.word || '');
+  const phoneticText = entry.phonetic || (entry.phonetics && entry.phonetics.find(p => p.text)?.text) || '';
+  const headerCode = phoneticText ? `<pre><code>${escape(phoneticText)}</code></pre>\n\n` : '\n\n';
 
-  return `Word: ${word}\n${phonetic}${origin}${meanings}`;
+  const meanings = (entry.meanings || []).map(meaning => {
+    const partOfSpeech = meaning.partOfSpeech ? `<b>[${escape(meaning.partOfSpeech)}]</b>` : '';
+    const definitions = (meaning.definitions || []).slice(0, 5).map((def, idx) => {
+      const definition = escape(def.definition || '');
+      const example = def.example ? `\n   <i>ex: ${escape(def.example)}</i>` : '';
+      return `${idx + 1}. ${definition}${example}`;
+    }).join('\n');
+    return `${partOfSpeech}\n${definitions}`;
+  }).join('\n\n');
+
+  return `📖 <b>${word}</b>\n${headerCode}${meanings}`;
 }
 
 /**
@@ -81,20 +91,22 @@ function formatDictionaryDataEN(data) {
  * @param {Object} data - API 回傳的字典資料
  * @returns {string} 格式化的字典資訊
  */
-function formatDictionaryData(data) {
-  const title = data.title;
-  const definitions = data.heteronyms.map(heteronym => {
-    const pinyin = heteronym.pinyin;
-    const bopomofo = heteronym.bopomofo;
-    const definitions = heteronym.definitions.map(def => {
-      const type = def.type;
-      const definition = def.def;
-      const example = def.example ? `\n範例: ${def.example.join(', ')}` : '';
-      return `詞性: ${type}\n解釋: ${definition}${example}`;
+export function formatDictionaryData(data) {
+  const title = escape(data.title || '');
+  const heteronymBlocks = (data.heteronyms || []).map(heteronym => {
+    const pinyin = heteronym.pinyin || '無';
+    const bopomofo = heteronym.bopomofo || '無';
+    const phonetics = `拼音: ${pinyin} | 注音: ${bopomofo}`;
+
+    const defs = (heteronym.definitions || []).map((def, idx) => {
+      const type = def.type ? `[${escape(def.type)}] ` : '';
+      const definition = escape(def.def || '');
+      const example = def.example && def.example.length > 0 ? `\n   <i>例: ${escape(def.example.join('；'))}</i>` : '';
+      return `${idx + 1}. ${type}${definition}${example}`;
     }).join('\n\n');
 
-    return `拼音: ${pinyin}\n注音: ${bopomofo}\n${definitions}`;
+    return `<pre><code>${escape(phonetics)}</code></pre>\n\n${defs}`;
   }).join('\n\n');
 
-  return `字詞: ${title}\n\n${definitions}`;
+  return `📖 <b>${title}</b>\n${heteronymBlocks}`;
 }

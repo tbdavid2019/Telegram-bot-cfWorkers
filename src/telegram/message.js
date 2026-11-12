@@ -83,6 +83,18 @@ export async function msgHandleCallbackQuery(message, context) {
     return commandAnswerBookOriginal(message, '/bo', '', context);
   }
 
+  // 處理唐詩
+  if (callbackData === '/poetry:again' || callbackData === '/poetry' || callbackData.startsWith('/poetry:')) {
+    const { commandTangPoetry } = await import('../features/divination.js');
+    return commandTangPoetry(message, '/poetry', '', context);
+  }
+
+  // 處理隨機密碼
+  if (callbackData === '/password' || callbackData.startsWith('/password:')) {
+    const { generateRandomPassword } = await import('../features/divination.js');
+    return generateRandomPassword(message, '/password', '', context);
+  }
+
   // 處理淺草寺籤詩
   if (callbackData === '/oracle:again' || callbackData === '/oracle' || callbackData.startsWith('/oracle:')) {
     const { commandTempleOracleJP } = await import('../features/divination.js');

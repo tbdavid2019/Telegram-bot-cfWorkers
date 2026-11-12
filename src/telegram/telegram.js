@@ -19,6 +19,16 @@ async function sendMessage(message, token, context) {
       body[key] = context[key];
     }
   }
+
+  // 支援 Telegram 10.4 暫時性訊息 (Ephemeral Messages)
+  if (context?.ephemeral_message_parameters) {
+    body.ephemeral_message_parameters = context.ephemeral_message_parameters;
+  } else if (context?.ephemeral) {
+    body.ephemeral_message_parameters = typeof context.ephemeral === 'object'
+      ? context.ephemeral
+      : { is_ephemeral: true };
+    delete body.ephemeral;
+  }
   
   let method = "sendMessage";
   if (context?.message_id) {
@@ -128,6 +138,20 @@ export async function sendRichMessage(richMessagePayload, token, context, fallba
   if (chatContext.message_id) {
     body.message_id = chatContext.message_id;
   }
+  if (chatContext.ephemeral_message_parameters) {
+    body.ephemeral_message_parameters = chatContext.ephemeral_message_parameters;
+  } else if (chatContext.ephemeral) {
+    body.ephemeral_message_parameters = typeof chatContext.ephemeral === 'object'
+      ? chatContext.ephemeral
+      : { is_ephemeral: true };
+  } else if (richMessagePayload?.ephemeral_message_parameters) {
+    body.ephemeral_message_parameters = richMessagePayload.ephemeral_message_parameters;
+  } else if (richMessagePayload?.ephemeral) {
+    body.ephemeral_message_parameters = typeof richMessagePayload.ephemeral === 'object'
+      ? richMessagePayload.ephemeral
+      : { is_ephemeral: true };
+  }
+
   if (fallbackText !== undefined && fallbackText !== null) {
     const textStr = String(fallbackText);
     // 頂層 text 長度限制在 4096 以內，避免被 Telegram API 400 拒絕
@@ -140,6 +164,8 @@ export async function sendRichMessage(richMessagePayload, token, context, fallba
       key !== 'reply_markup' &&
       key !== 'message_id' &&
       key !== 'text' &&
+      key !== 'ephemeral' &&
+      key !== 'ephemeral_message_parameters' &&
       chatContext[key] !== undefined &&
       chatContext[key] !== null
     ) {
@@ -193,12 +219,47 @@ export async function sendRichMessageToTelegram(richMessagePayload, token, conte
     console.warn(`[Telegram] Send rich message failed or unsupported, gracefully falling back to legacy sendMessage`);
     let text = fallbackText !== undefined && fallbackText !== null ? String(fallbackText) : '';
     
-    // 若無提供 fallbackText，嘗試從 blocks 表格自動生成
-    if (!text && richMessagePayload) {
-      const blocks = Array.isArray(richMessagePayload) ? richMessagePayload : (richMessagePayload.blocks || []);
-      const tableBlocks = blocks.filter((b) => b && b.type === 'table');
-      if (tableBlocks.length > 0) {
-        text = tableBlocks.map((tb) => tableToLegacyHtml(tb)).join('\n\n');
+    const blocks = Array.isArray(richMessagePayload) ? richMessagePayload : (richMessagePayload?.blocks || []);
+
+    // 🆕 若 chatContext.reply_markup 未設定，但包含 type: 'buttons' 區塊，自動將內嵌按鈕匯集降級轉換為 inline_keyboard
+    if (!chatContext.reply_markup && blocks.length > 0) {
+      const buttonBlocks = blocks.filter((b) => b && b.type === 'buttons');
+      if (buttonBlocks.length > 0) {
+        const allRows = [];
+        for (const block of buttonBlocks) {
+          if (Array.isArray(block.buttons)) {
+            for (const row of block.buttons) {
+              if (Array.isArray(row)) {
+                allRows.push(row);
+              } else if (row && typeof row === 'object') {
+                allRows.push([row]);
+              }
+            }
+          }
+        }
+        if (allRows.length > 0) {
+          chatContext.reply_markup = buildInlineKeyboard(allRows);
+        }
+      }
+    }
+
+    // 若無提供 fallbackText，嘗試從 blocks 自動生成
+    if (!text && blocks.length > 0) {
+      const parts = [];
+      for (const b of blocks) {
+        if (!b) continue;
+        if (b.type === 'table') {
+          parts.push(tableToLegacyHtml(b));
+        } else if (b.type === 'section_heading') {
+          parts.push(`<b>${escape(b.text)}</b>`);
+        } else if (b.type === 'paragraph') {
+          parts.push(escape(b.text));
+        } else if (b.type === 'preformatted') {
+          parts.push(`<pre><code>${escape(b.text)}</code></pre>`);
+        }
+      }
+      if (parts.length > 0) {
+        text = parts.join('\n\n');
         chatContext.parse_mode = 'HTML';
       }
     }
@@ -217,9 +278,11 @@ export async function sendRichMessageToTelegram(richMessagePayload, token, conte
           chunkContext.reply_to_message_id = null;
           chunkContext.allow_sending_without_reply = true;
         }
+        if (i < chunks.length - 1 && chunkContext.reply_markup) {
+          delete chunkContext.reply_markup;
+        }
         lastResp = await sendMessageToTelegram(chunks[i], token, chunkContext);
         if (!lastResp || !lastResp.ok) {
-          // 若有任何 chunk 發送失敗，立即回傳該失敗回應，避免後續成功覆蓋失敗狀態
           return lastResp;
         }
       }
@@ -248,6 +311,82 @@ export function sendRichMessageWithContext(context) {
       context.SHARE_CONTEXT.currentBotToken,
       context.CURRENT_CHAT_CONTEXT,
       fallbackText
+    );
+  };
+}
+
+/**
+ * 發送 Telegram 10.4 原生 HTML Widget 端點 (/sendWidget)
+ * @param {Object|string} widgetPayload - Widget 資料或 HTML 內容
+ * @param {string} token - Telegram Bot Token
+ * @param {Object} context - 聊天上下文
+ */
+export async function sendWidget(widgetPayload, token, context) {
+  const chatContext = { ...(context || {}) };
+  const payloadObj = typeof widgetPayload === 'string'
+    ? { widget: widgetPayload }
+    : (widgetPayload && typeof widgetPayload === 'object' ? widgetPayload : {});
+
+  const body = {
+    chat_id: chatContext.chat_id,
+    ...payloadObj
+  };
+
+  if (chatContext.reply_markup && !body.reply_markup) {
+    body.reply_markup = chatContext.reply_markup;
+  }
+  if (chatContext.message_id && !body.message_id) {
+    body.message_id = chatContext.message_id;
+  }
+  if (chatContext.ephemeral_message_parameters && !body.ephemeral_message_parameters) {
+    body.ephemeral_message_parameters = chatContext.ephemeral_message_parameters;
+  } else if (chatContext.ephemeral && !body.ephemeral_message_parameters) {
+    body.ephemeral_message_parameters = typeof chatContext.ephemeral === 'object'
+      ? chatContext.ephemeral
+      : { is_ephemeral: true };
+  }
+
+  for (const key of Object.keys(chatContext)) {
+    if (
+      key !== 'chat_id' &&
+      key !== 'reply_markup' &&
+      key !== 'message_id' &&
+      key !== 'ephemeral' &&
+      key !== 'ephemeral_message_parameters' &&
+      body[key] === undefined &&
+      chatContext[key] !== undefined &&
+      chatContext[key] !== null
+    ) {
+      body[key] = chatContext[key];
+    }
+  }
+
+  return await fetch(
+    `${ENV.TELEGRAM_API_DOMAIN}/bot${token}/sendWidget`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }
+  );
+}
+
+export function sendWidgetWithContext(context) {
+  return async (widgetPayload) => {
+    if (context?.captureToolOutput && typeof context.captureToolOutput === 'function') {
+      const output = typeof widgetPayload === 'string' ? widgetPayload : JSON.stringify(widgetPayload);
+      context.captureToolOutput(output);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    return sendWidget(
+      widgetPayload,
+      context.SHARE_CONTEXT.currentBotToken,
+      context.CURRENT_CHAT_CONTEXT
     );
   };
 }

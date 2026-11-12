@@ -4,6 +4,7 @@
  */
 
 import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { escape } from '../utils/md2tgmd.js';
 
 /**
  * IP 地址查詢指令
@@ -32,7 +33,15 @@ export async function commandIpLookup(message, command, subcommand, context) {
       return sendMessageToTelegramWithContext(context)(`錯誤: ${data.error.message}`);
     } else {
       const formattedIpInfo = formatIpInfo(data);
-      return sendMessageToTelegramWithContext(context)(formattedIpInfo);
+      if (context) {
+        if (!context.CURRENT_CHAT_CONTEXT) {
+          context.CURRENT_CHAT_CONTEXT = {};
+        }
+        context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+      }
+      return sendMessageToTelegramWithContext(context)(
+        `<pre><code>${escape(formattedIpInfo.trim())}</code></pre>`
+      );
     }
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -87,7 +96,15 @@ export async function commandDnsLookup(message, command, subcommand, context) {
       return sendMessageToTelegramWithContext(context)(`錯誤: DNS 查詢失敗，狀態碼 ${data.Status}`);
     } else {
       const formattedDnsInfo = formatDnsInfo(data);
-      return sendMessageToTelegramWithContext(context)(formattedDnsInfo);
+      if (context) {
+        if (!context.CURRENT_CHAT_CONTEXT) {
+          context.CURRENT_CHAT_CONTEXT = {};
+        }
+        context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+      }
+      return sendMessageToTelegramWithContext(context)(
+        `<pre><code>${escape(formattedDnsInfo.trim())}</code></pre>`
+      );
     }
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -148,7 +165,15 @@ export async function commandDnsLookup2(message, command, subcommand, context) {
     const records = await recordsResponse.json();
 
     const formattedDnsRecords = formatDnsRecords(records);
-    return sendMessageToTelegramWithContext(context)(formattedDnsRecords);
+    if (context) {
+      if (!context.CURRENT_CHAT_CONTEXT) {
+        context.CURRENT_CHAT_CONTEXT = {};
+      }
+      context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    }
+    return sendMessageToTelegramWithContext(context)(
+      `<pre><code>${escape(formattedDnsRecords.trim())}</code></pre>`
+    );
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
   }

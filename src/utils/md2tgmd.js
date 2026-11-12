@@ -29,7 +29,8 @@ export function balanceTelegramHtmlTags(html) {
   const stack = [];
   const validTags = new Set([
     "b", "strong", "i", "em", "u", "ins", "s", "strike", "del",
-    "span", "tg-spoiler", "a", "code", "pre", "blockquote"
+    "span", "tg-spoiler", "a", "code", "pre", "blockquote",
+    "tg-button-row", "tg-button", "tg-emoji"
   ]);
 
   let match;
@@ -56,6 +57,67 @@ export function balanceTelegramHtmlTags(html) {
     balanced += `</${tag}>`;
   }
   return balanced;
+}
+
+/**
+ * 解析 Telegram 10.4 HTML 中的 <tg-button-row><tg-button.../></tg-button-row> 按鈕列
+ * 支援 callback_data (或 data-callback-data), url (或 href), style, copy_text 等屬性
+ * @param {string} html
+ * @returns {Array<Array<Object>>} 二維按鈕陣列
+ */
+export function parseHtmlButtonRows(html) {
+  if (!html || typeof html !== 'string') return [];
+  const rows = [];
+  const rowRegex = /<tg-button-row\b[^>]*>([\s\S]*?)<\/tg-button-row>/gi;
+  let rowMatch;
+
+  while ((rowMatch = rowRegex.exec(html)) !== null) {
+    const rowContent = rowMatch[1];
+    const buttonRegex = /<tg-button\b([^>]*)>([\s\S]*?)<\/tg-button>/gi;
+    let btnMatch;
+    const currentRow = [];
+
+    while ((btnMatch = buttonRegex.exec(rowContent)) !== null) {
+      const attrsStr = btnMatch[1];
+      const text = btnMatch[2].trim();
+      const btnObj = { text };
+
+      // 提取屬性 (支援 key="value" 與 key='value')
+      const attrRegex = /([a-zA-Z0-9_-]+)=["']([^"']*)["']/g;
+      let attr;
+      while ((attr = attrRegex.exec(attrsStr)) !== null) {
+        const key = attr[1].toLowerCase();
+        const val = attr[2];
+        if (key === 'data-callback-data' || key === 'callback_data' || key === 'callback-data') {
+          btnObj.callback_data = val;
+        } else if (key === 'href' || key === 'url' || key === 'data-url') {
+          btnObj.url = val;
+        } else if (key === 'style') {
+          btnObj.style = val;
+        } else if (key === 'data-copy-text' || key === 'copy-text' || key === 'copy_text') {
+          btnObj.copy_text = { text: val };
+        } else if (key === 'data-web-app' || key === 'web-app' || key === 'web_app') {
+          try {
+            btnObj.web_app = JSON.parse(val);
+          } catch {
+            btnObj.web_app = { url: val };
+          }
+        }
+      }
+
+      if (/\bdisabled\b/i.test(attrsStr)) {
+        btnObj.disabled = true;
+      }
+
+      currentRow.push(btnObj);
+    }
+
+    if (currentRow.length > 0) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
 }
 
 /**

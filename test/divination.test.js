@@ -7,7 +7,9 @@ import {
   commandYinyuan,
   commandAnswerBook,
   commandTempleOracleJP,
-  formatAnswerBookCard
+  formatAnswerBookCard,
+  commandTangPoetry,
+  generateRandomPassword
 } from '../src/features/divination.js';
 import { commandHandlers, isValidCommand } from '../src/telegram/commands.js';
 
@@ -928,6 +930,136 @@ test('msgHandleCallbackQuery routes /boa:again, /oracle, /tarot:1, and /wt corre
     };
     await msgHandleCallbackQuery(msgOracle, context);
     assert.equal(routedCommand, 'oracle');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandTangPoetry: formats poetry inside pre/code card and mounts reply_markup buttons', async () => {
+  let sentMessage = '';
+  let sentMarkup = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('TangPoetry')) {
+      return new Response(JSON.stringify({
+        poem: {
+          title: '靜夜思',
+          author: '李白',
+          text: '床前明月光，疑是地上霜。\n舉頭望明月，低頭思故鄉。'
+        }
+      }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      sentMarkup = body.reply_markup;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandTangPoetry({}, '/poetry', '', context);
+    assert.match(sentMessage, /<pre><code>《靜夜思》 李白\n\n床前明月光，疑是地上霜。\n舉頭望明月，低頭思故鄉。<\/code><\/pre>/);
+    assert.equal(context.CURRENT_CHAT_CONTEXT.parse_mode, 'HTML');
+    assert.ok(sentMarkup);
+    const markup = typeof sentMarkup === 'string' ? JSON.parse(sentMarkup) : sentMarkup;
+    assert.deepEqual(markup.inline_keyboard[0], [
+      { text: '📜 再來一首', callback_data: '/poetry:again' },
+      { text: '📖 解答之書', callback_data: '/boa' }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generateRandomPassword: formats password inside pre/code card and mounts reload button', async () => {
+  let sentMessage = '';
+  let sentMarkup = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('RandomPassword')) {
+      return new Response(JSON.stringify({
+        RandomPassword: 's3cur3#P@ssw0rd99'
+      }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      sentMarkup = body.reply_markup;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await generateRandomPassword({}, '/password', '', context);
+    assert.match(sentMessage, /🔑 <b>隨機密碼<\/b>\n\n<pre><code>s3cur3#P@ssw0rd99<\/code><\/pre>/);
+    assert.equal(context.CURRENT_CHAT_CONTEXT.parse_mode, 'HTML');
+    assert.ok(sentMarkup);
+    const markup = typeof sentMarkup === 'string' ? JSON.parse(sentMarkup) : sentMarkup;
+    assert.deepEqual(markup.inline_keyboard[0], [
+      { text: '🔄 重新生成', callback_data: '/password' }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('msgHandleCallbackQuery routes /poetry:again and /password callback queries', async () => {
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  let routedTarget = '';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (typeof url === 'string' && url.includes('answerCallbackQuery')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('TangPoetry')) {
+      routedTarget = 'poetry';
+      return new Response(JSON.stringify({ poem: { title: '測試', author: '詩人', text: '詩句' } }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('RandomPassword')) {
+      routedTarget = 'password';
+      return new Response(JSON.stringify({ RandomPassword: 'test_pass_123' }), { status: 200 });
+    }
+    if (typeof url === 'string' && url.includes('api.telegram.org')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return originalFetch(url);
+  };
+
+  try {
+    const { msgHandleCallbackQuery } = await import('../src/telegram/message.js');
+
+    // 1. /poetry:again
+    const msgPoetry = {
+      callback_query: { id: 'cb_p', data: '/poetry:again', message: { chat: { id: 12345 } } },
+      chat: { id: 12345 }
+    };
+    await msgHandleCallbackQuery(msgPoetry, context);
+    assert.equal(routedTarget, 'poetry');
+
+    // 2. /password
+    const msgPassword = {
+      callback_query: { id: 'cb_pwd', data: '/password', message: { chat: { id: 12345 } } },
+      chat: { id: 12345 }
+    };
+    await msgHandleCallbackQuery(msgPassword, context);
+    assert.equal(routedTarget, 'password');
   } finally {
     globalThis.fetch = originalFetch;
   }

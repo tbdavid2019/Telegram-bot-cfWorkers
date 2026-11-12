@@ -267,11 +267,18 @@ export async function commandFetchUpdate(message, command, subcommand, context) 
     const timeFormat = (ts) => {
       return new Date(ts * 1e3).toLocaleString("en-US", {});
     };
+    if (context) {
+      if (!context.CURRENT_CHAT_CONTEXT) {
+        context.CURRENT_CHAT_CONTEXT = {};
+      }
+      context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+    }
     if (current.ts < online.ts) {
-      return sendMessageToTelegramWithContext(context)(`New version detected: ${online.sha}(${timeFormat(online.ts)})
-Current version: ${current.sha}(${timeFormat(current.ts)})`);
+      const msg = `🚀 <b>發現新版本</b>\n\n<pre><code>線上版本: ${escapeHTML(online.sha)} (${escapeHTML(timeFormat(online.ts))})\n當前版本: ${escapeHTML(current.sha)} (${escapeHTML(timeFormat(current.ts))})</code></pre>`;
+      return sendMessageToTelegramWithContext(context)(msg);
     } else {
-      return sendMessageToTelegramWithContext(context)(`Current version: ${current.sha}(${timeFormat(current.ts)}) is up to date`);
+      const msg = `✅ <b>系統已是最新版本</b>\n\n<pre><code>當前版本: ${escapeHTML(current.sha)} (${escapeHTML(timeFormat(current.ts))})</code></pre>`;
+      return sendMessageToTelegramWithContext(context)(msg);
     }
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`ERROR: ${e.message}`);
@@ -406,10 +413,13 @@ export async function commandGetID(message, command, subcommand, context) {
   const userId = message.from.id;
   const username = [message?.from?.first_name, message?.from?.last_name].filter(Boolean).join(' ');
   const safeName = escapeHTML(username);
-  let msg = `👤 <b>${safeName}</b>\n`;
-  msg += `/getid\n`;
-  msg += `Your own ID is: <code>${userId}</code>`;
-  context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+  let msg = `👤 <b>${safeName}</b>\n\n<pre><code>User ID: ${userId}</code></pre>`;
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
+    context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+  }
   return sendMessageToTelegramWithContext(context)(msg);
 }
 
@@ -420,25 +430,25 @@ export async function commandGetGroupID(message, command, subcommand, context) {
   const chatType = message.chat.type;
   const username = [message?.from?.first_name, message?.from?.last_name].filter(Boolean).join(' ');
   const safeName = escapeHTML(username);
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
+    context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+  }
   if (chatType === 'private') {
     // 私聊時顯示說明
-    let msg = `👤 <b>${safeName}</b>\n`;
-    msg += `/getgroupid\n`;
+    let msg = `👤 <b>${safeName}</b>\n\n`;
     msg += `In order to get the ID of a group or channel, you need to do one of the following:\n`;
     msg += `• Add me to a group or channel you want to get the ID of, and send /getgroupid in the group\n`;
     msg += `• Another option is to forward a message from the group (if the bot is allowed to see it).`;
-    context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
     return sendMessageToTelegramWithContext(context)(msg);
   } else {
     // 群組中顯示 ID
     const chatId = message.chat.id;
-    const chatTitle = message.chat.title || '';
+    const chatTitle = message.chat.title || message.chat.username || '群組';
     const safeTitle = escapeHTML(chatTitle);
-    let msg = `👥 <b>${safeName}</b>\n`;
-    msg += `/getgroupid\n`;
-    msg += `Group Title: <b>${safeTitle}</b>\n`;
-    msg += `Group ID is: <code>${chatId}</code>`;
-    context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
+    let msg = `👥 <b>${safeTitle}</b>\n\n<pre><code>Group ID: ${chatId}</code></pre>`;
     return sendMessageToTelegramWithContext(context)(msg);
   }
 }

@@ -3,7 +3,7 @@
  * 包含富文本原生表格 (InputRichBlockTable)、相容性 HTML 轉換與段落感知降級切分
  */
 
-import { balanceTelegramHtmlTags, parseMarkdownTables, markdownToTelegramHtml, cleanCellPlainText, formatTableAsAsciiBox } from '../utils/md2tgmd.js';
+import { balanceTelegramHtmlTags, parseMarkdownTables, parseHtmlButtonRows, markdownToTelegramHtml, cleanCellPlainText, formatTableAsAsciiBox } from '../utils/md2tgmd.js';
 import { escapeHTML } from '../utils/utils.js';
 
 /**
@@ -344,7 +344,111 @@ export function markdownTableToRichBlock(tableInput, options = {}) {
 }
 
 /**
- * 從 Markdown 文本中提取 Telegram 10.3 富文本表格區塊，並將文本拆分為常規文字與富文本物件
+ * 構建 Telegram Bot API 10.3/10.4 原生段落內嵌按鈕列 (InputRichBlockButtons)
+ * 支援穿插於文字段落中間，並支援 style: 'primary' | 'danger' | 'success' | 'link'
+ * @param {Array<Object>|Array<Array<Object>>} buttons - 一維或二維按鈕物件陣列
+ * @param {Object} [options={}] - 選項設定 (例如 layout)
+ * @returns {Object|null} InputRichBlockButtons 物件，若無有效按鈕則回傳 null
+ */
+export function buildRichButtons(buttons, options = {}) {
+  if (!buttons) return null;
+  const rawRows = Array.isArray(buttons)
+    ? (buttons.length > 0 && Array.isArray(buttons[0]) ? buttons : [buttons])
+    : [];
+  if (rawRows.length === 0) return null;
+
+  const formattedRows = [];
+  for (const row of rawRows) {
+    const safeRow = Array.isArray(row) ? row : [row];
+    const formattedRow = [];
+    for (const btn of safeRow) {
+      if (!btn || typeof btn !== 'object') {
+        const textVal = String(btn !== undefined && btn !== null ? btn : '');
+        if (textVal) formattedRow.push({ text: textVal });
+        continue;
+      }
+      const btnObj = { text: String(btn.text !== undefined && btn.text !== null ? btn.text : '') };
+      if (btn.callback_data !== undefined) btnObj.callback_data = String(btn.callback_data);
+      if (btn.url !== undefined) btnObj.url = String(btn.url);
+      if (btn.style && ['primary', 'danger', 'success', 'link'].includes(btn.style)) {
+        btnObj.style = btn.style;
+      } else if (btn.style && typeof btn.style === 'string') {
+        btnObj.style = btn.style;
+      }
+      if (btn.web_app) btnObj.web_app = btn.web_app;
+      if (btn.copy_text) btnObj.copy_text = btn.copy_text;
+      if (btn.login_url) btnObj.login_url = btn.login_url;
+      if (btn.switch_inline_query !== undefined) btnObj.switch_inline_query = btn.switch_inline_query;
+      if (btn.switch_inline_query_current_chat !== undefined) btnObj.switch_inline_query_current_chat = btn.switch_inline_query_current_chat;
+      if (btn.disabled) {
+        btnObj.disabled = typeof btn.disabled === 'object' && btn.disabled !== null ? btn.disabled : {};
+      }
+      formattedRow.push(btnObj);
+    }
+    if (formattedRow.length > 0) {
+      formattedRows.push(formattedRow);
+    }
+  }
+
+  if (formattedRows.length === 0 || formattedRows.every(r => r.length === 0)) {
+    return null;
+  }
+
+  const result = {
+    type: 'buttons',
+    buttons: formattedRows
+  };
+
+  if (options && typeof options === 'object') {
+    if (options.layout) result.layout = options.layout;
+  }
+
+  return result;
+}
+
+/**
+ * 構建 Telegram 10.4 原生段落文字區塊 (InputRichBlockParagraph)
+ * @param {string} text
+ * @returns {{ type: 'paragraph', text: string }}
+ */
+export function buildRichParagraph(text) {
+  return {
+    type: 'paragraph',
+    text: String(text !== undefined && text !== null ? text : '')
+  };
+}
+
+/**
+ * 構建 Telegram 10.4 原生區塊標題 (InputRichBlockSectionHeading)
+ * @param {string} text
+ * @returns {{ type: 'section_heading', text: string }}
+ */
+export function buildRichSectionHeading(text) {
+  return {
+    type: 'section_heading',
+    text: String(text !== undefined && text !== null ? text : '')
+  };
+}
+
+/**
+ * 構建 Telegram 10.4 原生代碼區塊 (InputRichBlockPreformatted)
+ * @param {string} code
+ * @param {string} [language='']
+ * @returns {{ type: 'preformatted', text: string, language?: string }}
+ */
+export function buildRichPreformatted(code, language = '') {
+  const block = {
+    type: 'preformatted',
+    text: String(code !== undefined && code !== null ? code : '')
+  };
+  if (language) {
+    block.language = String(language);
+  }
+  return block;
+}
+
+/**
+ * 從 Markdown 文本中提取 Telegram 10.3/10.4 富文本表格與按鈕區塊，並將文本拆分為常規文字與富文本物件
  * @param {string} markdown - 原始 Markdown 訊息
  * @returns {{ text: string, blocks: Array<Object>, fallbackText: string, segments: Array<Object> }}
  */
@@ -371,7 +475,27 @@ export function extractRichBlocksFromMarkdown(markdown) {
   const normalized = str.replace(/\r\n/g, '\n');
   const tables = parseMarkdownTables(normalized);
 
-  if (tables.length === 0) {
+  // 提取 <tg-button-row>
+  const buttonItems = [];
+  const btnRowRegex = /<tg-button-row\b[^>]*>[\s\S]*?<\/tg-button-row>/gi;
+  let btnMatch;
+  while ((btnMatch = btnRowRegex.exec(normalized)) !== null) {
+    const raw = btnMatch[0];
+    const parsedRows = parseHtmlButtonRows(raw);
+    if (parsedRows.length > 0) {
+      const richBlock = buildRichButtons(parsedRows);
+      if (richBlock) {
+        buttonItems.push({
+          raw,
+          index: btnMatch.index,
+          block: richBlock,
+          type: 'buttons'
+        });
+      }
+    }
+  }
+
+  if (tables.length === 0 && buttonItems.length === 0) {
     const fallback = markdownToTelegramHtml(normalized);
     return {
       text: normalized,
@@ -381,24 +505,40 @@ export function extractRichBlocksFromMarkdown(markdown) {
     };
   }
 
+  // 匯集所有區塊並按照在文本中的出現順序排序
+  const entities = [];
+  for (const table of tables) {
+    const richBlock = markdownTableToRichBlock(table, { caption: table.caption });
+    const idx = normalized.indexOf(table.raw);
+    if (idx !== -1 && richBlock) {
+      entities.push({
+        type: 'table',
+        raw: table.raw,
+        index: idx,
+        block: richBlock
+      });
+    }
+  }
+  for (const btnItem of buttonItems) {
+    entities.push(btnItem);
+  }
+
+  entities.sort((a, b) => a.index - b.index);
+
   const blocks = [];
   const segments = [];
   let lastIndex = 0;
 
-  for (const table of tables) {
-    const richBlock = markdownTableToRichBlock(table, { caption: table.caption });
-    if (richBlock) {
-      blocks.push(richBlock);
-    }
-
-    const idx = normalized.indexOf(table.raw, lastIndex);
-    if (idx !== -1) {
-      const textBefore = normalized.slice(lastIndex, idx);
+  for (const ent of entities) {
+    const currentIdx = normalized.indexOf(ent.raw, lastIndex);
+    if (currentIdx !== -1) {
+      const textBefore = normalized.slice(lastIndex, currentIdx);
       if (textBefore.trim()) {
         segments.push({ type: 'text', content: textBefore });
       }
-      segments.push({ type: 'table', block: richBlock, raw: table.raw });
-      lastIndex = idx + table.raw.length;
+      blocks.push(ent.block);
+      segments.push({ type: ent.type, block: ent.block, raw: ent.raw });
+      lastIndex = currentIdx + ent.raw.length;
     }
   }
 
@@ -410,12 +550,17 @@ export function extractRichBlocksFromMarkdown(markdown) {
   }
 
   let cleanText = normalized;
-  for (const table of tables) {
-    cleanText = cleanText.replace(table.raw, '');
+  for (const ent of entities) {
+    cleanText = cleanText.replace(ent.raw, '');
   }
   cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
-  const fallbackText = markdownToTelegramHtml(normalized);
+  // fallbackText: 去除 tg-button-row 標籤，保留一般文本與表格 HTML
+  let fallbackSource = normalized;
+  for (const btn of buttonItems) {
+    fallbackSource = fallbackSource.replace(btn.raw, '');
+  }
+  const fallbackText = markdownToTelegramHtml(fallbackSource.trim());
 
   return {
     text: cleanText,

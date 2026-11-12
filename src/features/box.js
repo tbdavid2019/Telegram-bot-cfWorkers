@@ -9,6 +9,7 @@
 
 import { sendMessageToTelegramWithContext, getFileLink, sendChatActionToTelegramWithContext } from '../telegram/telegram.js';
 import { ENV } from '../config/env.js';
+import { escape } from '../utils/md2tgmd.js';
 
 export const BOX_DEFAULT_PRIMARY = 'https://box.david888.com';
 export const BOX_DEFAULT_FALLBACKS = [
@@ -819,29 +820,39 @@ export async function commandBoxStats(message, command, subcommand, context) {
 
   try {
     const statsRes = await boxGetStats({}, context);
-    const stats = statsRes.stats;
+    const stats = statsRes.stats || {};
 
-    let reply = `📊 *【888box 雲端儲存統計】*\n\n`;
-    reply += `⚡ **目前連線節點**: \`${statsRes.endpoint}\`\n`;
-    if (stats.storage_backend) reply += `💾 **儲存後端**: \`${stats.storage_backend}\`\n`;
-    reply += `\n📁 **資產數量統計**:\n`;
-    reply += `• 📦 **總資產數**: \`${stats.total ?? 'N/A'}\`\n`;
-    reply += `• 🖼️ **圖片 (Image)**: \`${stats.image ?? 'N/A'}\`\n`;
-    reply += `• 🎬 **影片 (Video)**: \`${stats.video ?? 'N/A'}\`\n`;
-    reply += `• 🎵 **音訊 (Audio)**: \`${stats.audio ?? 'N/A'}\`\n`;
-    reply += `• 📄 **檔案 (File)**: \`${stats.file ?? 'N/A'}\`\n\n`;
+    let reply = `📊 <b>888box 雲端儲存統計</b>\n\n`;
+
+    let statsCard = `連線節點: ${statsRes.endpoint || 'N/A'}\n`;
+    if (stats.storage_backend) statsCard += `儲存後端: ${stats.storage_backend}\n`;
+    statsCard += `總資產數: ${stats.total ?? 'N/A'}\n`;
+    statsCard += `圖片 (Image): ${stats.image ?? 'N/A'}\n`;
+    statsCard += `影片 (Video): ${stats.video ?? 'N/A'}\n`;
+    statsCard += `音訊 (Audio): ${stats.audio ?? 'N/A'}\n`;
+    statsCard += `檔案 (File): ${stats.file ?? 'N/A'}`;
+
+    reply += `<pre><code>${escape(statsCard)}</code></pre>\n\n`;
 
     const endpoints = getBoxEndpoints(context);
-    reply += `🌐 **節點備援架構**:\n`;
+    let endpointsCard = `節點備援架構:\n`;
     endpoints.forEach((ep, idx) => {
-      reply += `${idx === 0 ? '👑 主要' : `🛡️ 備援 ${idx}`}: \`${ep}\`\n`;
+      endpointsCard += `${idx === 0 ? '👑 主要' : `🛡️ 備援 ${idx}`}: ${ep}\n`;
     });
 
-    context.CURRENT_CHAT_CONTEXT.parse_mode = 'Markdown';
+    reply += `<pre><code>${escape(endpointsCard.trim())}</code></pre>`;
+
+    if (context) {
+      if (!context.CURRENT_CHAT_CONTEXT) context.CURRENT_CHAT_CONTEXT = {};
+      context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    }
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
-    context.CURRENT_CHAT_CONTEXT.parse_mode = 'Markdown';
-    return sendMessageToTelegramWithContext(context)(`❌ *888box 統計取得失敗*: ${escapeMarkdown(e.message)}`);
+    if (context) {
+      if (!context.CURRENT_CHAT_CONTEXT) context.CURRENT_CHAT_CONTEXT = {};
+      context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    }
+    return sendMessageToTelegramWithContext(context)(`❌ <b>888box 統計取得失敗</b>: ${escape(e.message)}`);
   }
 }
 

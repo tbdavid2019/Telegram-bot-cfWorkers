@@ -6,15 +6,27 @@ import {
   tableToLegacyHtml,
   splitRichTextIntoLegacyChunks,
   markdownTableToRichBlock,
-  extractRichBlocksFromMarkdown
+  extractRichBlocksFromMarkdown,
+  buildRichButtons,
+  buildRichParagraph,
+  buildRichSectionHeading,
+  buildRichPreformatted
 } from '../src/telegram/rich.js';
 import {
   sendRichMessage,
   sendRichMessageToTelegram,
   sendRichMessageWithContext,
   buildInlineButton,
-  buildInlineKeyboard
+  buildInlineKeyboard,
+  sendWidget,
+  sendWidgetWithContext,
+  sendMessageToTelegram
 } from '../src/telegram/telegram.js';
+import { balanceTelegramHtmlTags, parseHtmlButtonRows } from '../src/utils/md2tgmd.js';
+import { commandGetID, commandGetGroupID, commandFetchUpdate } from '../src/features/system.js';
+import { commandIpLookup, commandDnsLookup } from '../src/features/network.js';
+import { commandDictCN, commandDictEN } from '../src/features/dictionary.js';
+import { commandBoxStats } from '../src/features/box.js';
 import { showModelMenu } from '../src/features/llm.js';
 import { commandSetImageProvider } from '../src/features/image-gen.js';
 import { msgHandleCallbackQuery } from '../src/telegram/message.js';
@@ -985,4 +997,312 @@ test('tableToLegacyHtml: correctly processes native InputRichBlockTable with cel
   assert.ok(html.includes('今天'), '應該包含單元格文字 今天');
   assert.ok(html.includes('21°C~27°C'), '應該包含氣溫區間');
   assert.ok(html.includes('<b>台北氣象預報</b>'), '應該包含 caption 粗體標題');
+});
+
+test('buildRichButtons: formats 1D and 2D button arrays with styles and disabled attributes', () => {
+  // 1D array
+  const richButtons1D = buildRichButtons([
+    { text: '確認', callback_data: '/confirm', style: 'primary' },
+    { text: '刪除', callback_data: '/delete', style: 'danger' }
+  ]);
+  assert.equal(richButtons1D.type, 'buttons');
+  assert.equal(richButtons1D.buttons.length, 1);
+  assert.deepEqual(richButtons1D.buttons[0], [
+    { text: '確認', callback_data: '/confirm', style: 'primary' },
+    { text: '刪除', callback_data: '/delete', style: 'danger' }
+  ]);
+
+  // 2D array with link and disabled
+  const richButtons2D = buildRichButtons([
+    [
+      { text: '官網', url: 'https://example.com', style: 'link' }
+    ],
+    [
+      { text: '已停用按鈕', disabled: true }
+    ]
+  ]);
+  assert.equal(richButtons2D.type, 'buttons');
+  assert.equal(richButtons2D.buttons.length, 2);
+  assert.deepEqual(richButtons2D.buttons[0][0], { text: '官網', url: 'https://example.com', style: 'link' });
+  assert.deepEqual(richButtons2D.buttons[1][0], { text: '已停用按鈕', disabled: {} });
+
+  // Empty or invalid input returns null
+  assert.equal(buildRichButtons([]), null);
+  assert.equal(buildRichButtons(null), null);
+});
+
+test('buildRichParagraph, buildRichSectionHeading, and buildRichPreformatted construct proper blocks', () => {
+  const p = buildRichParagraph('這是一段段落文字');
+  assert.deepEqual(p, { type: 'paragraph', text: '這是一段段落文字' });
+
+  const heading = buildRichSectionHeading('章節標題');
+  assert.deepEqual(heading, { type: 'section_heading', text: '章節標題' });
+
+  const pre = buildRichPreformatted('const x = 1;', 'javascript');
+  assert.deepEqual(pre, { type: 'preformatted', text: 'const x = 1;', language: 'javascript' });
+});
+
+test('balanceTelegramHtmlTags: supports tg-button-row, tg-button, and tg-emoji tags', () => {
+  const unclosed = '<tg-button-row><tg-button data-callback-data="/test">按鈕';
+  const balanced = balanceTelegramHtmlTags(unclosed);
+  assert.equal(balanced, '<tg-button-row><tg-button data-callback-data="/test">按鈕</tg-button></tg-button-row>');
+
+  const unclosedEmoji = '<tg-emoji emoji-id="12345">😎';
+  const balancedEmoji = balanceTelegramHtmlTags(unclosedEmoji);
+  assert.equal(balancedEmoji, '<tg-emoji emoji-id="12345">😎</tg-emoji>');
+});
+
+test('parseHtmlButtonRows: correctly parses inline tg-button-row and tg-button attributes', () => {
+  const html = `
+    文字段落
+    <tg-button-row>
+      <tg-button data-callback-data="/again" style="primary">再來一首</tg-button>
+      <tg-button href="https://example.com" style="link">外部連結</tg-button>
+    </tg-button-row>
+    <tg-button-row>
+      <tg-button callback_data="/cancel" disabled>取消</tg-button>
+    </tg-button-row>
+  `;
+  const rows = parseHtmlButtonRows(html);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0], [
+    { text: '再來一首', callback_data: '/again', style: 'primary' },
+    { text: '外部連結', url: 'https://example.com', style: 'link' }
+  ]);
+  assert.deepEqual(rows[1], [
+    { text: '取消', callback_data: '/cancel', disabled: true }
+  ]);
+});
+
+test('extractRichBlocksFromMarkdown: parses markdown tables and tg-button-row into rich blocks', () => {
+  const content = `
+### 標題
+| 項目 | 價格 |
+| :--- | :--- |
+| 蘋果 | $10 |
+
+請點擊下方按鈕：
+<tg-button-row>
+  <tg-button data-callback-data="/buy" style="primary">購買</tg-button>
+</tg-button-row>
+  `;
+
+  const result = extractRichBlocksFromMarkdown(content);
+  assert.equal(result.blocks.length, 2);
+  assert.equal(result.blocks[0].type, 'table');
+  assert.equal(result.blocks[1].type, 'buttons');
+  assert.deepEqual(result.blocks[1].buttons[0], [
+    { text: '購買', callback_data: '/buy', style: 'primary' }
+  ]);
+  assert.ok(!result.fallbackText.includes('<tg-button-row>'));
+});
+
+test('sendRichMessage and sendMessage: support ephemeral_message_parameters (Telegram 10.4)', async () => {
+  let richRequestBody = null;
+  let standardRequestBody = null;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/sendRichMessage')) {
+      richRequestBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 10 } }), { status: 200 });
+    }
+    if (urlStr.includes('/sendMessage')) {
+      standardRequestBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 11 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    // 1. sendRichMessage with ephemeral_message_parameters
+    await sendRichMessage({ blocks: [] }, 'fake_token', {
+      chat_id: 12345,
+      ephemeral_message_parameters: { lifetime: 60 }
+    });
+    assert.ok(richRequestBody);
+    assert.deepEqual(richRequestBody.ephemeral_message_parameters, { lifetime: 60 });
+
+    // 2. sendMessage with ephemeral: true convenience flag
+    await sendMessageToTelegram('暫時訊息', 'fake_token', {
+      chat_id: 12345,
+      ephemeral: true
+    });
+    assert.ok(standardRequestBody);
+    assert.deepEqual(standardRequestBody.ephemeral_message_parameters, { is_ephemeral: true });
+    assert.equal(standardRequestBody.ephemeral, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sendRichMessageToTelegram: automatically downgrades buttons block to inline_keyboard on failure', async () => {
+  let sentBody = null;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/sendRichMessage')) {
+      return new Response(JSON.stringify({ ok: false, description: 'Unsupported endpoint' }), { status: 400 });
+    }
+    if (urlStr.includes('/sendMessage')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 12 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    const richPayload = {
+      blocks: [
+        { type: 'paragraph', text: '請選擇操作：' },
+        {
+          type: 'buttons',
+          buttons: [
+            [
+              { text: '確認', callback_data: '/ok' },
+              { text: '取消', callback_data: '/cancel' }
+            ]
+          ]
+        }
+      ]
+    };
+
+    await sendRichMessageToTelegram(richPayload, 'fake_token', { chat_id: 12345 });
+
+    assert.ok(sentBody);
+    assert.ok(sentBody.reply_markup);
+    assert.ok(sentBody.reply_markup.inline_keyboard);
+    assert.deepEqual(sentBody.reply_markup.inline_keyboard[0], [
+      { text: '確認', callback_data: '/ok' },
+      { text: '取消', callback_data: '/cancel' }
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sendWidget: dispatches POST to /sendWidget with widget payload and context parameters', async () => {
+  let requestUrl = '';
+  let requestBody = null;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    requestUrl = String(url);
+    requestBody = JSON.parse(opts.body);
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 99 } }), { status: 200 });
+  };
+
+  try {
+    const context = {
+      chat_id: 9999,
+      ephemeral_message_parameters: { lifetime: 30 },
+      reply_markup: { inline_keyboard: [[{ text: '關閉', callback_data: '/close' }]] }
+    };
+
+    await sendWidget({ html: '<div class="widget">Widget Content</div>' }, 'test_token', context);
+
+    assert.match(requestUrl, /\/bottest_token\/sendWidget$/);
+    assert.equal(requestBody.chat_id, 9999);
+    assert.equal(requestBody.html, '<div class="widget">Widget Content</div>');
+    assert.deepEqual(requestBody.ephemeral_message_parameters, { lifetime: 30 });
+    assert.ok(requestBody.reply_markup);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Tool Card Formatting: /getid, /getgroupid, /version, /ip, /dns, and /dictcn/dicten', async () => {
+  let sentMessage = '';
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const urlStr = String(url);
+    if (urlStr.includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      sentMessage = body.text;
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    if (urlStr.includes('moedict.tw')) {
+      return new Response(JSON.stringify({
+        title: '福',
+        heteronyms: [
+          { pinyin: 'fú', bopomofo: 'ㄈㄨˊ', definitions: [{ type: '名', def: '一切順遂幸運的事。' }] }
+        ]
+      }), { status: 200 });
+    }
+    if (urlStr.includes('dictionaryapi.dev')) {
+      return new Response(JSON.stringify([
+        {
+          word: 'hello',
+          phonetic: '/həˈloʊ/',
+          meanings: [
+            { partOfSpeech: 'interjection', definitions: [{ definition: 'Used as a greeting.' }] }
+          ]
+        }
+      ]), { status: 200 });
+    }
+    if (urlStr.includes('ipinfo.io')) {
+      return new Response(JSON.stringify({
+        ip: '1.1.1.1',
+        hostname: 'one.one.one.one',
+        city: 'Sydney',
+        country: 'AU'
+      }), { status: 200 });
+    }
+    if (urlStr.includes('1.1.1.1/dns-query')) {
+      return new Response(JSON.stringify({
+        Status: 0,
+        Question: [{ name: 'example.com' }],
+        Answer: [{ name: 'example.com', data: '93.184.216.34' }]
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    const makeContext = () => ({
+      SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+      CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+    });
+
+    // 1. /getid
+    let ctx = makeContext();
+    await commandGetID({ from: { id: 777, first_name: 'David' } }, '/getid', '', ctx);
+    assert.match(sentMessage, /👤 <b>David<\/b>/);
+    assert.match(sentMessage, /<pre><code>User ID: 777<\/code><\/pre>/);
+
+    // 2. /getgroupid
+    ctx = makeContext();
+    await commandGetGroupID({ chat: { id: -100123456, type: 'supergroup', title: 'Test Group' }, from: { first_name: 'David' } }, '/getgroupid', '', ctx);
+    assert.match(sentMessage, /👥 <b>Test Group<\/b>/);
+    assert.match(sentMessage, /<pre><code>Group ID: -100123456<\/code><\/pre>/);
+
+    // 3. /ip
+    ctx = makeContext();
+    await commandIpLookup({}, '/ip', '1.1.1.1', ctx);
+    assert.match(sentMessage, /<pre><code>/);
+    assert.match(sentMessage, /IP地址: 1\.1\.1\.1/);
+
+    // 4. /dns
+    ctx = makeContext();
+    await commandDnsLookup({}, '/dns', 'example.com', ctx);
+    assert.match(sentMessage, /<pre><code>/);
+    assert.match(sentMessage, /查詢域名: example\.com/);
+
+    // 5. /dictcn
+    ctx = makeContext();
+    await commandDictCN({}, '/dictcn', '福', ctx);
+    assert.match(sentMessage, /📖 <b>福<\/b>/);
+    assert.match(sentMessage, /<pre><code>拼音: fú \| 注音: ㄈㄨˊ<\/code><\/pre>/);
+
+    // 6. /dicten
+    ctx = makeContext();
+    await commandDictEN({}, '/dicten', 'hello', ctx);
+    assert.match(sentMessage, /📖 <b>hello<\/b>/);
+    assert.match(sentMessage, /<pre><code>\/həˈloʊ\/<\/code><\/pre>/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
