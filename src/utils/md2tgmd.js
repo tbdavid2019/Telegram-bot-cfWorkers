@@ -598,8 +598,8 @@ export function markdownToTelegramHtml(markdown) {
   // 5. 處理 Markdown 標題 (# Title -> <b>Title</b>)
   text = text.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
 
-  // 6. 處理引用 (> quote -> <blockquote>quote</blockquote>)
-  text = text.replace(/^(?:&gt;|>)\s*(.+)$/gm, "<blockquote>$1</blockquote>");
+  // 6. 處理引用 (> quote -> ▎ <i>quote</i>，避免 Telegram <blockquote> 內建引號符號)
+  text = text.replace(/^(?:&gt;|>)\s*(.+)$/gm, "▎ <i>$1</i>");
 
   // 7. 處理清單符號：行首的 * 或 - 或 + 後接空格，轉為圓點符號 • 避免干擾粗體語法
   text = text.replace(/^(\s*)[*+-]\s+/gm, "$1• ");

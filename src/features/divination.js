@@ -1076,7 +1076,7 @@ export async function commandTempleOracleJP(message, command, subcommand, contex
 
           const responseMessage = `⛩️ <b>淺草籤詩</b>\n\n` +
             `📜 <b>類型:</b> ${escape(type)}\n` +
-            `🪷 <b>詩句:</b>\n<blockquote>${escape(poem)}</blockquote>\n\n` +
+            `🪷 <b>詩句:</b>\n${escape(poem)}\n\n` +
             `💡 <b>解釋:</b>\n${escape(explanation)}\n\n` +
             `📋 <b>結果:</b>\n${resultMessages}`;
 
@@ -1142,7 +1142,7 @@ function formatAnswerBookCard(answerText, question) {
   if (question) {
     card += `💭 <i>問題：${escape(question)}</i>\n\n`;
   }
-  card += `<blockquote>✨ <b>${escape(answerText)}</b></blockquote>\n\n`;
+  card += `✨ <b>${escape(answerText)}</b>\n\n`;
   card += `🌱 靜下心來，答案自會浮現。`;
   return card;
 }
@@ -1158,8 +1158,7 @@ function setDivinationMenu(context) {
     context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
     context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
       [
-        { text: '📖 再翻一頁', callback_data: '/boa:again' },
-        { text: '🎲 原版解答', callback_data: '/bo:again' }
+        { text: '📖 再翻一頁', callback_data: '/boa:again' }
       ],
       [
         { text: '⛩️ 抽淺草籤', callback_data: '/oracle:again' },

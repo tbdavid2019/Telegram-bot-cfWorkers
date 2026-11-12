@@ -15,11 +15,14 @@ test('all new divination commands are registered in commandHandlers', () => {
   assert.equal(isValidCommand('/bazi'), true);
   assert.equal(isValidCommand('/fengshui'), true);
   assert.equal(isValidCommand('/yinyuan'), true);
+  assert.equal(isValidCommand('/orcale'), true);
 
   assert.equal(typeof commandHandlers['/tarot']?.fn, 'function');
   assert.equal(typeof commandHandlers['/bazi']?.fn, 'function');
   assert.equal(typeof commandHandlers['/fengshui']?.fn, 'function');
   assert.equal(typeof commandHandlers['/yinyuan']?.fn, 'function');
+  assert.equal(typeof commandHandlers['/orcale']?.fn, 'function');
+  assert.equal(commandHandlers['/orcale']?.fn, commandTempleOracleJP);
 });
 
 // ===== 塔羅占卜測試 =====
@@ -786,14 +789,14 @@ test('commandAnswerBook formats elegant card layout and attaches rich menu keybo
     assert.match(sentBody.text, /📖 【解答之書】/);
     assert.match(sentBody.text, /The Book of Answers/);
     assert.match(sentBody.text, /💭 <i>問題：今天適合出門嗎？<\/i>/);
-    assert.match(sentBody.text, /<blockquote>✨ <b>保持開放的心態，好運將不期而至。<\/b><\/blockquote>/);
+    assert.match(sentBody.text, /✨ <b>保持開放的心態，好運將不期而至。<\/b>/);
+    assert.doesNotMatch(sentBody.text, /<blockquote>/);
 
     const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
     assert.ok(markup.inline_keyboard);
+    assert.equal(markup.inline_keyboard[0].length, 1);
     assert.equal(markup.inline_keyboard[0][0].text, '📖 再翻一頁');
     assert.equal(markup.inline_keyboard[0][0].callback_data, '/boa:again');
-    assert.equal(markup.inline_keyboard[0][1].text, '🎲 原版解答');
-    assert.equal(markup.inline_keyboard[0][1].callback_data, '/bo:again');
     assert.equal(markup.inline_keyboard[1][0].text, '⛩️ 抽淺草籤');
     assert.equal(markup.inline_keyboard[1][0].callback_data, '/oracle:again');
     assert.equal(markup.inline_keyboard[1][1].text, '🎴 單張塔羅');
@@ -838,6 +841,8 @@ test('commandTempleOracleJP formats oracle result and attaches rich menu keyboar
     assert.ok(sentBody);
     assert.match(sentBody.text, /淺草籤詩/);
     assert.match(sentBody.text, /大吉/);
+    assert.match(sentBody.text, /🪷 <b>詩句:<\/b>\n七寶浮屠塔，高高峰頂處。\n\n/);
+    assert.doesNotMatch(sentBody.text, /<blockquote>/);
 
     const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
     assert.ok(markup.inline_keyboard);

@@ -62,10 +62,10 @@ describe('Telegram Markdown / HTML Rendering', () => {
     assert.equal(output, '<b>估值情境與市場預期</b>');
   });
 
-  test('引用語法 > 應轉換為 <blockquote> 標籤', () => {
+  test('引用語法 > 應轉換為優雅前綴與斜體標籤，避免 Telegram blockquote 內建引號圖示', () => {
     const input = '> 這是一段引言';
     const output = markdownToTelegramHtml(input);
-    assert.equal(output, '<blockquote>這是一段引言</blockquote>');
+    assert.equal(output, '▎ <i>這是一段引言</i>');
   });
 
   test('尖括號如 /stock2 <股票代碼> 應轉義為 &lt; 和 &gt;，避免非法 HTML 標籤崩潰', () => {

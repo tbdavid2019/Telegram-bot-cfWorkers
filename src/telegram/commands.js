@@ -223,6 +223,11 @@ export const commandHandlers = {
     fn: commandTempleOracleJP,
     description: "淺草寺籤詩"
   },
+  "/orcale": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandTempleOracleJP,
+    description: "淺草寺籤詩"
+  },
   "/poetry": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
     fn: commandTangPoetry,
