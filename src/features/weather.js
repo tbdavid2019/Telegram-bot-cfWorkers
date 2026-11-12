@@ -131,11 +131,22 @@ async function fetchAndSendWeather(locationName, context) {
         is_striped: true
       });
 
-      // 2. 建立 Inline Keyboard 快捷選單
+      // 2. 建立 Inline Keyboard 快捷選單（含 64-byte 截斷保護與兩排按鈕矩陣）
+      let safeCity = locationName;
+      while (new TextEncoder().encode('/wt:' + safeCity).length > 64 && safeCity.length > 0) {
+        safeCity = Array.from(safeCity).slice(0, -1).join('');
+      }
+      const reloadCallback = safeCity ? `/wt:${safeCity}` : '/wt';
+
       const keyboard = buildInlineKeyboard([
         [
-          { text: '🔄 重新整理', callback_data: `/wt:${locationName}` },
-          { text: '🌦️ 選擇其他城市', callback_data: '/wt' }
+          { text: '🔄 重新整理', callback_data: reloadCallback },
+          { text: '⚠️ 天氣特報', callback_data: '/weatheralert' }
+        ],
+        [
+          { text: '📍 台北', callback_data: '/wt:台北' },
+          { text: '📍 台中', callback_data: '/wt:台中' },
+          { text: '📍 高雄', callback_data: '/wt:高雄' }
         ]
       ]);
       if (context && context.CURRENT_CHAT_CONTEXT) {
@@ -195,6 +206,21 @@ function formatWeatherInfo(data) {
 }
 
 /**
+ * 設定天氣特報快捷選單按鈕
+ */
+function setWeatherAlertMenu(context) {
+  if (context && context.CURRENT_CHAT_CONTEXT) {
+    context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+      [
+        { text: '🔄 重新整理特報', callback_data: '/weatheralert' },
+        { text: '🌦️ 台北天氣', callback_data: '/wt:台北' },
+        { text: '🌦️ 高雄天氣', callback_data: '/wt:高雄' }
+      ]
+    ]);
+  }
+}
+
+/**
  * 台灣天氣特報指令
  * @param {Object} message - Telegram 訊息對象
  * @param {string} command - 指令名稱
@@ -229,8 +255,10 @@ export async function commandWeatherAlert(message, command, subcommand, context)
             weatherReport = '目前沒有特報內容。';
           }
 
+          setWeatherAlertMenu(context);
           return sendMessageToTelegramWithContext(context)(weatherReport);
         } else {
+          setWeatherAlertMenu(context);
           return sendMessageToTelegramWithContext(context)('抱歉，無法取得天氣特報。');
         }
       } catch (jsonError) {

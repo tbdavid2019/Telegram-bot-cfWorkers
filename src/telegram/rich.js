@@ -3,7 +3,7 @@
  * 包含富文本原生表格 (InputRichBlockTable)、相容性 HTML 轉換與段落感知降級切分
  */
 
-import { balanceTelegramHtmlTags, parseMarkdownTables, markdownToTelegramHtml, cleanCellPlainText } from '../utils/md2tgmd.js';
+import { balanceTelegramHtmlTags, parseMarkdownTables, markdownToTelegramHtml, cleanCellPlainText, formatTableAsAsciiBox } from '../utils/md2tgmd.js';
 import { escapeHTML } from '../utils/utils.js';
 
 /**
@@ -139,8 +139,27 @@ export function buildRichTable({
  * @param {string} [options.caption] - 表格標題
  * @returns {string} Telegram HTML 字串
  */
-export function tableToLegacyHtml({ headers = [], rows = [], caption } = {}) {
-  const parts = [];
+export function tableToLegacyHtml(tableInput = {}) {
+  try {
+    const asciiBox = formatTableAsAsciiBox(tableInput);
+    if (asciiBox && asciiBox.trim() !== '') {
+      return asciiBox;
+    }
+  } catch (_) {
+    // 降級回退到條列式清單
+  }
+
+  let { headers = [], rows = [], caption } = tableInput || {};
+
+  // 若 headers/rows 為空，但傳入了 Telegram 10.3 Native Rich Table 結構的 cells
+  if ((!headers || headers.length === 0) && Array.isArray(tableInput.cells) && tableInput.cells.length > 0) {
+    if (tableInput.cells[0].some(c => c && c.is_header)) {
+      headers = tableInput.cells[0];
+      rows = tableInput.cells.slice(1);
+    } else {
+      rows = tableInput.cells;
+    }
+  }
 
   if (caption !== undefined && caption !== null && String(caption).trim() !== '') {
     parts.push(`<b>${escapeHTML(String(caption).trim())}</b>`);

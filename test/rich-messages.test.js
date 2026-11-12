@@ -21,6 +21,10 @@ import { msgHandleCallbackQuery } from '../src/telegram/message.js';
 import { commandStock, commandStockTW } from '../src/features/stock.js';
 import { commandWeather } from '../src/features/weather.js';
 import { chatWithLLM } from '../src/agent/llm.js';
+import { getCharDisplayWidth } from '../src/utils/md2tgmd.js';
+import { commandMenu } from '../src/features/system.js';
+import { commandSortList, commandHandlers } from '../src/telegram/commands.js';
+import { commandTarot } from '../src/features/divination.js';
 
 test('buildRichTable: generates compliant InputRichBlockTable with defaults and custom options', () => {
   const table = buildRichTable({
@@ -74,7 +78,7 @@ test('buildRichTable: enforces maximum 20 columns constraint and handles empty t
   assert.equal(emptyTable, null);
 });
 
-test('tableToLegacyHtml: converts table to standard Telegram HTML list with escaping', () => {
+test('tableToLegacyHtml: converts table to Box-drawing Telegram HTML with escaping and fallbacks', () => {
   const html = tableToLegacyHtml({
     caption: '行情 <測試 & 符號>',
     headers: ['標的 & 項目', '價格'],
@@ -85,8 +89,10 @@ test('tableToLegacyHtml: converts table to standard Telegram HTML list with esca
   });
 
   assert.match(html, /<b>行情 &lt;測試 &amp; 符號&gt;<\/b>/);
-  assert.match(html, /• <b>標的 &amp; 項目:<\/b> &lt;NVDA&gt; \| <b>價格:<\/b> \$130\.50/);
-  assert.match(html, /• <b>標的 &amp; 項目:<\/b> TSLA \| <b>價格:<\/b> \$210\.00/);
+  assert.match(html, /<pre><code>┌─/);
+  assert.match(html, /│ 標的 &amp; 項目 │ 價格\s+│/);
+  assert.match(html, /│ &lt;NVDA&gt;\s+│ \$130\.50 │/);
+  assert.match(html, /└─/);
 });
 
 test('splitRichTextIntoLegacyChunks: splits text by paragraph and ensures unclosed tags are balanced', () => {
@@ -677,8 +683,14 @@ test('commandWeather: generates Telegram 10.3 InputRichBlockTable and attaches i
     assert.ok(markup.inline_keyboard);
     assert.equal(markup.inline_keyboard[0][0].text, '🔄 重新整理');
     assert.equal(markup.inline_keyboard[0][0].callback_data, '/wt:Taipei');
-    assert.equal(markup.inline_keyboard[0][1].text, '🌦️ 選擇其他城市');
-    assert.equal(markup.inline_keyboard[0][1].callback_data, '/wt');
+    assert.equal(markup.inline_keyboard[0][1].text, '⚠️ 天氣特報');
+    assert.equal(markup.inline_keyboard[0][1].callback_data, '/weatheralert');
+    assert.equal(markup.inline_keyboard[1][0].text, '📍 台北');
+    assert.equal(markup.inline_keyboard[1][0].callback_data, '/wt:台北');
+    assert.equal(markup.inline_keyboard[1][1].text, '📍 台中');
+    assert.equal(markup.inline_keyboard[1][1].callback_data, '/wt:台中');
+    assert.equal(markup.inline_keyboard[1][2].text, '📍 高雄');
+    assert.equal(markup.inline_keyboard[1][2].callback_data, '/wt:高雄');
 
     // 驗證 Fallback Text 包含氣象資訊
     assert.match(sentBody.text, /Taipei 的天氣預報/);
@@ -759,4 +771,218 @@ test('chatWithLLM: auto-detects markdown tables in final answer and sends via Te
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+// ===== Rich Menu 升級與 Code Review 修復驗證測試 =====
+
+test('getCharDisplayWidth: accurately handles variation selectors and extended emojis', () => {
+  // 1. Variation Selectors (0xfe00 - 0xfe0f) must return 0 width
+  assert.equal(getCharDisplayWidth(String.fromCodePoint(0xfe00)), 0);
+  assert.equal(getCharDisplayWidth(String.fromCodePoint(0xfe0e)), 0);
+  assert.equal(getCharDisplayWidth(String.fromCodePoint(0xfe0f)), 0);
+
+  // 2. Unicode 13+ Emojis in range 0x1f300 - 0x1faff return 2 width
+  assert.equal(getCharDisplayWidth('🌸'), 2);
+  assert.equal(getCharDisplayWidth('🎴'), 2);
+  assert.equal(getCharDisplayWidth('🧭'), 2);
+  assert.equal(getCharDisplayWidth('🪙'), 2); // 0x1FA99
+  assert.equal(getCharDisplayWidth('🪟'), 2); // 0x1FA9F
+  assert.equal(getCharDisplayWidth('🫖'), 2); // 0x1FAD6
+});
+
+test('commandMenu: registered at top of commandSortList and renders universal navigation menu', async () => {
+  assert.equal(commandSortList[0], '/menu', '/menu 必須在選單排序置頂');
+  assert.ok(commandHandlers['/menu'], '/menu 必須已註冊於 commandHandlers');
+
+  let sentBody = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandMenu({}, '/menu', '', context);
+
+    assert.ok(sentBody);
+    assert.match(sentBody.text, /功能快捷導航選單/);
+    assert.match(sentBody.text, /命理占卜/);
+    assert.match(sentBody.text, /生活天氣/);
+    assert.match(sentBody.text, /AI 創作/);
+    assert.match(sentBody.text, /財經查詢/);
+
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    assert.ok(markup.inline_keyboard);
+    // 命理占卜
+    assert.equal(markup.inline_keyboard[0][0].text, '📖 解答之書');
+    assert.equal(markup.inline_keyboard[0][0].callback_data, '/boa');
+    assert.equal(markup.inline_keyboard[0][1].text, '⛩️ 淺草籤詩');
+    assert.equal(markup.inline_keyboard[0][1].callback_data, '/oracle');
+    assert.equal(markup.inline_keyboard[1][0].text, '🎴 每日塔羅');
+    assert.equal(markup.inline_keyboard[1][0].callback_data, '/tarot:1');
+    assert.equal(markup.inline_keyboard[1][1].text, '🧭 奇門遁甲');
+    assert.equal(markup.inline_keyboard[1][1].callback_data, '/qi');
+    // 天氣
+    assert.equal(markup.inline_keyboard[2][0].text, '📍 台北');
+    assert.equal(markup.inline_keyboard[2][0].callback_data, '/wt:台北');
+    assert.equal(markup.inline_keyboard[3][0].text, '⚠️ 天氣特報');
+    assert.equal(markup.inline_keyboard[3][0].callback_data, '/weatheralert');
+    // AI 創作
+    assert.equal(markup.inline_keyboard[4][0].text, '🎨 AI生圖');
+    assert.equal(markup.inline_keyboard[4][0].callback_data, '/img');
+    assert.equal(markup.inline_keyboard[4][1].text, '⚙️ 切換模型');
+    assert.equal(markup.inline_keyboard[4][1].callback_data, '/setimg');
+    // 財經
+    assert.equal(markup.inline_keyboard[5][0].text, '📈 台股大盤');
+    assert.equal(markup.inline_keyboard[5][0].callback_data, '/stock:0050');
+    assert.equal(markup.inline_keyboard[5][1].text, '💼 護國神山');
+    assert.equal(markup.inline_keyboard[5][1].callback_data, '/stock:2330');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandTarot: handles single spread parameter boundary without explicit question', async () => {
+  let tarotRequestBody = null;
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('api.telegram.org')) {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    if (String(url).includes('api/tarot-question')) {
+      tarotRequestBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({
+        success: true,
+        question: tarotRequestBody.question,
+        answer: '指引建議',
+        reading: {
+          spread: tarotRequestBody.spread,
+          cards: [{ position: '指引', name: '太陽', orientation: '正位' }]
+        }
+      }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandTarot({}, '/tarot', 'hexagram', context);
+    assert.ok(tarotRequestBody);
+    assert.equal(tarotRequestBody.spread, 'hexagram');
+    assert.equal(tarotRequestBody.question, '今日指引');
+
+    await commandTarot({}, '/tarot', '1', context);
+    assert.ok(tarotRequestBody);
+    assert.equal(tarotRequestBody.spread, 'single');
+    assert.equal(tarotRequestBody.question, '今日指引');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('commandWeather: truncates callback_data to 64 bytes safely', async () => {
+  let sentBody = null;
+  const longCityName = '一個非常非常非常非常非常非常非常非常非常長的地名超過六十四位元組測試城市';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('wttr.in')) {
+      return new Response(JSON.stringify({
+        nearest_area: [{ areaName: [{ value: '長地名' }] }],
+        current_condition: [{
+          temp_C: '25',
+          FeelsLikeC: '26',
+          lang_zh: [{ value: '晴天' }],
+          chanceofrain: '10',
+          humidity: '60',
+          windspeedKmph: '10',
+          winddir16Point: 'E'
+        }],
+        weather: []
+      }), { status: 200 });
+    }
+    if (String(url).includes('api.telegram.org')) {
+      sentBody = JSON.parse(opts.body);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    await commandWeather({}, '/wt', longCityName, context);
+    assert.ok(sentBody);
+    const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
+    const reloadCallback = markup.inline_keyboard[0][0].callback_data;
+    const byteLength = new TextEncoder().encode(reloadCallback).length;
+    assert.ok(byteLength <= 64, `callback_data 長度 ${byteLength} 不得超過 64 bytes`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('msgHandleCallbackQuery: handles /img_prompt:k_ expiration and new routing options', async () => {
+  let replyText = '';
+  const context = {
+    SHARE_CONTEXT: { currentBotToken: 'fake_token' },
+    CURRENT_CHAT_CONTEXT: { chat_id: 12345 }
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('answerCallbackQuery')) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (String(url).includes('api.telegram.org')) {
+      const body = JSON.parse(opts.body);
+      replyText = body.text;
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    }
+    return originalFetch(url, opts);
+  };
+
+  try {
+    // 1. /img_prompt:k_ 过期測試
+    const msgExpired = {
+      callback_query: { id: 'cb_exp', data: '/img_prompt:k_non_existent_key_12345', message: { chat: { id: 12345 } } },
+      chat: { id: 12345 }
+    };
+    await msgHandleCallbackQuery(msgExpired, context);
+    assert.match(replyText, /⚠️ 圖片生成提示詞已過期，請重新輸入 \/img <提示詞>/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('tableToLegacyHtml: correctly processes native InputRichBlockTable with cells and renders ASCII box table', () => {
+  const nativeTable = buildRichTable({
+    headers: ['日期', '氣溫', '雨率'],
+    rows: [
+      ['今天', '21°C~27°C', '7%'],
+      ['明天', '20°C~28°C', '9%']
+    ],
+    caption: '台北氣象預報'
+  });
+
+  const html = tableToLegacyHtml(nativeTable);
+  assert.ok(html.includes('<pre><code>'), '應該包含 <pre><code>');
+  assert.ok(html.includes('┌'), '應該包含頂部邊框 ┌');
+  assert.ok(html.includes('今天'), '應該包含單元格文字 今天');
+  assert.ok(html.includes('21°C~27°C'), '應該包含氣溫區間');
+  assert.ok(html.includes('<b>台北氣象預報</b>'), '應該包含 caption 粗體標題');
 });

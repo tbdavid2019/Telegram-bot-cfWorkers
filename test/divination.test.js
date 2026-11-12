@@ -792,10 +792,16 @@ test('commandAnswerBook formats elegant card layout and attaches rich menu keybo
     assert.ok(markup.inline_keyboard);
     assert.equal(markup.inline_keyboard[0][0].text, '📖 再翻一頁');
     assert.equal(markup.inline_keyboard[0][0].callback_data, '/boa:again');
-    assert.equal(markup.inline_keyboard[1][0].text, '⛩️ 抽淺草寺籤');
-    assert.equal(markup.inline_keyboard[1][0].callback_data, '/oracle');
-    assert.equal(markup.inline_keyboard[1][1].text, '🎴 抽塔羅牌');
+    assert.equal(markup.inline_keyboard[0][1].text, '🎲 原版解答');
+    assert.equal(markup.inline_keyboard[0][1].callback_data, '/bo:again');
+    assert.equal(markup.inline_keyboard[1][0].text, '⛩️ 抽淺草籤');
+    assert.equal(markup.inline_keyboard[1][0].callback_data, '/oracle:again');
+    assert.equal(markup.inline_keyboard[1][1].text, '🎴 單張塔羅');
     assert.equal(markup.inline_keyboard[1][1].callback_data, '/tarot:1');
+    assert.equal(markup.inline_keyboard[2][0].text, '🧭 奇門遁甲');
+    assert.equal(markup.inline_keyboard[2][0].callback_data, '/qi');
+    assert.equal(markup.inline_keyboard[2][1].text, '🌸 梅花易數');
+    assert.equal(markup.inline_keyboard[2][1].callback_data, '/mei');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -831,12 +837,18 @@ test('commandTempleOracleJP formats oracle result and attaches rich menu keyboar
     await commandTempleOracleJP({}, '/oracle', '', context);
     assert.ok(sentBody);
     assert.match(sentBody.text, /淺草籤詩/);
-    assert.match(sentBody.text, /類型: 大吉/);
+    assert.match(sentBody.text, /大吉/);
 
     const markup = typeof sentBody.reply_markup === 'string' ? JSON.parse(sentBody.reply_markup) : sentBody.reply_markup;
     assert.ok(markup.inline_keyboard);
-    assert.equal(markup.inline_keyboard[0][0].text, '⛩️ 再抽一支籤');
-    assert.equal(markup.inline_keyboard[0][0].callback_data, '/oracle');
+    assert.equal(markup.inline_keyboard[0][0].text, '⛩️ 再抽一籤');
+    assert.equal(markup.inline_keyboard[0][0].callback_data, '/oracle:again');
+    assert.equal(markup.inline_keyboard[0][1].text, '📖 解答之書');
+    assert.equal(markup.inline_keyboard[0][1].callback_data, '/boa');
+    assert.equal(markup.inline_keyboard[1][0].text, '🎴 抽塔羅牌');
+    assert.equal(markup.inline_keyboard[1][0].callback_data, '/tarot:1');
+    assert.equal(markup.inline_keyboard[1][1].text, '🌸 梅花易數');
+    assert.equal(markup.inline_keyboard[1][1].callback_data, '/mei');
   } finally {
     globalThis.fetch = originalFetch;
   }

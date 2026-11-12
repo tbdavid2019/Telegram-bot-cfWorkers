@@ -59,7 +59,8 @@ import {
   commandSystem,
   commandRegenerate,
   commandGetID,
-  commandGetGroupID
+  commandGetGroupID,
+  commandMenu
 } from '../features/system.js';
 import { commandLLMChange, commandModel } from '../features/llm.js';
 import { commandGPS } from '../features/location.js';
@@ -86,6 +87,7 @@ import { commandDelegate } from '../features/a2a888-hub.js';
  * 把原生指令 "/setenv", "/delenv", "/version", "/redo" 隱藏
  */
 export const commandSortList = [
+  "/menu",          // 功能總覽導航選單
   "/new",           // 新對話 
   "/bo",            // 解答之書原版
   "/qi",            // 奇門遁甲
@@ -137,6 +139,13 @@ export const commandSortList = [
  * - needAuth: 是否需要權限驗證（可選）
  */
 export const commandHandlers = {
+  // 導航與選單相關
+  "/menu": {
+    scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],
+    fn: commandMenu,
+    description: "功能總覽選單導航"
+  },
+
   // 天氣相關
   "/wt": {
     scopes: ["all_private_chats", "all_group_chats", "all_chat_administrators"],

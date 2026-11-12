@@ -1,5 +1,5 @@
 // 系統指令模組
-import { sendMessageToTelegramWithContext } from '../telegram/telegram.js';
+import { sendMessageToTelegramWithContext, buildInlineKeyboard } from '../telegram/telegram.js';
 import { loadChatLLM, loadImageGen, getActiveLLMProfile, getCurrentProfileName } from '../agent/agents.js';
 import { loadHistory } from '../agent/llm.js';
 import { chatWithLLM } from '../agent/llm.js';
@@ -441,4 +441,58 @@ export async function commandGetGroupID(message, command, subcommand, context) {
     context.CURRENT_CHAT_CONTEXT.parse_mode = "HTML";
     return sendMessageToTelegramWithContext(context)(msg);
   }
+}
+
+/**
+ * /menu - 萬用導航 Rich Menu
+ * 支援分類按鈕矩陣快速呼叫命理、天氣、AI創作與財經查詢
+ */
+export async function commandMenu(message, command, subcommand, context) {
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
+    context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+      // 🔮 命理占卜
+      [
+        { text: '📖 解答之書', callback_data: '/boa' },
+        { text: '⛩️ 淺草籤詩', callback_data: '/oracle' }
+      ],
+      [
+        { text: '🎴 每日塔羅', callback_data: '/tarot:1' },
+        { text: '🧭 奇門遁甲', callback_data: '/qi' }
+      ],
+      // ⛅ 生活天氣
+      [
+        { text: '📍 台北', callback_data: '/wt:台北' },
+        { text: '📍 台中', callback_data: '/wt:台中' },
+        { text: '📍 高雄', callback_data: '/wt:高雄' }
+      ],
+      [
+        { text: '⚠️ 天氣特報', callback_data: '/weatheralert' }
+      ],
+      // 🎨 AI 創作
+      [
+        { text: '🎨 AI生圖', callback_data: '/img' },
+        { text: '⚙️ 切換模型', callback_data: '/setimg' }
+      ],
+      // 📈 財經查詢
+      [
+        { text: '📈 台股大盤', callback_data: '/stock:0050' },
+        { text: '💼 護國神山', callback_data: '/stock:2330' }
+      ]
+    ]);
+  }
+
+  const menuText =
+    `✨ <b>【功能快捷導航選單】</b>\n\n` +
+    `請點選下方按鈕快速體驗各項功能：\n\n` +
+    `🔮 <b>命理占卜：</b>解答之書、淺草觀音籤、每日塔羅牌、奇門遁甲\n` +
+    `⛅ <b>生活天氣：</b>全台主要城市即時預報、即時天氣警報特報\n` +
+    `🎨 <b>AI 創作：</b>文字/多模態圖片生成與服務切換\n` +
+    `📈 <b>財經查詢：</b>台股 0050、2330 台積電即時盤勢\n\n` +
+    `💡 <i>隨時輸入 /menu 即可再次喚起此快捷導航。</i>`;
+
+  return sendMessageToTelegramWithContext(context)(menuText);
 }

@@ -7,7 +7,7 @@
 import { sendMessageToTelegramWithContext, buildInlineKeyboard } from '../telegram/telegram.js';
 import { ENV } from '../config/env.js';
 import { resolveUserTimeZone, getZonedDateParts } from '../utils/timezone.js';
-import { escape } from '../utils/md2tgmd.js';
+import { escape, markdownToTelegramHtml } from '../utils/md2tgmd.js';
 
 /**
  * 根據問題關鍵詞智能推導占問目的 (purpose)
@@ -36,6 +36,7 @@ export function detectPurpose(text) {
 export async function commandMeiHua(message, command, subcommand, context) {
   const input = (subcommand || '').trim();
   if (!input) {
+    setQimenMenu(context);
     return sendMessageToTelegramWithContext(context)(
       '🌸 *梅花易數大師解卦*\n\n' +
       '請在指令後面輸入您要詢問的問題（支援時間起卦、數字起卦、漢字報字起卦）。\n\n' +
@@ -121,6 +122,8 @@ export async function commandMeiHua(message, command, subcommand, context) {
     reply += `起卦：${method === 'number' ? `數字 (${num1}, ${num2}${num3 !== undefined ? `, ${num3}` : ''})` : method === 'text' ? `漢字 (${text})` : '時間起卦'}　目的：${purpose}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
 
+    setQimenMenu(context);
+
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
     return sendMessageToTelegramWithContext(context)(`錯誤: ${e.message}`);
@@ -137,16 +140,19 @@ export async function commandMeiHua(message, command, subcommand, context) {
 export async function commandTarot(message, command, subcommand, context) {
   const input = (subcommand || '').trim();
   if (!input) {
+    setTarotMenu(context);
     return sendMessageToTelegramWithContext(context)(
-      '🔮 *塔羅牌占卜*\n\n' +
-      '請在指令後面輸入您要詢問的問題。\n\n' +
-      '📝 *使用範例*：\n' +
-      '• `/tarot 我最近的事業發展如何？` （預設時間之流牌陣 3 張牌）\n' +
-      '• `/tarot single 今日運勢指引` （單張牌指引）\n' +
-      '• `/tarot diamond 創業評估與阻力` （鑽石牌陣 5 張牌）\n' +
-      '• `/tarot celtic 感情與未來展望` （塞爾特十字牌陣 10 張牌）\n' +
-      '• `/tarot 留在原公司還是換新工作好？` （自動判定二選一決策視角）\n\n' +
-      '支援牌陣：`single` (單張), `three` (3張/預設), `diamond` (5張), `moon` (4張), `horseshoe` (7張), `celtic` (10張)'
+      markdownToTelegramHtml(
+        '🔮 *塔羅牌占卜*\n\n' +
+        '請在指令後面輸入您要詢問的問題。\n\n' +
+        '📝 *使用範例*：\n' +
+        '• `/tarot 我最近的事業發展如何？` （預設時間之流牌陣 3 張牌）\n' +
+        '• `/tarot single 今日運勢指引` （單張牌指引）\n' +
+        '• `/tarot diamond 創業評估與阻力` （鑽石牌陣 5 張牌）\n' +
+        '• `/tarot celtic 感情與未來展望` （塞爾特十字牌陣 10 張牌）\n' +
+        '• `/tarot 留在原公司還是換新工作好？` （自動判定二選一決策視角）\n\n' +
+        '支援牌陣：`single` (單張), `three` (3張/預設), `diamond` (5張), `moon` (4張), `horseshoe` (7張), `celtic` (10張), `hexagram` (6/7張)'
+      )
     );
   }
 
@@ -172,7 +178,10 @@ export async function commandTarot(message, command, subcommand, context) {
     'celtic': 'celtic',
     '十字': 'celtic',
     '塞爾特': 'celtic',
-    '10': 'celtic'
+    '10': 'celtic',
+    'hexagram': 'hexagram',
+    '六芒星': 'hexagram',
+    '6': 'hexagram'
   };
 
   const spreadNames = {
@@ -181,7 +190,8 @@ export async function commandTarot(message, command, subcommand, context) {
     'diamond': '鑽石牌陣（5張）',
     'moon': '月相牌陣（4張）',
     'horseshoe': '馬蹄鐵牌陣（7張）',
-    'celtic': '塞爾特十字（10張）'
+    'celtic': '塞爾特十字（10張）',
+    'hexagram': '六芒星牌陣（7張）'
   };
 
   let spread = 'three';
@@ -191,6 +201,9 @@ export async function commandTarot(message, command, subcommand, context) {
   if (parts.length > 1 && spreadMap[parts[0].toLowerCase()]) {
     spread = spreadMap[parts[0].toLowerCase()];
     question = parts.slice(1).join(' ').trim();
+  } else if (parts.length === 1 && spreadMap[parts[0].toLowerCase()]) {
+    spread = spreadMap[parts[0].toLowerCase()];
+    question = '今日指引';
   }
 
   // 檢查 seed
@@ -277,24 +290,18 @@ export async function commandTarot(message, command, subcommand, context) {
     const cards = reading.cards || [];
     const currentSpreadName = spreadNames[reading.spread || spread] || reading.spread || spread;
 
-    let reply = `【🔮 塔羅占卜】\n問題：${data.question || question}\n牌陣：${currentSpreadName}\n`;
+    let reply = `<b>【🔮 塔羅占卜】</b>\n` +
+      `<b>問題：</b>${escape(data.question || question)}\n` +
+      `<b>牌陣：</b>${escape(currentSpreadName)}\n`;
 
     if (cards && cards.length > 0) {
-      reply += `\n🃏 *抽牌結果*：\n`;
-      reply += cards.map(c => `• [${c.position}] ${c.name} (${c.orientation})`).join('\n') + '\n';
+      reply += `\n🃏 <b>抽牌結果</b>：\n`;
+      reply += cards.map(c => `• [${escape(c.position)}] ${escape(c.name)} (${escape(c.orientation)})`).join('\n') + '\n';
     }
 
-    reply += '\n' + (ans ? ans : '（無回覆內容）');
+    reply += '\n' + (ans ? markdownToTelegramHtml(ans) : '（無回覆內容）');
 
-    if (context && context.CURRENT_CHAT_CONTEXT) {
-      context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
-        [{ text: '🎴 抽單張指引', callback_data: '/tarot:1' }],
-        [
-          { text: '📖 解答之書', callback_data: '/boa:again' },
-          { text: '⛩️ 抽淺草寺籤', callback_data: '/oracle' }
-        ]
-      ]);
-    }
+    setTarotMenu(context);
 
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
@@ -313,6 +320,7 @@ export async function commandTarot(message, command, subcommand, context) {
 export async function commandQimen(message, command, subcommand, context) {
   const input = (subcommand || '').trim();
   if (!input) {
+    setQimenMenu(context);
     return sendMessageToTelegramWithContext(context)(
       '🧭 *奇門遁甲問事占卜*\n\n' +
       '請在指令後面輸入您要詢問的具體問題與事項。\n\n' +
@@ -395,6 +403,8 @@ export async function commandQimen(message, command, subcommand, context) {
     }
     reply += `模式：${mode === 'traditional' ? '傳統時辰' : '進階九時段'}　專題用神：${purpose}\n\n`;
     reply += ans ? ans : '（無回覆內容）';
+
+    setQimenMenu(context);
 
     return sendMessageToTelegramWithContext(context)(reply);
   } catch (e) {
@@ -1061,20 +1071,16 @@ export async function commandTempleOracleJP(message, command, subcommand, contex
           const poem = data.oracle.poem || '詩句未提供';
           const explanation = data.oracle.explain || '解釋未提供';
 
-          const results = data.oracle.result;
-          const resultMessages = Object.entries(results).map(([key, value]) => `${key}: ${value}`).join('\n');
+          const results = data.oracle.result || {};
+          const resultMessages = Object.entries(results).map(([key, value]) => `• <b>${escape(key)}:</b> ${escape(value)}`).join('\n');
 
-          const responseMessage = `淺草籤詩:\n類型: ${type}\n詩句: ${poem}\n解釋: ${explanation}\n\n結果:\n${resultMessages}`;
+          const responseMessage = `⛩️ <b>淺草籤詩</b>\n\n` +
+            `📜 <b>類型:</b> ${escape(type)}\n` +
+            `🪷 <b>詩句:</b>\n<blockquote>${escape(poem)}</blockquote>\n\n` +
+            `💡 <b>解釋:</b>\n${escape(explanation)}\n\n` +
+            `📋 <b>結果:</b>\n${resultMessages}`;
 
-          if (context && context.CURRENT_CHAT_CONTEXT) {
-            context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
-              [{ text: '⛩️ 再抽一支籤', callback_data: '/oracle' }],
-              [
-                { text: '📖 解答之書', callback_data: '/boa:again' },
-                { text: '🎴 抽塔羅牌', callback_data: '/tarot:1' }
-              ]
-            ]);
-          }
+          setOracleMenu(context);
 
           return sendMessageToTelegramWithContext(context)(responseMessage);
         } else {
@@ -1145,13 +1151,85 @@ function formatAnswerBookCard(answerText, question) {
  * 設定占卜功能 Rich Menu 快捷按鈕
  */
 function setDivinationMenu(context) {
-  if (context && context.CURRENT_CHAT_CONTEXT) {
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
     context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
     context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
-      [{ text: '📖 再翻一頁', callback_data: '/boa:again' }],
       [
-        { text: '⛩️ 抽淺草寺籤', callback_data: '/oracle' },
-        { text: '🎴 抽塔羅牌', callback_data: '/tarot:1' }
+        { text: '📖 再翻一頁', callback_data: '/boa:again' },
+        { text: '🎲 原版解答', callback_data: '/bo:again' }
+      ],
+      [
+        { text: '⛩️ 抽淺草籤', callback_data: '/oracle:again' },
+        { text: '🎴 單張塔羅', callback_data: '/tarot:1' }
+      ],
+      [
+        { text: '🧭 奇門遁甲', callback_data: '/qi' },
+        { text: '🌸 梅花易數', callback_data: '/mei' }
+      ]
+    ]);
+  }
+}
+
+/**
+ * 設定淺草籤詩快捷選單按鈕
+ */
+function setOracleMenu(context) {
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
+    context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+      [
+        { text: '⛩️ 再抽一籤', callback_data: '/oracle:again' },
+        { text: '📖 解答之書', callback_data: '/boa' }
+      ],
+      [
+        { text: '🎴 抽塔羅牌', callback_data: '/tarot:1' },
+        { text: '🌸 梅花易數', callback_data: '/mei' }
+      ]
+    ]);
+  }
+}
+
+/**
+ * 設定塔羅專屬 Rich Menu 按鈕
+ */
+function setTarotMenu(context) {
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
+    context.CURRENT_CHAT_CONTEXT.parse_mode = 'HTML';
+    context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+      [
+        { text: '🎴 單張指引', callback_data: '/tarot:1' },
+        { text: '🃏 時間之流 (3張)', callback_data: '/tarot:three' }
+      ],
+      [
+        { text: '✡️ 六芒星牌陣', callback_data: '/tarot:hexagram' },
+        { text: '📖 解答之書', callback_data: '/boa' }
+      ]
+    ]);
+  }
+}
+
+/**
+ * 設定奇門遁甲與梅花易數快捷選單按鈕
+ */
+function setQimenMenu(context) {
+  if (context) {
+    if (!context.CURRENT_CHAT_CONTEXT) {
+      context.CURRENT_CHAT_CONTEXT = {};
+    }
+    context.CURRENT_CHAT_CONTEXT.reply_markup = buildInlineKeyboard([
+      [
+        { text: '🧭 奇門起局', callback_data: '/qi' },
+        { text: '🌸 梅花易數', callback_data: '/mei' },
+        { text: '📖 解答之書', callback_data: '/boa' }
       ]
     ]);
   }

@@ -305,7 +305,7 @@ export function getCharDisplayWidth(char) {
 
   // 控制字元與零寬字元 (ZWJ, ZWNJ, BOM, Variation Selectors 等)
   if (code < 32 || (code >= 0x7f && code < 0xa0)) return 0;
-  if (code === 0x200b || code === 0x200c || code === 0x200d || code === 0xfeff || code === 0xfe0e || code === 0xfe0f) return 0;
+  if (code === 0x200b || code === 0x200c || code === 0x200d || code === 0xfeff || (code >= 0xfe00 && code <= 0xfe0f)) return 0;
 
   // CJK, Fullwidth, Hangul, Kana, Emojis
   if (
@@ -319,9 +319,7 @@ export function getCharDisplayWidth(char) {
     (code >= 0xffe0 && code <= 0xffe6) || // Fullwidth Symbols
     (code >= 0x2100 && code <= 0x214f && (code === 0x2103 || code === 0x2109)) || // ℃, ℉
     (code >= 0x2600 && code <= 0x27bf) || // Misc symbols (⛩, ☀️, ☁, ⚡)
-    (code >= 0x1f300 && code <= 0x1f64f) ||
-    (code >= 0x1f680 && code <= 0x1f6ff) ||
-    (code >= 0x1f900 && code <= 0x1f9ff) ||
+    (code >= 0x1f300 && code <= 0x1faff) || // Emojis & Pictographs (Unicode 13+)
     (code >= 0x20000 && code <= 0x2fffd) ||
     (code >= 0x30000 && code <= 0x3fffd)
   ) {

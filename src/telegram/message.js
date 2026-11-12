@@ -68,24 +68,61 @@ export async function msgHandleCallbackQuery(message, context) {
   if (callbackData.startsWith('/wt:')) {
     return handleWeatherCallback(message, context);
   }
+  if (callbackData === '/weatheralert' || callbackData.startsWith('/weatheralert')) {
+    const { commandWeatherAlert } = await import('../features/weather.js');
+    return commandWeatherAlert(message, '/weatheralert', '', context);
+  }
 
   // 處理解答之書
-  if (callbackData === '/boa:again' || callbackData.startsWith('/boa')) {
+  if (callbackData === '/boa:again' || callbackData === '/boa' || callbackData.startsWith('/boa:')) {
     const { commandAnswerBook } = await import('../features/divination.js');
     return commandAnswerBook(message, '/boa', '', context);
   }
+  if (callbackData === '/bo:again' || callbackData === '/bo' || callbackData.startsWith('/bo:')) {
+    const { commandAnswerBookOriginal } = await import('../features/divination.js');
+    return commandAnswerBookOriginal(message, '/bo', '', context);
+  }
 
   // 處理淺草寺籤詩
-  if (callbackData === '/oracle' || callbackData.startsWith('/oracle')) {
+  if (callbackData === '/oracle:again' || callbackData === '/oracle' || callbackData.startsWith('/oracle:')) {
     const { commandTempleOracleJP } = await import('../features/divination.js');
     return commandTempleOracleJP(message, '/oracle', '', context);
   }
 
   // 處理塔羅牌占卜
   if (callbackData.startsWith('/tarot')) {
-    const spread = callbackData.includes(':') ? callbackData.split(':')[1] : '1';
+    const subcommand = callbackData.includes(':') 
+      ? callbackData.slice(callbackData.indexOf(':') + 1)
+      : (callbackData.includes(' ') ? callbackData.slice(callbackData.indexOf(' ') + 1) : '1');
     const { commandTarot } = await import('../features/divination.js');
-    return commandTarot(message, '/tarot', spread || '1', context);
+    return commandTarot(message, '/tarot', subcommand || '1', context);
+  }
+
+  // 處理奇門遁甲
+  if (callbackData === '/qi' || callbackData.startsWith('/qi:') || callbackData.startsWith('/qi ')) {
+    const subcommand = callbackData.includes(':')
+      ? callbackData.slice(callbackData.indexOf(':') + 1)
+      : (callbackData.includes(' ') ? callbackData.slice(callbackData.indexOf(' ') + 1) : '');
+    const { commandQimen } = await import('../features/divination.js');
+    return commandQimen(message, '/qi', subcommand, context);
+  }
+
+  // 處理梅花易數
+  if (callbackData === '/mei' || callbackData.startsWith('/mei:') || callbackData.startsWith('/mei ')) {
+    const subcommand = callbackData.includes(':')
+      ? callbackData.slice(callbackData.indexOf(':') + 1)
+      : (callbackData.includes(' ') ? callbackData.slice(callbackData.indexOf(' ') + 1) : '');
+    const { commandMeiHua } = await import('../features/divination.js');
+    return commandMeiHua(message, '/mei', subcommand, context);
+  }
+
+  // 處理功能總覽選單
+  if (callbackData === '/menu' || callbackData.startsWith('/menu:') || callbackData.startsWith('/menu ')) {
+    const subcommand = callbackData.includes(':')
+      ? callbackData.slice(callbackData.indexOf(':') + 1)
+      : (callbackData.includes(' ') ? callbackData.slice(callbackData.indexOf(' ') + 1) : '');
+    const { commandMenu } = await import('../features/system.js');
+    return commandMenu(message, '/menu', subcommand, context);
   }
 
   // 處理一鍵生成圖片 prompt callback (/img_prompt:...)
@@ -97,7 +134,7 @@ export async function msgHandleCallbackQuery(message, context) {
         prompt = await DATABASE.get('img_prompt:' + promptId);
       }
       if (!prompt) {
-        return sendMessageToTelegramWithContext(context)('⚠️ 圖片生成提示詞已過期，請直接輸入指令：/img <描述>');
+        return sendMessageToTelegramWithContext(context)('⚠️ 圖片生成提示詞已過期，請重新輸入 /img <提示詞>');
       }
     } else {
       try {
@@ -110,9 +147,18 @@ export async function msgHandleCallbackQuery(message, context) {
     return commandGenerateImg(message, '/img', prompt, context);
   }
 
+  // 處理 AI 圖片生成與設定
+  if (callbackData === '/img' || callbackData.startsWith('/img:')) {
+    const prompt = callbackData.includes(':') ? callbackData.slice(callbackData.indexOf(':') + 1) : '';
+    const { commandGenerateImg } = await import('../features/image-gen.js');
+    return commandGenerateImg(message, '/img', prompt, context);
+  }
+
   // 處理台股查詢
-  if (callbackData.startsWith('/stock:')) {
-    return handleStockTWCallback(message, context);
+  if (callbackData.startsWith('/stock:') || callbackData.startsWith('/stock ')) {
+    const stockCode = callbackData.replace(/^\/stock[:\s]+/, '').trim();
+    const { commandStockTW } = await import('../features/stock.js');
+    return commandStockTW(message, '/stock', stockCode, context);
   }
 
   // 處理美股查詢
@@ -126,8 +172,8 @@ export async function msgHandleCallbackQuery(message, context) {
   }
 
   // 處理圖片生成模型切換
-  if (callbackData.startsWith('/setimg:')) {
-    const provider = callbackData.replace('/setimg:', '');
+  if (callbackData === '/setimg' || callbackData.startsWith('/setimg:')) {
+    const provider = callbackData.includes(':') ? callbackData.slice(callbackData.indexOf(':') + 1) : '';
     const { commandSetImageProvider } = await import('../features/image-gen.js');
     return commandSetImageProvider(message, '/setimg', provider, context);
   }
